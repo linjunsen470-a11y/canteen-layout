@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Canvas} from '@react-three/fiber';import {OrbitControls,Grid} from '@react-three/drei';
-import {Layers,Plus,Minus,Undo2,Redo2,Save,Download,FileUp,Trash2} from 'lucide-react';
+import {Layers,Plus,Minus,Undo2,Redo2,Save,Download,FileUp,Trash2,Copy,AlignLeft,ArrowLeftRight} from 'lucide-react';
 import {useStore} from './store';import {catalog} from './model';
 const m=(n:number)=>(n/1000).toFixed(2)+' m';
 function Three(){const {project,selected}=useStore();return <Canvas camera={{position:[20,18,24],fov:42}}><color attach="background" args={['#edf1f4']}/><ambientLight intensity={.8}/><directionalLight position={[10,20,10]} intensity={1.5} castShadow/><mesh rotation={[-Math.PI/2,0,0]} position={[project.width/2000,0,project.height/2000]}><planeGeometry args={[project.width/1000,project.height/1000]}/><meshStandardMaterial color="#f5f3ed"/></mesh>{project.items.filter(i=>i.kind!=='zone').map(i=><mesh key={i.id} position={[(i.x+i.w/2)/1000,i.h/2000,(i.y+i.d/2)/1000]}><boxGeometry args={[i.w/1000,Math.max(80,i.h)/1000,i.d/1000]}/><meshStandardMaterial color={selected===i.id?'#f59e0b':i.color}/></mesh>)}<Grid position={[project.width/2000,.01,project.height/2000]} args={[project.width/1000,project.height/1000]}/><OrbitControls makeDefault target={[project.width/2000,0,project.height/2000]}/></Canvas>}
