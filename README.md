@@ -17,7 +17,9 @@ Open the local Vite URL printed in the terminal. Production build: `npm run buil
 
 - React + TypeScript + Vite desktop workspace.
 - Shared project model; dimensions and positions are stored in millimetres.
-- SVG 2D floor-plan editor with selectable and draggable furniture and zones.
+- SVG 2D floor-plan editor with selectable and draggable furniture and zones, plus zone corner resizing.
+- Shift-click multi-selection, duplicate, delete selection, left alignment and horizontal distribution.
+- Object locking, dimension labels and per-zone editable dimensions / area calculations.
 - Furniture catalog with editable dimensions, height, coordinates, rotation and color.
 - 3D scene rendered from the same project data using Three.js via React Three Fiber; orbit, zoom and pan controls.
 - Undo/redo, local browser save/restore, JSON import/export and PNG plan export.
