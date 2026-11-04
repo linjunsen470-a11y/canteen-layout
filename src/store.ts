@@ -7,7 +7,8 @@ add:kind=>{const p=get().project;const def=catalog.find(x=>x.kind===kind)!;const
 update:(id,patch)=>set(s=>({past:[...s.past,s.project].slice(-60),future:[],project:{...s.project,items:s.project.items.map(i=>i.id===id?{...i,...patch}:i)}})),
 move:(id,patch)=>set(s=>({project:{...s.project,items:s.project.items.map(i=>i.id===id?{...i,...patch}:i)}})),
 beginMove:()=>set(s=>({past:[...s.past,s.project].slice(-60),future:[]})),
-remove:()=>{const s=get();if(!s.selected)return;set({past:[...s.past,s.project].slice(-60),future:[],project:{...s.project,items:s.project.items.filter(i=>i.id!==s.selected)},selected:null})},\nremoveMany:ids=>set(s=>({past:[...s.past,s.project].slice(-60),future:[],project:{...s.project,items:s.project.items.filter(i=>!ids.includes(i.id))},selected:null})),
+remove:()=>{const s=get();if(!s.selected)return;set({past:[...s.past,s.project].slice(-60),future:[],project:{...s.project,items:s.project.items.filter(i=>i.id!==s.selected)},selected:null})},
+removeMany:ids=>set(s=>({past:[...s.past,s.project].slice(-60),future:[],project:{...s.project,items:s.project.items.filter(i=>!ids.includes(i.id))},selected:null})),
 undo:()=>set(s=>s.past.length?{project:s.past[s.past.length-1],past:s.past.slice(0,-1),future:[s.project,...s.future]}:{}),
 redo:()=>set(s=>s.future.length?{project:s.future[0],past:[...s.past,s.project],future:s.future.slice(1)}:{}),
 resize:(width,height)=>set(s=>({past:[...s.past,s.project].slice(-60),future:[],project:{...s.project,width,height}}))
