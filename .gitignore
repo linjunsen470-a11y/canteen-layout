@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local acceptance output; reviewed historical evidence stays in docs/.
+.local-checks/

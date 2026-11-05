@@ -1,0 +1,147 @@
+{
+  "id": "b0731af7-e575-4677-88e8-803cfc27dda9",
+  "schemaVersion": 3,
+  "createdAt": "2026-11-05T09:24:01.999Z",
+  "updatedAt": "2026-11-05T09:24:08.658Z",
+  "metadata": {
+    "customer": "",
+    "site": "",
+    "purpose": "",
+    "notes": ""
+  },
+  "name": "G3 合成现场",
+  "width": 20000,
+  "height": 12000,
+  "items": [
+    {
+      "id": "0055359b-7a28-453e-8fa8-f6b853f82d7a",
+      "model": "rect-table",
+      "kind": "table",
+      "name": "四人餐桌",
+      "w": 1200,
+      "d": 800,
+      "h": 750,
+      "color": "#d9b98c",
+      "x": 3000,
+      "y": 3000,
+      "rotation": 0
+    },
+    {
+      "id": "8459d3cd-1fa3-41b8-a942-a53a45d8dd27",
+      "model": "rect-table",
+      "kind": "table",
+      "name": "四人餐桌",
+      "w": 1200,
+      "d": 800,
+      "h": 750,
+      "color": "#d9b98c",
+      "x": 3000,
+      "y": 9000,
+      "rotation": 0
+    }
+  ],
+  "underlay": {
+    "assetId": "bb6e1bd9-6e8c-46f5-b7bf-a76ab4db1dea",
+    "name": "synthetic-5000mm.png",
+    "pixelWidth": 1000,
+    "pixelHeight": 600,
+    "x": 999.9998820981762,
+    "y": 1000.0001774295142,
+    "mmPerPixel": 10.00000088484053,
+    "rotation": 0,
+    "opacity": 0.65,
+    "hidden": false,
+    "locked": true,
+    "calibration": {
+      "points": [
+        {
+          "x": 99.99999705822265,
+          "y": 100.00002659135907
+        },
+        {
+          "x": 599.9999528162001,
+          "y": 100.00002659135907
+        }
+      ],
+      "distance": 5000
+    }
+  },
+  "outline": [
+    {
+      "x": 0,
+      "y": 0
+    },
+    {
+      "x": 20000,
+      "y": 0
+    },
+    {
+      "x": 20000,
+      "y": 6000
+    },
+    {
+      "x": 12000,
+      "y": 6000
+    },
+    {
+      "x": 12000,
+      "y": 12000
+    },
+    {
+      "x": 0,
+      "y": 12000
+    }
+  ],
+  "planningAreas": [
+    {
+      "id": "3e0e5ab9-d1e9-493e-b734-7c7f3edd3c93",
+      "name": "经营区 A",
+      "color": "#c38434",
+      "outline": [
+        {
+          "x": 1000,
+          "y": 1000
+        },
+        {
+          "x": 9000,
+          "y": 1000
+        },
+        {
+          "x": 9000,
+          "y": 5000
+        },
+        {
+          "x": 1000,
+          "y": 5000
+        }
+      ]
+    },
+    {
+      "id": "75ad9bca-a12a-4ac5-aef9-a98ed8108830",
+      "name": "经营区 B",
+      "color": "#c38434",
+      "outline": [
+        {
+          "x": 1000,
+          "y": 7000
+        },
+        {
+          "x": 9000,
+          "y": 7000
+        },
+        {
+          "x": 9000,
+          "y": 11000
+        },
+        {
+          "x": 1000,
+          "y": 11000
+        }
+      ]
+    }
+  ],
+  "exportInfo": {
+    "assetsIncluded": false,
+    "note": "普通 JSON 不含底图图片；跨设备迁移请导出项目包。"
+  }
+}

@@ -1,30 +1,76 @@
-# Canteen Layout Studio
+# 食堂与商业空间布局工作台
 
-A browser-based 2D/3D space planner for canteens, staff restaurants, food-service counters and commercial interiors.
+基于 React、TypeScript、Vite、Zustand、SVG 和 Three.js 的本地 2D/3D 规划工具。统一以毫米保存尺寸与位置，二维编辑和三维预览共用项目数据。
 
-## Run locally
+**当前状态：G1–G4 已完成本地阶段验收，项目格式为 6。** 下一阶段为 G5，本仓库尚未提供云端账户、协作或客户分享服务。阶段证据与历史版本见 [文档索引](docs/README.md) 和 [商业路线图](docs/commercial-roadmap.md)。
 
-Requirements: Node.js 20+ and npm.
+## 本地运行
+
+需要 Node.js 22.12+、pnpm 11.5.0（版本在 `package.json` 固定）。
 
 ```bash
-npm install
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-Open the local Vite URL printed in the terminal. Production build: `npm run build`; preview: `npm run preview`.
+打开终端显示的本地地址。其他命令：
 
-## Current implementation
+```bash
+pnpm typecheck
+pnpm build
+pnpm preview
+```
 
-- React + TypeScript + Vite desktop workspace.
-- Shared project model; dimensions and positions are stored in millimetres.
-- SVG 2D floor-plan editor with selectable and draggable furniture and zones, plus zone corner resizing.
-- Shift-click multi-selection, duplicate, delete selection, left alignment and horizontal distribution.
-- Object locking, dimension labels and per-zone editable dimensions / area calculations.
-- Furniture catalog with editable dimensions, height, coordinates, rotation and color.
-- 3D scene rendered from the same project data using Three.js via React Three Fiber; orbit, zoom and pan controls.
-- Undo/redo, local browser save/restore, JSON import/export and PNG plan export.
-- Responsive 2D / split / 3D view modes.
+构建输出到 `dist/`，可由静态 HTTP 服务托管，不需要后端。CI 使用锁文件安装并构建；修改依赖时一并提交 `package.json` 和 `pnpm-lock.yaml`。本次只提交本地 Git，不部署或推送。
 
-## Notes
+## 工作台与常用操作
 
-The current build is an early functional foundation. Multi-select, precision alignment, wall/door/window editing, dimension annotations, persistent reusable custom catalog entries, IndexedDB project library, 3D screenshot export and advanced area polygon editing remain future work.
+- 左侧切换设备库/对象列表，支持搜索、显隐、锁定和定位；右侧根据场地、单选、多选展示属性。提供 66 个内置设备与空间构件条目，可建立本地自定义规格。
+- 设备可点击添加或拖入平面；Shift 点击增减选择，空白处拖框多选。拖动选中对象移动；方向键微移 10mm，Shift 100mm，Alt 1mm。
+- 滚轮围绕指针缩放，空格拖动、中键或平移工具移动视图；“适应整个场地”复位，“定位”聚焦选中对象。
+- 选中单件后，拖动 **↻** 圆柄自由旋转 360°。角度支持小数、负值和超过一周；Shift 临时吸附 15°。网格不会限制自由旋转。
+- 网格、网格步长和几何吸附分别设置。**布局工具**中的几何吸附提供墙边/端点、设备边缘/中心参考线，Alt 临时关闭吸附。
+- 数字属性按 Enter 或失焦提交，Esc 取消输入；Ctrl/Cmd+Z 撤销，Ctrl/Cmd+Shift+Z 或 Ctrl/Cmd+Y 重做。Esc 取消当前工具/拖动，输入框内的 Delete 不删除场景对象。
+- 支持 2D、3D、可调分屏和侧栏收起。分隔条可拖动、双击复位或用方向键调整；面板、视图和常用设置单独持久化。
+- 三维可切换俯视、斜视、复位及物体特写；移动开关默认关闭，开启后可拖设备，关闭时拖动观察视角。无 WebGL 时仍可使用二维、保存和导出平面。
+
+## 场地、底图与空间构件
+
+- 场地支持矩形和 3–64 点的简单凹多边形；可逐点绘制、增删/拖动顶点或输入精确坐标。尺寸改变会同比缩放场地轮廓，已有设备位置保持不变。地面和区域显示使用同一场地裁切。
+- 在“场地资料 / 范围”导入 PNG/JPEG，选择两个已知间距点进行底图校准。底图可锁定、移动、旋转及调透明度；原图保存在 IndexedDB。
+- 独立规划范围与整场地、功能分区分开管理。范围外可淡化或保护，只有完整位于活动范围内的对象可编辑；切换范围不改变世界坐标。
+- 功能分区支持矩形、分割和凹多边形；设备归属由属性明确指定。面积分别列出各区面积之和、去重覆盖与重叠覆盖，场地面积独立统计。
+- 墙和隔断通过拖动画线创建；Shift 限制水平/垂直，可拖端点调整。墙端点可吸附，常见同高双墙转角自动修整。
+- 门窗可贴墙并形成三维开口，随墙移动/旋转；单独自由旋转后转为独立放置，也可重新选择所属墙体。门窗开口重叠、超出墙体或墙高校验失败时不应用修改。
+- 柱体、固定设施、入口/排烟/上水/下水/电力点位支持确认状态和备注；楼梯为单层示意构件。构件均沿用显隐、锁定、撤销和项目保存。
+
+## 组合、标注与空间检查
+
+- **布局工具 → 四人桌椅组合**创建一桌四椅。默认按 2 行 × 3 列重复即可得到 6 组、24 座；重复间距为世界坐标 X/Y 位移，整批一次撤销。
+- 单击组合成员选整组，双击或 Ctrl 单击选择单件，Ctrl+Shift 逐个增减。解组保留成员 ID，复制分配新 ID；含不可编辑组员时不进行残缺移动/复制。
+- “整体旋转”保持成员相对位置；批量属性的“统一朝向”分别绕各自中心调整。左对齐和水平等距按旋转边界计算，完整组合视为一个单元。
+- “复制后放置”跟随平面指针预览，点击落位，Esc 回滚。贴墙门窗按行列重复时需连墙选择，或先转为独立放置。
+- 选两个物件/墙体后“标注边界净距”，得到旋转轮廓的最短距离，移动端点后自动更新。手绘尺寸、文字和引线仍保留；手绘尺寸只记录绘制时长度。
+- “检查空间”列出完整轮廓越界、固定障碍、一般重叠、门扇开启范围和参考净距提示，点击可定位；修改布局后需重新检查。参考值默认 900mm、可改，只作业务提醒，不作合规结论，也不强制禁止碰撞。
+- 座位按可见对象/组合的明确声明统计，组合声明替代成员计数，不按中文名称猜容量。隐藏项不计，未声明座椅或部分隐藏的声明组合提示待确认。
+- 咖啡机等完整落在桌面的小设备可自动识别承托物，也可在属性中指定；检查与 3D 使用同一桌面高度。承托关系不自动带动设备移动。
+
+## 保存、恢复与交付
+
+“项目库”提供空白新建、打开示例、重命名、独立副本、客户/场地/用途/需求资料，以及删除和回收站恢复。编辑动作合并自动保存，进行中的拖动/复制预览不写盘；顶部显示未保存、保存中、成功、失败或冲突。
+
+IndexedDB 保存当前项目及上一份成功快照，恢复记录作为新项目打开；写入失败保留内存，支持重试/另存副本。多标签页修订冲突不会静默覆盖。旧 localStorage 数据迁移后保留原文。
+
+- 当前项目格式 **6**，接受无版本旧文件及 1–5，拒绝未知未来版本；导入采用独立项目 ID。
+- **项目包 `.canteen.json`** 含底图图片，适合迁移和完整备份；普通 JSON 仅含几何与图片引用。
+- PNG 导出完整场地，不受当前缩放/平移影响；三维截图保持观察朝向，排除选中框。
+- “客户成果”生成固定快照，含平面、三维、图例和可见物件清单，支持独立 HTML 与打印/PDF；隐藏对象及内部需求备注不输出。
+- 浏览器配置、站点地址与端口决定本地库位置；清理站点数据会删除项目及恢复记录。自动保存无法保证恢复强制退出前未完成的动作，请定期导出项目包。
+
+## 工程维护与边界
+
+入口为 `src/App.tsx`，交互由 `store.ts`、`editorInteraction.ts` 与 `useEditorKeyboard.ts` 协调。`PlanEditor.tsx` 使用 SVG，`Scene3D.tsx` 与设备预览共用参数化模型；样式集中在 `src/style.css`。底图/项目库、几何、组合、检查与导出按职责拆分，无通用插件层。
+
+模型为通用示意，不是厂家产品或施工规格。尚不支持多层楼板、多个独立地面岛/孔洞、曲墙、复杂实体碰撞或自动动线优化。圆桌检查为近似轮廓；最短净距不能替代整条通道的连续通行判断。G5–G8 需另行实施，当前本地验收不代表商业发布或真实客户试点。
+
+构建保留 Three.js 主包体积提示；性能历史记录只适用于记录中的合成场景和机器。通常只执行类型检查、构建和与改动相关的短操作流程，不默认跑性能或全量回归。脚本入口及输出管理见 [tests/README.md](tests/README.md)，本轮清理与本地提交范围见 [维护记录](docs/maintenance-2026-11-05.md)。
