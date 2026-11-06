@@ -3,6 +3,9 @@ import * as T from 'three';
 import { createFurniture, disposeFurniture, FurnitureSpec, studioEnvironment } from './furniture';
 import { modelOf } from './model';
 const cache=new Map<string,string>();
+// Render at most one uncached thumbnail per animation frame, so a visible row cannot monopolize a frame.
+const pending=new Set<()=>void>();let queued=false;
+function enqueue(task:()=>void){pending.add(task);const next=()=>{const task=pending.values().next().value;if(task){pending.delete(task);task()}if(pending.size)requestAnimationFrame(next);else queued=false};if(!queued){queued=true;requestAnimationFrame(next)}return()=>{pending.delete(task)}}
 let renderer:T.WebGLRenderer|undefined, scene:T.Scene, camera:T.PerspectiveCamera;
 let environment:T.WebGLRenderTarget, cleanup:ReturnType<typeof setTimeout>;
 function releaseRenderer(){
@@ -26,12 +29,12 @@ function thumbnail(item:FurnitureSpec) {
   const size=Math.max(item.w,item.h,item.d)/1000;
   const center=new T.Vector3(0,item.h/2100,0);camera.position.copy(center).add(new T.Vector3(1.3,.92,1.55).normalize().multiplyScalar(size*2.5));camera.lookAt(center);camera.updateProjectionMatrix();
   renderer.render(scene,camera);const image=renderer.domElement.toDataURL('image/png');
-  scene.remove(model);disposeFurniture(model);cache.set(key,image);clearTimeout(cleanup);cleanup=setTimeout(releaseRenderer,300);return image;
+  scene.remove(model);disposeFurniture(model);cache.set(key,image);if(cache.size>160)cache.delete(cache.keys().next().value!);clearTimeout(cleanup);cleanup=setTimeout(releaseRenderer,300);return image;
 }
 export default function CatalogThumbnail({item}:{item:FurnitureSpec}) {
   const [src,setSrc]=useState(''),[visible,setVisible]=useState(false);const host=useRef<HTMLSpanElement>(null);
   const model=modelOf(item);
   useEffect(()=>{const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){setVisible(true);observer.disconnect()}},{rootMargin:'120px'});if(host.current)observer.observe(host.current);return()=>observer.disconnect()},[]);
-  useEffect(()=>{if(!visible)return;let active=true;const frame=requestAnimationFrame(()=>{try{const image=thumbnail(item);if(active)setSrc(image)}catch{if(active)setSrc('')}});return()=>{active=false;cancelAnimationFrame(frame)}},[visible,model,item.w,item.d,item.h,item.color]);
+  useEffect(()=>{if(!visible)return;let active=true;const cancel=enqueue(()=>{try{const image=thumbnail(item);if(active)setSrc(image)}catch{if(active)setSrc('')}});return()=>{active=false;cancel()}},[visible,model,item.w,item.d,item.h,item.color]);
   return <span ref={host} className="catalog-thumb">{src?<img className="catalog-render" src={src} alt={`${item.name}三维模型`} draggable={false}/>:<span className="catalog-render placeholder">模型预览</span>}</span>;
 }

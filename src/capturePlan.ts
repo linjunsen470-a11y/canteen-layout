@@ -14,13 +14,16 @@ export function capturePlan(svg:SVGSVGElement,project:Project):Promise<string>{r
     clone.querySelectorAll<SVGGElement>('[data-item-id]').forEach(group=>{
       group.removeAttribute('opacity');const i=project.items.find(i=>i.id===group.dataset.itemId)!;if(isAnnotation(i))return;
       group.querySelectorAll('text').forEach(n=>n.remove());
-      group.querySelectorAll('[stroke]').forEach(n=>n.setAttribute('stroke',i.kind==='zone'?'#acbcb3':'#5e7166'));
+      group.querySelectorAll('[stroke]').forEach(n=>{if(!n.closest('[data-equipment-symbol]'))n.setAttribute('stroke',i.kind==='zone'?'#acbcb3':'#5e7166')});
+      group.querySelector('[data-symbol-detail]')?.setAttribute('visibility',Math.min(i.w,i.d)*exportScale<16?'hidden':'visible');
+      if(i.model==='chair')group.querySelector('[data-back-edge]')?.setAttribute('stroke-width',String(i.d*.13));
+      group.querySelector('[data-operation-edge]')?.setAttribute('stroke-width',String(2/exportScale));
       if(isBuilding(i)||(i.kind!=='zone'&&i.w*exportScale<28))return;
       const text=document.createElementNS('http://www.w3.org/2000/svg','text');
       text.setAttribute('fill',i.kind==='zone'?'#6c7d73':'#273e31');
       text.setAttribute('font-size',String(i.kind==='zone'?12/exportScale:Math.min(11/exportScale,i.w/Math.max(4,i.name.length))));
       if(i.kind==='zone'){text.setAttribute('x',String(i.x+10/exportScale));text.setAttribute('y',String(i.y+20/exportScale));text.textContent=`${i.name} · ${(zoneArea(project,i)/1e6).toFixed(1)}㎡`}
-      else{text.setAttribute('text-anchor','middle');text.setAttribute('dominant-baseline','middle');text.textContent=i.name}
+      else{if(group.querySelector('[data-equipment-symbol]'))text.setAttribute('y',String(i.d/2+12/exportScale));text.setAttribute('text-anchor','middle');text.setAttribute('dominant-baseline','middle');text.textContent=i.name}
       group.append(text);
     });
     const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml'}));const image=new Image();image.onload=()=>{try{const canvas=document.createElement('canvas');canvas.width=width+padding*2;canvas.height=height+padding*2;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0);resolve(canvas.toDataURL('image/png'))}catch{reject(Error('平面图导出失败'))}finally{URL.revokeObjectURL(url)}};image.onerror=()=>{URL.revokeObjectURL(url);reject(Error('平面图导出失败'))};image.src=url;

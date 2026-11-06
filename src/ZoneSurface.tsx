@@ -16,5 +16,5 @@ export default function ZoneSurface({project,item}:{project:Project;item:Item}){
  const key=JSON.stringify([siteOutline(project),zoneCorners(item)]);
  const geometry=useMemo(()=>{const positions:number[]=[];for(const a of triangles(siteOutline(project)))for(const b of triangles(zoneCorners(item))){const p=clip(a,b);for(let i=1;i<p.length-1;i++)for(const v of [p[0],p[i],p[i+1]])positions.push(v.x/1000,.004,v.y/1000)}const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.computeVertexNormals();return g},[key]);
  useEffect(()=>()=>geometry.dispose(),[geometry]);
- return <mesh renderOrder={2} name={`zone:${item.id}`} geometry={geometry} raycast={()=>{}}><meshBasicMaterial color={item.color} transparent opacity={planning.dim&&!insidePlanning(item,project)? .066 : .22} depthWrite={false} side={T.DoubleSide}/></mesh>;
+ return <mesh renderOrder={2} name={`zone:${item.id}`} geometry={geometry} raycast={()=>{}}><meshBasicMaterial color={item.color} transparent opacity={planning.dim&&!insidePlanning(item,project)? .066 : .22} depthWrite={false} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} side={T.DoubleSide}/></mesh>;
 }

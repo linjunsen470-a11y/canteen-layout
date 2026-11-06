@@ -1,3 +1,4 @@
+import { ordinaryEquipment } from './equipmentFacing';
 import { Project, Item, modelOf, catalog, projectIdentity } from './model';
 import { isAnnotation } from './annotations';
 import { syncStructure, isAttachedOpening } from './structure';
@@ -28,7 +29,7 @@ export function parseProject(value: unknown): Project {
         if(i.zoneId!==undefined&&(typeof i.zoneId!=='string'||i.kind==='zone'||!p.items.some(z=>z&&z.id===i.zoneId&&z.kind==='zone')))throw Error('所属区域无效');
         if(i.fontSize!==undefined&&(!finite(i.fontSize)||i.fontSize<20))throw Error('文字高度至少 20mm');
         ids.add(i.id);
-        return { model: isAnnotation(i)?undefined:modelOf(i), id: i.id, kind: i.kind, name: i.name, color: i.color, x: i.x, y: i.y, w: i.w, d: i.d, h: i.h, rotation: i.rotation, locked: i.locked,hidden:i.hidden,fontSize:i.fontSize,zoneId:i.zoneId,wallId:i.wallId,offset:i.offset,sill:i.sill,flipped:i.flipped,freeStanding:i.freeStanding,polygon:i.polygon,pointType:i.pointType,verification:i.verification,notes:i.notes,seats:i.seats,supportId:i.supportId,measure:i.measure };
+        return { catalogId:i.catalogId,specification:i.specification,operationFace:ordinaryEquipment(i)?(i.operationFace??'none'):i.operationFace, model: isAnnotation(i)?undefined:modelOf(i), id: i.id, kind: i.kind, name: i.name, color: i.color, x: i.x, y: i.y, w: i.w, d: i.d, h: i.h, rotation: i.rotation, locked: i.locked,hidden:i.hidden,fontSize:i.fontSize,zoneId:i.zoneId,wallId:i.wallId,offset:i.offset,sill:i.sill,flipped:i.flipped,hingeRight:i.hingeRight,freeStanding:i.freeStanding,polygon:i.polygon,pointType:i.pointType,verification:i.verification,notes:i.notes,seats:i.seats,supportId:i.supportId,measure:i.measure };
     });
     return syncStructure({ ...identity, name: p.name, width: p.width, height: p.height, outline:p.outline, underlay:p.underlay, planningAreas:p.planningAreas,groups:p.groups,clearance:p.clearance, items });
 }

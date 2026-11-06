@@ -1,0 +1,20 @@
+import { memo, useEffect, useState } from 'react';
+import { PanelLeftClose, Search } from 'lucide-react';
+import { CatalogEntry, catalog } from './model';
+import { useCustomCatalog, reloadCustomCatalog } from './customCatalog';
+import { useWorkspace } from './workspace';
+import { ordinaryEquipment } from './equipmentFacing';
+import ObjectList from './ObjectList';
+import CatalogThumbnail from './CatalogThumbnail';
+import CustomItemDialog from './CustomItemDialog';
+import CustomCatalogActions from './CustomCatalogActions';
+export default memo(function EquipmentLibrary({onAdd,savedSignal}:{onAdd:(entry:CatalogEntry)=>void;savedSignal:number}){
+ const prefs=useWorkspace(),{leftTab}=prefs,libraryOpen=!prefs.focusMode&&prefs.libraryOpen;
+ const customState=useCustomCatalog(),custom=customState.entries;
+ const [search,setSearch]=useState(''),[category,setCategory]=useState('全部分类'),[managing,setManaging]=useState(false);
+ useEffect(()=>{if(savedSignal){setSearch('');setCategory('我的物件')}},[savedSignal]);
+    const groups = Array.from(new Set([...catalog.map(c => c.group), '我的物件'])).sort((a,b)=>{const order=['餐饮设备','厨房设备','热厨设备','洗消设备','餐桌椅','餐饮服务','空间构件'];return (order.indexOf(a)<0?99:order.indexOf(a))-(order.indexOf(b)<0?99:order.indexOf(b))});
+    const matches=(c:CatalogEntry)=>`${c.name} ${c.specification??''}`.toLowerCase().includes(search.trim().toLowerCase())&&(category==='全部分类'||(custom.includes(c)?'我的物件':c.group)===category);
+    const count=[...catalog,...custom].filter(matches).length;
+ return <aside className="library" hidden={!libraryOpen}><div className="panel-heading"><div><h3>{leftTab==='objects'?'场景对象':'设备库'}</h3></div><button title="收起设备库" aria-label="收起设备库" onClick={()=>prefs.set({libraryOpen:false})}><PanelLeftClose/></button></div><div className="sidebar-tabs" role="tablist" aria-label="左侧面板"><button role="tab" aria-selected={leftTab==='catalog'} onClick={()=>prefs.set({leftTab:'catalog'})}>设备库</button><button role="tab" aria-selected={leftTab==='objects'} onClick={()=>prefs.set({leftTab:'objects'})}>对象列表</button></div>{leftTab==='objects'?<ObjectList/>:<><label className="catalog-search"><Search/><input aria-label="搜索设备" placeholder="搜索名称或规格" value={search} onChange={e=>setSearch(e.target.value)}/></label><div className="catalog-filter"><select aria-label="设备分类" value={category} onChange={e=>setCategory(e.target.value)}>{['全部分类',...groups].map(g=><option key={g}>{g}</option>)}</select><small>{count} 项</small></div><div className="library-actions"><CustomItemDialog onSaved={()=>{setSearch('');setCategory('我的物件')}}/><button aria-pressed={managing} onClick={()=>setManaging(v=>!v)}>{managing?'完成管理':'管理规格'}</button></div>{groups.filter(g=>(g==='我的物件'?custom:catalog.filter(c=>c.group===g)).some(matches)).map(g => <section key={g}><h4>{g}</h4><div className="catalog">{(g === '我的物件' ? custom : catalog.filter(c => c.group === g)).filter(matches).map(c => <div className="catalog-entry" key={c.id??c.name}><button draggable onDragStart={e => { e.dataTransfer.setData('application/canteen-item', JSON.stringify(c)); e.dataTransfer.effectAllowed = 'copy'; }} onClick={() => onAdd(c)}><CatalogThumbnail item={c}/><b>{c.name}</b><small>{c.w} × {c.d} × {c.h} mm</small></button>{managing&&(custom.includes(c)?<CustomCatalogActions entry={c}/>:ordinaryEquipment(c)&&<div className="catalog-save-action"><CustomItemDialog initial={c} copy label={`另存规格 · ${c.name}`} onSaved={()=>{setSearch('');setCategory('我的物件')}}/></div>)}</div>)}</div></section>)}{customState.error&&<div role="alert"><p>{customState.error}</p><button onClick={reloadCustomCatalog}>重新读取设备库</button></div>}{count===0&&<p className="empty-state">没有匹配的设备</p>}</>}</aside>;
+});

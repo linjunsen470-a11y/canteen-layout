@@ -10,11 +10,12 @@ export default function StructureFields({ item }: {
     if (isOpening(item))
         return <>
   <label className="full-field">所属墙体<select aria-label="所属墙体" value={item.wallId??''} onChange={e=>{if(!e.target.value){update({freeStanding:true,wallId:undefined,offset:undefined});return}const next=s.project.items.find(w=>w.id===e.target.value)!;const offset=openingSlot(next,item,s.project.items,(next.w-item.w)/2);if(offset===undefined){useStore.setState({error:'这面墙没有足够空间容纳该门窗'});return}update({freeStanding:false,wallId:next.id,offset})}}><option value="">独立放置 · 可自由旋转</option>{s.project.items.filter(w=>w.kind==='wall').map(w=><option key={w.id} value={w.id} disabled={w.locked||w.hidden}>{w.name}{w.locked?'（锁定）':''}</option>)}</select></label>
-  <label>开口宽度（mm）<NumberField value={item.w} min={100} onCommit={w => update({ w })}/></label><label>开口高度（mm）<NumberField value={item.h} min={100} onCommit={h => update({ h })}/>{wall&&<small>最高 {Math.max(0,wall.h-(item.sill??0)-50)} mm</small>}</label>
-  {wall?<label className="full-field">距墙起点（mm）<NumberField value={item.offset ?? 50} min={50} onCommit={offset=>update({offset})}/></label>:<><label>X 坐标（mm）<NumberField value={item.x} onCommit={x=>update({x})}/></label><label>Y 坐标（mm）<NumberField value={item.y} onCommit={y=>update({y})}/></label><label>厚度（mm）<NumberField value={item.d} min={1} onCommit={d=>update({d})}/></label></>}
-  {item.kind === 'window' && <label>窗台离地（mm）<NumberField value={item.sill ?? 900} min={0} onCommit={sill => update({ sill })}/></label>}
+  <label className="full-field">{item.kind==='door'?'门型':'窗型'}<select aria-label={item.kind==='door'?'门型':'窗型'} value={item.model??item.kind} onChange={e=>update({model:e.target.value as Item['model']})}>{catalog.filter(c=>c.kind===item.kind).map(c=><option value={c.model} key={c.model}>{c.name}</option>)}</select></label>
+  <label>开口宽度（mm）<NumberField value={item.w} min={100} max={wall?wall.w-(item.offset??50)-50:undefined} onCommit={w => update({ w })}/></label><label>开口高度（mm）<NumberField value={item.h} min={100} max={wall?wall.h-(item.sill??0)-50:undefined} onCommit={h => update({ h })}/></label>
+  {wall?<><label className="full-field">距墙起点（mm）<NumberField value={item.offset ?? 50} min={50} max={wall.w-item.w-50} onCommit={offset=>update({offset})}/></label><p>距墙终点：{Math.round(wall.w-(item.offset??0)-item.w)} mm · 两端至少留 50 mm</p></>:<><label>X 坐标（mm）<NumberField value={item.x} onCommit={x=>update({x})}/></label><label>Y 坐标（mm）<NumberField value={item.y} onCommit={y=>update({y})}/></label><label>厚度（mm）<NumberField value={item.d} min={1} onCommit={d=>update({d})}/></label></>}
+  {item.kind === 'window' && <label>窗台离地（mm）<NumberField value={item.sill ?? 900} min={0} max={wall?wall.h-item.h-50:undefined} onCommit={sill => update({ sill })}/></label>}
   <label>颜色<input type="color" value={item.color} onChange={e => update({ color: e.target.value })}/></label>
-  {item.kind === 'door' && <button onClick={() => update({ flipped: !item.flipped })}>反转开门方向</button>}
+
   <p>{wall?`贴墙模式：沿墙拖动，厚度与方向跟随墙体。墙长 ${wall.w.toFixed(0)}mm，高 ${wall.h}mm。`:'独立模式：可自由移动与旋转，不在墙体生成开口。选取所属墙体可恢复贴墙及开口。'}</p>
  </>;
     const cx = item.x + item.w / 2, cy = item.y + item.d / 2;

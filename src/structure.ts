@@ -1,3 +1,4 @@
+import { operationFace, ordinaryEquipment, facingModels } from './equipmentFacing';
 import { validateLayout, syncMeasurements } from './layoutData';
 import { Item, Project, uid } from './model';
 import { validateZone } from './zones';
@@ -30,6 +31,12 @@ export function syncStructure(project: Project): Project {
     validateSite(project);validateSiteExtras(project);validateLayout(project);
     const items = project.items.map(i => {
         validateZone(i);
+        if(i.catalogId!==undefined&&(typeof i.catalogId!=='string'||!i.catalogId.trim()||i.catalogId.length>200))throw Error('目录来源标识无效');
+        if(i.specification!==undefined&&(typeof i.specification!=='string'||i.specification.length>500))throw Error('规格说明无效');
+        if(i.operationFace!==undefined&&(!ordinaryEquipment(i)||!['none','positive-y'].includes(i.operationFace)||(i.operationFace==='positive-y'&&(!i.model||!facingModels.has(i.model)))))throw Error('设备操作面定义无效');
+        if(ordinaryEquipment(i))i={...i,operationFace:operationFace(i)};
+        if(i.hingeRight!==undefined&&(i.kind!=='door'||typeof i.hingeRight!=='boolean'))throw Error('门轴设置仅适用于门，且必须为布尔值');
+        if(i.flipped!==undefined&&typeof i.flipped!=='boolean')throw Error('开向无效');
         if(i.freeStanding!==undefined&&(typeof i.freeStanding!=='boolean'||!isOpening(i)))throw Error('独立放置状态仅适用于门窗');
         if(i.notes!==undefined&&typeof i.notes!=='string')throw Error('现场备注无效');
         if(i.verification!==undefined&&!['pending','confirmed'].includes(i.verification))throw Error('现场确认状态无效');
@@ -58,23 +65,25 @@ export function syncStructure(project: Project): Project {
     return syncMeasurements({ ...project, items });
 }
 export function openingSlot(wall: Item, opening: Item, items: Item[], preferred: number) {
-    const candidates = [preferred, 50, ...items.filter(i => i.wallId === wall.id).map(i => (i.offset ?? 0) + i.w + 100)];
-    return candidates.map(n => Math.max(50, Math.min(wall.w - opening.w - 50, n))).find(offset => !openingError(wall, { ...opening, wallId: wall.id, offset }, items));
+    const candidates = [preferred, 50, wall.w-opening.w-50, ...items.filter(i => i.wallId === wall.id && i.id!==opening.id).flatMap(i => [(i.offset ?? 0) + i.w, (i.offset ?? 0)-opening.w])];
+    return candidates.map(n => Math.max(50, Math.min(wall.w - opening.w - 50, n))).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred)).find(offset => !openingError(wall, { ...opening, wallId: wall.id, offset }, items));
 }
 export function attachOpening(project: Project, opening: Item, point: {
     x: number;
     y: number;
 }, preferredWall?: string, exact = false, step=100): Item {
-    const walls = project.items.filter(i => i.kind === 'wall' && !i.locked && !i.hidden).map(w => ({ w, ...projectOnWall(w, point) })).sort((a, b) => a.distance - b.distance);
+    const walls = project.items.filter(i => i.kind === 'wall' && !i.locked && !i.hidden).map(w => ({ w, ...projectOnWall(w, point) })).sort((a, b) => Math.hypot(a.distance,Math.max(0,-a.offset,a.offset-a.w.w))-Math.hypot(b.distance,Math.max(0,-b.offset,b.offset-b.w.w)));
     const chosen = exact ? walls.find(v => v.distance <= Math.max(v.w.d / 2 + 200, 350) && v.offset >= -100 && v.offset <= v.w.w + 100) : walls.find(v => v.w.id === preferredWall) ?? walls[0];
     if (!chosen)
         throw Error(exact ? '请将门窗拖到未锁定的墙体上' : '请先绘制墙体，再选中墙体添加门窗');
-    const sill = opening.kind === 'door' ? 0 : 900;
+    const sill = opening.kind === 'door' ? 0 : opening.sill??900;
     const candidate = { ...opening, freeStanding:false, wallId: chosen.w.id, sill, offset: 50 };
     const preferred = exact ? step>0?Math.round((chosen.offset - opening.w / 2) / step) * step:chosen.offset-opening.w/2 : (chosen.w.w - opening.w) / 2;
-    const offset = openingSlot(chosen.w, candidate, project.items, preferred);
+    const offset = exact ? Math.max(50, Math.min(chosen.w.w-opening.w-50,preferred)) : openingSlot(chosen.w, candidate, project.items, preferred);
     if (offset === undefined)
         throw Error('该墙体没有足够的门窗空间，请加长/加高墙体或调整已有开口');
+    const error=openingError(chosen.w,{...candidate,offset},project.items);
+    if(error)throw Error(error);
     return { ...candidate, offset };
 }
 export type WallSection = {

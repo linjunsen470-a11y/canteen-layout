@@ -1,3 +1,4 @@
+import { doorLeaves } from './doorGeometry';
 import { Item, Point, Project, modelOf } from './model';
 import { zoneCorners } from './zones';
 import { pointInSite, polygonArea } from './site';
@@ -31,4 +32,4 @@ export function supportFor(p:Project,i:Item){
  return p.items.find(v=>v.id!==i.id&&!v.hidden&&isSurface(v)&&contains(footprint(v),footprint(i)));
 }
 export const baseHeight=(p:Project,i:Item)=>(i.sill??supportFor(p,i)?.h??0);
-export function doorSwing(i:Item){const a=i.rotation*Math.PI/180,c=Math.cos(a),s=Math.sin(a),sign=i.flipped?-1:1,cx=i.x+i.w/2,cy=i.y+i.d/2;const points=[{x:-i.w/2,y:0},...Array.from({length:25},(_,n)=>({x:-i.w/2+i.w*Math.cos(n*Math.PI/48),y:sign*i.w*Math.sin(n*Math.PI/48)}))];return points.map(p=>({x:cx+p.x*c-p.y*s,y:cy+p.x*s+p.y*c}))}
+export function doorSwings(i:Item){const a=i.rotation*Math.PI/180,c=Math.cos(a),s=Math.sin(a),sign=i.flipped?-1:1,cx=i.x+i.w/2,cy=i.y+i.d/2;return doorLeaves(i).map(leaf=>[{x:leaf.hinge,y:0},...Array.from({length:25},(_,n)=>({x:leaf.hinge+leaf.direction*leaf.width*Math.cos(n*Math.PI/48),y:sign*leaf.width*Math.sin(n*Math.PI/48)}))].map(p=>({x:cx+p.x*c-p.y*s,y:cy+p.x*s+p.y*c})))}

@@ -1,7 +1,8 @@
 import * as T from 'three';
 import { Item, Point } from './model';
 import { wallSections } from './structure';
-type Spec = Pick<Item, 'kind' | 'w' | 'd' | 'h' | 'color' | 'flipped' | 'model'>;
+import { doorLeaves } from './doorGeometry';
+type Spec = Pick<Item, 'kind' | 'w' | 'd' | 'h' | 'color' | 'flipped' | 'hingeRight' | 'model'>;
 export function createBuildingModel(item: Spec, openings: Item[] = [],profile?:Point[]) {
     const group = new T.Group(), w = item.w / 1000, d = item.d / 1000, h = item.h / 1000;
     const surface = new T.MeshStandardMaterial({ color: item.color, roughness: .88 });
@@ -37,16 +38,17 @@ export function createBuildingModel(item: Spec, openings: Item[] = [],profile?:P
             }
         }
         else {
-            const pivot = new T.Group();
-            pivot.position.set(-w / 2 + t, 0, 0);
-            pivot.rotation.y = (item.flipped ? 1 : -1) * Math.PI / 2;
-            group.add(pivot);
-            const leaf = box((w - 2 * t) / 2, (h - t) / 2, 0, w - 2 * t, h - t, .035, surface);
-            group.remove(leaf);
-            pivot.add(leaf);
-            const handle = box(w - 2 * t - .10, h * .46, .034, .12, .018, .025, metal);
-            group.remove(handle);
-            pivot.add(handle);
+            for(const spec of doorLeaves(item)){
+                const pivot = new T.Group(), length=spec.width/1000-(item.model==='double-door'?t:2*t);
+                pivot.name='door-leaf';
+                pivot.position.set(spec.hinge/1000+spec.direction*t,0,0);
+                pivot.rotation.y=(item.flipped?1:-1)*spec.direction*Math.PI/2;
+                group.add(pivot);
+                const leaf=box(spec.direction*length/2,(h-t)/2,0,length,h-t,.035,surface);
+                group.remove(leaf);pivot.add(leaf);
+                const handle=box(spec.direction*(length-Math.min(.1,length*.2)),h*.46,.034,Math.min(.12,length*.3),.018,.025,metal);
+                group.remove(handle);pivot.add(handle);
+            }
         }
     }
     const used = new Set<T.Material>();

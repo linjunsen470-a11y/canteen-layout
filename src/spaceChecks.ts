@@ -1,5 +1,5 @@
 import { Project } from './model';
-import { footprint, bounds, contains, polygonDistance, doorSwing, baseHeight, supportFor } from './spatial';
+import { footprint, bounds, contains, polygonDistance, doorSwings, baseHeight, supportFor } from './spatial';
 import { polygonCoverage } from './polygonArea';
 import { siteOutline } from './site';
 export type SpaceIssue={ids:string[];type:string;message:string};
@@ -16,6 +16,6 @@ export function checkSpace(p:Project,activeId:string|null){
   if(overlap>1){const fixed=[a,b].some(i=>['wall','partition','column','fixture'].includes(i.kind));issues.push({ids:[a.id,b.id],type:fixed?'固定障碍碰撞':'物件重叠',message:`${a.name} 与 ${b.name} 外包轮廓重叠`})}
   else if(reference>0&&!(p.groups??[]).some(g=>g.members.includes(a.id)&&g.members.includes(b.id))){const d=polygonDistance(fa,fb).distance;if(d<reference-.1)issues.push({ids:[a.id,b.id],type:'参考净距',message:`${a.name} ↔ ${b.name}：${Math.round(d)}mm，小于参考 ${reference}mm`})}
  }
- for(const door of bodies.filter(i=>i.kind==='door'))for(const other of bodies){if(other.id===door.id||other.id===door.wallId||other.kind==='door'||baseHeight(p,other)>=door.h)continue;if(polygonCoverage(doorSwing(door),[footprint(other)]).union>1)issues.push({ids:[door.id,other.id],type:'门扇开启范围',message:`${door.name} 的示意开启范围与 ${other.name} 重叠`})}
+ for(const door of bodies.filter(i=>i.kind==='door'))for(const other of bodies){if(other.id===door.id||other.id===door.wallId||other.kind==='door'||baseHeight(p,other)>=door.h)continue;if(doorSwings(door).some(swing=>polygonCoverage(swing,[footprint(other)]).union>1))issues.push({ids:[door.id,other.id],type:'门扇开启范围',message:`${door.name} 的示意开启范围与 ${other.name} 重叠`})}
  return issues;
 }

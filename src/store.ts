@@ -1,3 +1,4 @@
+import { useWallPlacement, cancelWallPlacement, placementEditMessage } from './wallPlacementState';
 import { movableSelection } from './layoutGroups';
 import { pruneLayout } from './layoutData';
 import { normalizeRotation } from './rotation';
@@ -8,7 +9,7 @@ import { Item, Project, Point, Underlay, blankProject, uid } from './model';
 import { syncStructure, isOpening, isAttachedOpening, projectOnWall, duplicateItems } from './structure';
 import { EditorMode, EditorTool, isEditable } from './editorInteraction';
 type State = {
-    placement:{origins:Item[];anchor:Point}|null;
+    placement:{origins:Item[];anchor:Point;previousSelection?:string[]}|null;
     calibrationPoints:Point[];
     setCalibrationPoints:(points:Point[])=>void;
     moveZone:(id:string,points:Point[])=>void;
@@ -72,11 +73,14 @@ function applyChanges(project: Project, changes: {
             if (!change)
                 return item;
             if(!isEditable(item,project))throw Error('对象已锁定、隐藏或位于当前规划范围外');
+            if(item.kind==='wall'&&(['x','y','w','d','h','rotation'] as const).some(key=>change.patch[key]!==undefined&&change.patch[key]!==item[key])&&project.items.some(i=>i.wallId===item.id&&!isEditable(i,project)))
+                throw Error('墙体包含锁定、隐藏或范围外门窗，请先处理关联门窗再调整墙体');
             const wall = project.items.find(w => w.id === item.wallId);
             if (isOpening(item) && wall?.locked)
                 throw Error('所属墙体已锁定，请先解锁墙体');
             let patch = { ...change.patch };
-            if(isAttachedOpening(item)&&patch.rotation!==undefined&&Math.abs(normalizeRotation(patch.rotation)-normalizeRotation(item.rotation))>1e-8)patch={...patch,freeStanding:true,wallId:undefined,offset:undefined};
+            if(isAttachedOpening(item)&&!patch.freeStanding&&patch.rotation!==undefined&&Math.abs(normalizeRotation(patch.rotation)-normalizeRotation(item.rotation))>1e-8)
+                throw Error('贴墙门窗的方向由墙体决定。请旋转所属墙体；如需独立示意，请先在“所属墙体”选择独立放置。');
 
             if(patch.wallId&&project.items.find(w=>w.id===patch.wallId)?.locked)throw Error('目标墙体已锁定');
             if (isAttachedOpening(item) && !patch.freeStanding && wall && (patch.x !== undefined || patch.y !== undefined)) {
@@ -94,7 +98,7 @@ export const useStore = create<State>((set, get) => ({
     calibrationPoints:[],setCalibrationPoints:calibrationPoints=>set({calibrationPoints}),moveUnderlay:patch=>{const p=get().project;if(p.underlay)set({project:{...p,underlay:{...p.underlay,...patch}}})},
     project: blankProject(), selected: null, selectedIds:[], mode:'layout', tool:'select',interactionEpoch:0,focusRequest:0,past: [], future: [], gesture: null, error: null,
     selectMany: ids=>{const valid=[...new Set(ids)].filter(id=>get().project.items.some(i=>i.id===id));const items=get().project.items.filter(i=>valid.includes(i.id));set({selectedIds:valid,selected:valid.at(-1)??null,...(items.length?{mode:items.every(i=>['wall','door','window','partition'].includes(i.kind))?'structure' as const:'layout' as const}:{}),error:null})},
-    cancelInteraction: ()=>{get().cancelMove();set(s=>({tool:'select',placement:null,selectedIds:s.selectedIds.filter(id=>s.project.items.some(i=>i.id===id)),selected:s.project.items.some(i=>i.id===s.selected)?s.selected:null,calibrationPoints:[],interactionEpoch:s.interactionEpoch+1}))},
+    cancelInteraction: ()=>{const restore=get().placement?.previousSelection;get().cancelMove();set(s=>{const ids=(restore??s.selectedIds).filter(id=>s.project.items.some(i=>i.id===id));return{tool:'select',placement:null,selectedIds:ids,selected:ids.at(-1)??null,calibrationPoints:[],interactionEpoch:s.interactionEpoch+1}})},
     setTool: tool=>{get().cancelInteraction();set({tool,...((tool.startsWith('outline')||tool.startsWith('underlay')||tool.startsWith('planning'))?{mode:'site' as const,selected:null,selectedIds:[]}:tool==='wall'||tool==='partition'?{mode:'structure' as const}:['zone','zone-draw','zone-edit','text','dimension','leader'].includes(tool)?{mode:'layout' as const}:{})})},
     setMode: mode=>{get().cancelInteraction();set({mode,selected:null,selectedIds:[]})},
     locate: id=>{get().cancelInteraction();if(id)get().selectMany([id]);set(s=>({focusRequest:s.focusRequest+1}))},
@@ -107,6 +111,7 @@ export const useStore = create<State>((set, get) => ({
         set({ error: (e as Error).message });
     } },
     commit: project => {
+        if(useWallPlacement.getState().session){useWallPlacement.setState({error:placementEditMessage});return false}
         const s = get();
         try {
             project = syncStructure(project);
@@ -139,8 +144,8 @@ export const useStore = create<State>((set, get) => ({
     } },
     move: (id,patch)=>get().moveMany([{id,patch}]),
     moveOutline: (outline,planningId)=>{try{const p=get().project;set({project:syncStructure(planningId?{...p,planningAreas:p.planningAreas?.map(a=>a.id===planningId?{...a,outline}:a)}:{...p,outline}),error:null})}catch(e){set({error:(e as Error).message})}},
-    moveMany:changes=>{try{set({project:applyChanges(get().project,changes),error:null})}catch(e){set({error:(e as Error).message})}},
-    beginMove: () => set({ gesture: get().project }),
+    moveMany:changes=>{if(useWallPlacement.getState().session){useWallPlacement.setState({error:placementEditMessage});return}try{set({project:applyChanges(get().project,changes),error:null})}catch(e){set({error:(e as Error).message})}},
+    beginMove: () => {if(!useWallPlacement.getState().session)set({ gesture: get().project })},
     cancelMove: () => { const project = get().gesture; if (project)
         set({ project, gesture: null, error: null }); },
     endMove: () => {
@@ -160,6 +165,7 @@ export const useStore = create<State>((set, get) => ({
         set({ error: (e as Error).message });
     } return []; },
     removeMany: ids => {
+        if(useWallPlacement.getState().session){useWallPlacement.setState({error:placementEditMessage});return}
         const project = get().project;
         const removed = new Set(project.items.filter(i => ids.includes(i.id) && isEditable(i,project)).map(i => i.id));
         if(!removed.size){set({error:'选中对象已锁定、隐藏或位于当前规划范围外'});return}
@@ -179,8 +185,8 @@ export const useStore = create<State>((set, get) => ({
         get().commit(pruneLayout({ ...project, items: project.items.filter(i => !removed.has(i.id)).map(i=>i.zoneId&&removed.has(i.zoneId)?{...i,zoneId:undefined}:i) }));
         get().selectMany([]);
     },
-    undo: () => { get().cancelInteraction(); set(s => s.past.length ? { project: s.past[s.past.length - 1], past: s.past.slice(0, -1), future: [s.project, ...s.future], selected: null,selectedIds:[], error: null } : {}); },
-    redo: () => { get().cancelInteraction(); set(s => s.future.length ? { project: s.future[0], past: [...s.past, s.project], future: s.future.slice(1), selected: null,selectedIds:[], error: null } : {}); },
+    undo: () => { if(useWallPlacement.getState().session){cancelWallPlacement();return}get().cancelInteraction(); set(s => s.past.length ? { project: s.past[s.past.length - 1], past: s.past.slice(0, -1), future: [s.project, ...s.future], selected: null,selectedIds:[], error: null } : {}); },
+    redo: () => { if(useWallPlacement.getState().session){cancelWallPlacement();return}get().cancelInteraction(); set(s => s.future.length ? { project: s.future[0], past: [...s.past, s.project], future: s.future.slice(1), selected: null,selectedIds:[], error: null } : {}); },
     resize: (width, height) => { if (validSize(width) && validSize(height))
         {const p=get().project;get().commit({ ...p, width, height, outline:p.outline?.map(v=>({x:v.x*width/p.width,y:v.y*height/p.height})) });} },
 }));

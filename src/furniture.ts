@@ -4,7 +4,7 @@ import { createBuildingModel } from './buildingModels';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Item, Point, modelOf } from './model';
-export type FurnitureSpec = Pick<Item,'kind'|'name'|'model'|'w'|'d'|'h'|'color'|'flipped'|'pointType'|'verification'>;
+export type FurnitureSpec = Pick<Item,'kind'|'name'|'model'|'w'|'d'|'h'|'color'|'flipped'|'hingeRight'|'pointType'|'verification'>;
 
 // One generated grain texture shared across models, with no network assets.
 let grain: T.CanvasTexture | undefined;
@@ -67,7 +67,8 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
       box(0,.83,-.433,.98,.34,.10,paint,true);box(0,.18,.36,.78,.025,.025,dark);break;
     }
     case 'bench': feet(.88,.40,.045);box(0,.94,0,1,.12,1,wood,true);box(0,.35,0,.83,.08,.055,dark);break;
-    case 'worktable': feet(.93);box(0,.97,0,1,.06,1,steel,true);box(0,.2,0,.89,.035,.86);box(0,.89,-.43,.88,.1,.025);box(0,.89,.43,.88,.1,.025);break;
+    // Worktable convention: open working side +Z, rear rail -Z (within envelope).
+    case 'worktable': box(0,.91,-.46,.94,.10,.04);feet(.93);box(0,.97,0,1,.06,1,steel,true);box(0,.2,0,.89,.035,.86);box(0,.89,-.43,.88,.1,.025);box(0,.89,.43,.88,.1,.025);break;
     case 'buffet': {
       feet(.14,.43,.04);box(0,.37,0,.96,.52,.92,paint,true);box(0,.71,-.42,1,.045,.16,steel,true);box(0,.71,.42,1,.045,.16,steel,true);for(const x of [-.48,-.155,.155,.48])box(x,.71,0,.035,.045,.68,steel,true);
       for(const x of [-.31,0,.31]){basin(x,.746,0,.235,.53);box(x,.685,0,.20,.008,.45,inside)}

@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 
-type Preferences={objectSnap:boolean;view:'2d'|'split'|'3d';libraryOpen:boolean;propsOpen:boolean;leftTab:'catalog'|'objects';ratio:number;axis:'auto'|'columns'|'rows';camera:'oblique'|'top';move3D:boolean;gridSize:number;snapSize:number};
-const defaults:Preferences={objectSnap:true,view:'split',libraryOpen:true,propsOpen:true,leftTab:'catalog',ratio:58,axis:'auto',camera:'oblique',move3D:false,gridSize:1000,snapSize:100};
+type Preferences={focusMode:boolean;focusView:'2d'|'3d'|null;toolsOpen:boolean;libraryWidth:number;propsWidth:number;objectSnap:boolean;view:'2d'|'split'|'3d';libraryOpen:boolean;propsOpen:boolean;leftTab:'catalog'|'objects';ratio:number;axis:'auto'|'columns'|'rows';camera:'oblique'|'top';move3D:boolean;gridSize:number;snapSize:number};
+const defaults:Preferences={focusMode:false,focusView:null,toolsOpen:true,libraryWidth:256,propsWidth:280,objectSnap:true,view:'2d',libraryOpen:true,propsOpen:true,leftTab:'catalog',ratio:58,axis:'auto',camera:'oblique',move3D:false,gridSize:1000,snapSize:100};
 function read():Preferences{
   try{const p=JSON.parse(localStorage.getItem('canteen-workspace-v1')||'{}');return {
+    focusMode:false,focusView:null,toolsOpen:p.toolsOpen!==false,
+    libraryWidth:Number.isFinite(p.libraryWidth)?Math.max(200,Math.min(400,p.libraryWidth)):256,
+    propsWidth:Number.isFinite(p.propsWidth)?Math.max(220,Math.min(420,p.propsWidth)):280,
     objectSnap:p.objectSnap!==false,
     view:['2d','split','3d'].includes(p.view)?p.view:defaults.view,
     libraryOpen:typeof p.libraryOpen==='boolean'?p.libraryOpen:true,propsOpen:typeof p.propsOpen==='boolean'?p.propsOpen:true,
