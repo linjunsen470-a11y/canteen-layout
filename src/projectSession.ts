@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { blankProject, initial, Project, projectIdentity } from './model';
+import { blankProject, Project, projectIdentity } from './model';
+import { createBistroNoodleTemplate } from './shopTemplates';
 import { parseProject } from './projectIO';
 import { useStore } from './store';
 import { legacyMigrationId, listProjects, migrateLegacy, ProjectRecord, readProject, RevisionConflict, setDeleted, writeProject } from './projectLibrary';
@@ -35,7 +36,7 @@ export function startProjectSession(){
       const rows=useProjectSession.getState().rows.filter(r=>!r.deletedAt);
       const row=rows.find(r=>r.id===last)??rows[0];
       if(row)activate(parseProject(row.project),row.revision);
-      else activate(blankProject(),0);
+      else activate(createBistroNoodleTemplate(),0);
       useProjectSession.setState({ready:true,message:warning});
       if(!row)await saveProject();
       if(warning)useProjectSession.setState({message:warning});
@@ -123,7 +124,7 @@ export const openProject=(id:string)=>run(async()=>{
 });
 export const createProject=(name:string,example=false)=>run(async()=>{
   await leaveCurrent();
-  const project=example?{...structuredClone(initial),...projectIdentity(),name:name||'食堂示例方案'}:blankProject(name||'未命名方案');
+  const project=example?createBistroNoodleTemplate(name||undefined):blankProject(name||'未命名方案');
   const row=await writeProject(project,0);activate(row.project,row.revision);channel?.postMessage(row.id);await refreshProjects();
 });
 // Also works after a conflict or failed save: never discard the in-memory document until a new ID is durable.

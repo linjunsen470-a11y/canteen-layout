@@ -56,9 +56,9 @@ const validSize = (n: number) => Number.isFinite(n) && n > 0;
 function patchItem(item: Item, patch: Partial<Item>): Item {
     if (item.locked)
         return patch.locked === false ? { ...item, locked: false } : item;
-    for (const key of ['w', 'd', 'h', 'x', 'y', 'rotation', 'offset', 'sill'] as const) {
+    for (const key of ['w', 'd', 'h', 'x', 'y', 'rotation', 'offset', 'sill', 'elevation'] as const) {
         const value = patch[key];
-        if (value !== undefined && (!Number.isFinite(value) || (['w', 'd'].includes(key) && value <= 0) || (key === 'h' && value < 0)))
+        if (value !== undefined && (!Number.isFinite(value) || (['w', 'd'].includes(key) && value <= 0) || ((key === 'h' || key === 'elevation') && value < 0)))
             return item;
     }
     if(patch.rotation!==undefined)patch={...patch,rotation:normalizeRotation(patch.rotation)};

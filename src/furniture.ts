@@ -1,20 +1,13 @@
 import { isSiteObject, siteObjectModel } from './siteObjects';
 import * as T from 'three';
-import { createBuildingModel } from './buildingModels';
+import { BuildingRenderOptions, createBuildingModel } from './buildingModels';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Item, Point, modelOf } from './model';
+import { Item, LightingPreset, Point, modelOf } from './model';
+import { brushedSteelTexture, fabricTexture, marbleTexture, menuBoardTexture, shopSignTexture, tvScreenTexture, wallArtTexture, woodGrainTexture } from './materials';
+
 export type FurnitureSpec = Pick<Item,'kind'|'name'|'model'|'w'|'d'|'h'|'color'|'flipped'|'hingeRight'|'pointType'|'verification'>;
 
-// One generated grain texture shared across models, with no network assets.
-let grain: T.CanvasTexture | undefined;
-function woodTexture() {
-  if (grain) return grain;
-  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=256;
-  const ctx=canvas.getContext('2d')!;ctx.fillStyle='#eee3cf';ctx.fillRect(0,0,512,256);
-  for(let y=0;y<256;y++) {const v=Math.sin(y*1.91)*.5+.5;ctx.strokeStyle=`rgba(95,64,29,${.04+v*.12})`;ctx.lineWidth=.5+v;ctx.beginPath();for(let x=0;x<=512;x+=8){const py=y+Math.sin(x/90+y*.08)*2+Math.sin(x/34+y)*.4;x?ctx.lineTo(x,py):ctx.moveTo(x,py)}ctx.stroke()}
-  grain=new T.CanvasTexture(canvas);grain.colorSpace=T.SRGBColorSpace;grain.wrapS=grain.wrapT=T.RepeatWrapping;grain.anisotropy=4;return grain;
-}
 export function studioEnvironment(renderer:T.WebGLRenderer) {
   const room=new RoomEnvironment();const generator=new T.PMREMGenerator(renderer);
   const target=generator.fromScene(room,.04);room.dispose();generator.dispose();return target;
@@ -27,21 +20,35 @@ export function disposeFurniture(group:T.Object3D) {
 }
 
 // Build in a unit envelope then scale to the exact user dimensions. All details stay within it.
-export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:Point[]) {
+export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:Point[],options:BuildingRenderOptions={}) {
   if(isSiteObject(item))return siteObjectModel(item);
-  if(['wall','door','window'].includes(item.kind))return createBuildingModel(item,openings,profile);
+  if(['wall','door','window'].includes(item.kind))return createBuildingModel(item,openings,profile,options);
   const root=new T.Group();const type=modelOf(item);
-  const material=(color:string,metalness=0,roughness=.5)=>new T.MeshStandardMaterial({color,metalness,roughness});
-  const steel=material('#b9c5ca',.82,.29), dark=material('#252c30',.55,.37), rubber=material('#202426',0,.85);
-  const paint=material(item.color,.15,.36), wood=material(item.color,0,.42);wood.map=woodTexture();
-  if(['sink','worktable','stove','shelf'].includes(type))steel.color.lerp(new T.Color(item.color),.24);
-  const black=material('#11191c',.22,.24), inside=material('#7c8d96',.8,.3);
-  const glass=new T.MeshPhysicalMaterial({color:'#d4eeeb',metalness:0,roughness:.1,transparent:true,opacity:.22,depthWrite:false,side:T.DoubleSide});
-  function mesh(geometry:T.BufferGeometry,mat:T.Material,x:number,y:number,z:number){const m=new T.Mesh(geometry,mat);m.position.set(x,y,z);m.castShadow=mat!==glass;m.receiveShadow=true;root.add(m);return m}
+  const preset:LightingPreset=options.lightingPreset??'warm-dining';
+  const isClay=preset==='clay';
+  const glowBoost=preset==='evening'?2.4:preset==='warm-dining'?1.55:preset==='daylight'?0.75:0.15;
+
+  const material=(color:string,metalness=0,roughness=.5)=>new T.MeshStandardMaterial({color:isClay?'#e5e3dd':color,metalness:isClay?.05:metalness,roughness:isClay?.82:roughness});
+  const steel=material('#c4cfd4',.84,.25); if(!isClay)steel.map=brushedSteelTexture();
+  const brass=material('#cfa25a',.82,.26);
+  const dark=material('#262c30',.52,.36), rubber=material('#202426',0,.85);
+  const paint=material(item.color,.14,.38);
+  const wood=material(item.color,0,.44); if(!isClay)wood.map=woodGrainTexture();
+  const fabric=material(item.color,0,.78); if(!isClay)fabric.map=fabricTexture();
+  const marble=material(item.color,0.04,.22); if(!isClay)marble.map=marbleTexture();
+  if(!isClay&&['sink','worktable','stove','shelf','dish-pass'].includes(type))steel.color.lerp(new T.Color(item.color),.22);
+  const black=material('#141a1e',.24,.24), inside=material('#7d8f98',.8,.3);
+  const warmBulb=new T.MeshStandardMaterial({color:'#fff3d4',emissive:'#ffbd63',emissiveIntensity:glowBoost,roughness:.18});
+  const coolLed=new T.MeshStandardMaterial({color:'#f4fbff',emissive:'#d9f0ff',emissiveIntensity:glowBoost*.85,roughness:.2});
+  const glass=new T.MeshPhysicalMaterial({color:'#d4eeeb',metalness:0,roughness:.08,transparent:true,opacity:.24,depthWrite:false,side:T.DoubleSide});
+  const leafDark=material('#375d3f',0,.68), leafMid=material('#4c7a52',0,.62), leafLight=material('#669663',0,.58);
+  const potMat=material('#c7a889',0,.72), soilMat=material('#46372a',0,.92);
+
+  function mesh(geometry:T.BufferGeometry,mat:T.Material,x:number,y:number,z:number){const m=new T.Mesh(geometry,mat);m.position.set(x,y,z);m.castShadow=mat!==glass&&mat!==warmBulb&&mat!==coolLed;m.receiveShadow=true;root.add(m);return m}
   function box(x:number,y:number,z:number,w:number,h:number,d:number,mat:T.Material=steel,round=false){return mesh(round?new RoundedBoxGeometry(w,h,d,2,Math.min(w,h,d)*.16):new T.BoxGeometry(w,h,d),mat,x,y,z)}
-  function cylinder(x:number,y:number,z:number,r:number,h:number,mat:T.Material=steel){return mesh(new T.CylinderGeometry(r,r,h,64),mat,x,y,z)}
-  function feet(top=.9,spread=.42,thickness=.035){for(const x of [-spread,spread])for(const z of [-.4,.4]){box(x,top/2+.025,z,thickness,top-.05,thickness);box(x,.025,z,thickness*1.15,.05,thickness*1.15,rubber,true)}}
-  function handle(x:number,y:number,z=.493,h=.18){box(x,y,z,.014,h,.014,dark,true);box(x,y-h/2,z-.014,.014,.014,.03);box(x,y+h/2,z-.014,.014,.014,.03)}
+  function cylinder(x:number,y:number,z:number,r:number,h:number,mat:T.Material=steel){return mesh(new T.CylinderGeometry(r,r,h,48),mat,x,y,z)}
+  function feet(top=.9,spread=.42,thickness=.035,mat:T.Material=steel){for(const x of [-spread,spread])for(const z of [-.4,.4]){box(x,top/2+.025,z,thickness,top-.05,thickness,mat);box(x,.025,z,thickness*1.15,.05,thickness*1.15,rubber,true)}}
+  function handle(x:number,y:number,z=.493,h=.18){box(x,y,z,.014,h,.014,dark,true);box(x,y-h/2,z-.014,.014,.014,.03,dark);box(x,y+h/2,z-.014,.014,.014,.03,dark)}
   function basin(x:number,y:number,z:number,w:number,d:number,depth=.08){
     box(x,y-depth+.005,z,w,.014,d,inside,true);
     box(x-w/2,y-depth/2,z,.012,depth,d);box(x+w/2,y-depth/2,z,.012,depth,d);
@@ -49,6 +56,261 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     cylinder(x,y-depth+.014,z,.022,.003,black);cylinder(x,y-depth+.016,z,.012,.003,steel);
   }
   switch(type){
+    // === NEW LIGHTING FIXTURES ===
+    case 'pendant-lamp': {
+      // Ceiling canopy + cord + designer brass/matte dome shade + warm glowing bulb
+      cylinder(0,.985,0,.13,.03,dark);
+      cylinder(0,.66,0,.016,.64,dark);
+      cylinder(0,.34,0,.07,.06,brass);
+      const shade=mesh(new T.ConeGeometry(.49,.28,40,1,true),paint,0,.18,0);
+      (shade.material as T.MeshStandardMaterial).side=T.DoubleSide;
+      const innerRim=mesh(new T.TorusGeometry(.48,.018,12,40),brass,0,.045,0);innerRim.rotation.x=Math.PI/2;
+      mesh(new T.SphereGeometry(.14,24,18),warmBulb,0,.10,0);
+      break;
+    }
+    case 'linear-light': {
+      // Modern dining linear bar pendant with dual suspension wires and warm bottom diffuser
+      for(const x of [-.34,.34]){
+        cylinder(x,.98,0,.028,.04,dark);
+        cylinder(x,.54,0,.008,.86,dark);
+      }
+      box(0,.10,0,1,.14,.85,paint,true);
+      box(0,.10,0,.96,.16,.24,brass);
+      box(0,.02,0,.94,.04,.64,warmBulb);
+      break;
+    }
+    case 'track-light': {
+      // Commercial ceiling track bar with 3 directional spotlights & warm glowing lenses
+      box(0,.92,0,1,.14,.28,paint);
+      for(const x of [-.34,0,.34]){
+        cylinder(x,.76,0,.04,.22,dark);
+        const head=cylinder(x,.34,.08,.11,.56,paint);
+        head.rotation.x=0.35;
+        const lens=cylinder(x,.10,.17,.088,.04,warmBulb);
+        lens.rotation.x=0.35;
+      }
+      break;
+    }
+    case 'wall-sconce': {
+      // Decorative hospitality wall sconce with brass backplate & warm frosted glass globe
+      box(0,.5,-.44,.42,.58,.12,brass,true);
+      box(0,.46,-.26,.12,.12,.32,brass);
+      cylinder(0,.52,.02,.28,.76,warmBulb);
+      cylinder(0,.91,.02,.30,.06,brass);
+      cylinder(0,.13,.02,.30,.06,brass);
+      break;
+    }
+    case 'chandelier': {
+      // Architectural brass ring chandelier with 6 glowing frosted globes
+      cylinder(0,.98,0,.10,.04,brass);
+      cylinder(0,.62,0,.016,.70,brass);
+      const ring=mesh(new T.TorusGeometry(.39,.024,14,48),brass,0,.24,0);
+      ring.rotation.x=Math.PI/2;
+      for(let n=0;n<6;n++){
+        const a=(n*Math.PI)/3;
+        const gx=Math.cos(a)*.39, gz=Math.sin(a)*.39;
+        const wire=box(gx*.5,.60,gz*.5,.008,.76,.008,brass);
+        wire.lookAt(0,.96,0);
+        mesh(new T.SphereGeometry(.10,20,16),warmBulb,gx,.16,gz);
+      }
+      break;
+    }
+    case 'kitchen-panel-light': {
+      box(0,.65,0,1,.70,1,steel,true);
+      box(0,.18,0,.92,.36,.88,coolLed);
+      break;
+    }
+    // === NEW DECOR & BRANDING ===
+    case 'potted-plant': {
+      // Sculpted ceramic/terracotta planter + dark soil + multi-tier lush botanical foliage
+      mesh(new T.CylinderGeometry(.32,.23,.34,32),potMat,0,.17,0);
+      cylinder(0,.33,0,.30,.025,soilMat);
+      cylinder(0,.55,0,.04,.44,material('#5a4330',0,.85));
+      for(const [ang,tilt,y,r,mat] of [
+        [0,0.45,.66,.26,leafDark],[1.1,0.52,.62,.24,leafMid],[2.2,0.48,.70,.25,leafDark],
+        [3.3,0.46,.64,.23,leafMid],[4.5,0.50,.68,.26,leafDark],[5.4,0.44,.72,.22,leafLight],
+        [0.6,0.32,.84,.22,leafMid],[2.7,0.34,.86,.21,leafLight],[4.8,0.30,.82,.23,leafMid],
+      ] as [number,number,number,number,T.Material][]){
+        const leaf=mesh(new T.SphereGeometry(r,14,10),mat,Math.cos(ang)*.22,y,Math.sin(ang)*.22);
+        leaf.scale.set(1,.42,1.25);
+        leaf.rotation.set(tilt,ang,0);
+      }
+      mesh(new T.SphereGeometry(.17,14,10),leafLight,0,.94,0).scale.set(1,.62,1);
+      break;
+    }
+    case 'planter-divider': {
+      // Commercial restaurant planter box divider topped with dense greenery
+      box(0,.04,0,.94,.08,.90,dark);
+      box(0,.34,0,1,.54,1,wood,true);
+      box(0,.61,0,.94,.04,.90,soilMat);
+      for(let i=0;i<7;i++){
+        const x=-.39+i*.13;
+        const m=i%3===0?leafDark:i%3===1?leafMid:leafLight;
+        const bush=mesh(new T.SphereGeometry(.17,12,10),m,x,.78+(i%2)*.05,(i%2-.5)*.14);
+        bush.scale.set(.95,1.25,1.3);
+        const top=mesh(new T.SphereGeometry(.13,12,10),leafLight,x+(i%2-.5)*.03,.90,(i%2-.5)*-.12);
+        top.scale.set(1,1.1,1.2);
+      }
+      break;
+    }
+    case 'wall-art': {
+      // Framed diptych architectural art with wood outer frame & warm graphic canvas
+      const artMat=new T.MeshStandardMaterial({color:'#ffffff',map:isClay?null:wallArtTexture(),roughness:.68});
+      box(0,.5,-.20,1,1,.60,wood,true);
+      box(0,.5,.26,.92,.88,.18,artMat);
+      break;
+    }
+    case 'menu-board': {
+      // Illuminated back-bar commercial menu lightbox
+      const screenMat=new T.MeshStandardMaterial({
+        color:'#ffffff',
+        map:isClay?null:menuBoardTexture(),
+        emissive:'#ffe8c2',
+        emissiveMap:isClay?null:menuBoardTexture(),
+        emissiveIntensity:glowBoost*.55,
+        roughness:.28,
+      });
+      box(0,.5,-.14,1,1,.72,dark,true);
+      box(0,.5,.30,.94,.90,.18,screenMat);
+      box(0,.98,0,1,.05,1,brass);
+      break;
+    }
+    case 'shop-sign': {
+      // Mall storefront fascia signboard with brushed brass trim & glowing brand face
+      const signTex=shopSignTexture(item.name||'品牌餐饮');
+      const faceMat=new T.MeshStandardMaterial({
+        color:'#ffffff',
+        map:isClay?null:signTex,
+        emissive:'#ffe2b0',
+        emissiveMap:isClay?null:signTex,
+        emissiveIntensity:glowBoost*.55,
+        roughness:.3,
+      });
+      box(0,.5,-.1,1,1,.80,paint,true);
+      box(0,.5,.36,.96,.90,.16,faceMat);
+      box(0,.97,.15,1,.06,.70,brass);
+      box(0,.03,.15,1,.06,.70,brass);
+      break;
+    }
+    case 'wood-feature-wall': {
+      // Vertical fluted oak accent wall with subtle recessed LED perimeter wash
+      box(0,.5,-.25,1,1,.50,dark);
+      for(let n=0;n<18;n++){
+        box(-.47+n*.0552,.5,.18,.036,1,.48,wood,true);
+      }
+      box(-.495,.5,.36,.012,.96,.08,warmBulb);
+      box(.495,.5,.36,.012,.96,.08,warmBulb);
+      break;
+    }
+    case 'podium': {
+      // Reception / ordering podium stand with angled POS tablet
+      box(0,.04,0,.96,.08,.96,dark);
+      box(0,.46,0,.84,.78,.80,wood,true);
+      box(0,.87,0,1,.06,1,marble,true);
+      box(0,.94,-.34,.94,.12,.14,brass);
+      const pad=box(0,.95,.05,.46,.04,.38,black,true);
+      pad.rotation.x=.38;
+      const scr=box(0,.965,.06,.40,.01,.32,coolLed);
+      scr.rotation.x=.38;
+      break;
+    }
+    case 'tv-screen': {
+      // Commercial digital queue / promo TV display
+      const tvMat=new T.MeshStandardMaterial({
+        color:'#ffffff',
+        map:isClay?null:tvScreenTexture(),
+        emissive:'#e8f4ff',
+        emissiveMap:isClay?null:tvScreenTexture(),
+        emissiveIntensity:glowBoost*.45,
+        roughness:.2,
+      });
+      box(0,.5,-.15,1,1,.66,black,true);
+      box(0,.5,.26,.94,.90,.16,tvMat);
+      break;
+    }
+    // === NEW COMMERCIAL HOSPITALITY FURNITURE & COUNTERS ===
+    case 'booth-table': {
+      // Sturdy pedestal restaurant booth table with chamfered wood top
+      box(0,.965,0,1,.07,1,wood,true);
+      for(const x of [-.26,.26]){
+        cylinder(x,.47,0,.055,.88,dark);
+        box(x,.03,0,.28,.06,.68,dark,true);
+      }
+      box(0,.90,0,.72,.04,.36,dark);
+      break;
+    }
+    case 'marble-round-table': {
+      // Café / bistro marble round top + brushed brass pedestal & base
+      cylinder(0,.968,0,.5,.058,marble);
+      const rim=mesh(new T.TorusGeometry(.498,.012,12,48),brass,0,.968,0);rim.rotation.x=Math.PI/2;
+      cylinder(0,.47,0,.048,.90,brass);
+      cylinder(0,.028,0,.28,.056,dark);
+      break;
+    }
+    case 'dining-armchair': {
+      // Warm upholstered restaurant armchair with wrap-around back & tapered legs
+      feet(.46,.37,.045,dark);
+      box(0,.50,.04,.90,.10,.82,fabric,true);
+      box(0,.74,-.40,.92,.44,.14,fabric,true);
+      for(const x of [-.43,.43])box(x,.66,-.04,.11,.24,.76,fabric,true);
+      box(0,.43,.02,.84,.04,.74,dark);
+      break;
+    }
+    case 'curved-booth': {
+      // Vertical-ribbed upholstered restaurant banquette sofa with oak plinth base
+      box(0,.09,0,.96,.18,.90,wood);
+      box(0,.33,.06,1,.30,.88,fabric,true);
+      box(0,.73,-.36,1,.54,.24,fabric,true);
+      // Vertical channel tufting ribs along backrest
+      for(let n=0;n<6;n++){
+        box(-.41+n*.164,.73,-.22,.13,.46,.07,fabric,true);
+      }
+      break;
+    }
+    case 'hotpot-table': {
+      // Dining table with recessed induction stove plate in center
+      box(0,.965,0,1,.07,1,wood,true);
+      box(0,.995,0,.36,.014,.42,black,true);
+      const ring=mesh(new T.TorusGeometry(.12,.008,8,32),brass,0,1.002,0);ring.rotation.x=Math.PI/2;
+      feet(.91,.40,.048,dark);
+      box(0,.87,-.38,.84,.09,.035,dark);box(0,.87,.38,.84,.09,.035,dark);
+      break;
+    }
+    case 'tea-bar': {
+      // Front-of-house café/tea bar counter with fluted front panel, marble customer ledge & stainless work deck
+      box(0,.05,0,.98,.10,.96,dark);
+      box(0,.48,0,1,.78,.94,paint,true);
+      for(let n=0;n<14;n++)box(-.455+n*.07,.48,-.48,.036,.72,.04,wood,true);
+      box(0,.90,.10,1,.06,.78,steel,true);
+      box(0,.97,-.34,1,.06,.32,marble,true);
+      box(0,.92,-.47,.94,.02,.04,warmBulb);
+      break;
+    }
+    case 'sushi-display': {
+      // Slanted glass chilled ingredient/sushi display counter with warm LED strip & food pans
+      feet(.08);
+      box(0,.28,0,1,.46,.96,paint,true);
+      box(0,.53,0,1,.05,1,steel,true);
+      for(const x of [-.34,-.11,.11,.34])box(x,.575,0,.19,.04,.58,inside,true);
+      for(const x of [-.48,.48])box(x,.76,0,.03,.46,.92,dark);
+      box(0,.98,.12,1,.035,.72,dark);
+      box(0,.94,.12,.92,.02,.08,coolLed);
+      const frontGlass=box(0,.76,-.36,.96,.52,.014,glass);
+      frontGlass.rotation.x=.34;
+      box(-.47,.76,0,.012,.44,.86,glass);box(.47,.76,0,.012,.44,.86,glass);
+      break;
+    }
+    case 'dish-pass': {
+      // Double-tier stainless kitchen pass-through table with upper heated shelf
+      feet(.62);
+      box(0,.16,0,.90,.03,.84,steel);
+      box(0,.65,0,1,.05,1,steel,true);
+      for(const x of [-.45,.45])for(const z of [-.38,.38])box(x,.81,z,.028,.32,.028,steel);
+      box(0,.98,0,1,.04,.64,steel,true);
+      box(0,.94,0,.90,.02,.08,warmBulb);
+      break;
+    }
+    // === EXISTING MODELS (POLISHED WITH RICHER FINISHES) ===
     case 'stairs': {
       const count=Math.max(3,Math.min(40,Math.round(item.h/160)));
       for(let step=0;step<count;step++){const h=(step+1)/count;box(0,h/2,.5-(step+.5)/count,1,h,1/count,paint)}
@@ -58,22 +320,23 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     case 'round-table': {
       if(type==='round-table'){
         cylinder(0,.972,0,.5,.056,wood);cylinder(0,.47,0,.055,.91,dark);cylinder(0,.028,0,.30,.056,dark);
-      }else{box(0,.97,0,1,.06,1,wood,true);feet(.92,.41,.045);box(0,.87,-.4,.86,.10,.035,dark);box(0,.87,.4,.86,.10,.035,dark);box(-.41,.87,0,.035,.10,.8,dark);box(.41,.87,0,.035,.10,.8,dark)}
+      }else{box(0,.97,0,1,.06,1,wood,true);feet(.92,.41,.045,dark);box(0,.87,-.4,.86,.10,.035,dark);box(0,.87,.4,.86,.10,.035,dark);box(-.41,.87,0,.035,.10,.8,dark);box(.41,.87,0,.035,.10,.8,dark)}
       break;
     }
     case 'chair': {
-      feet(.50,.38,.05);box(0,.52,.015,.98,.075,.88,paint,true);
+      feet(.50,.38,.05,dark);box(0,.52,.015,.98,.08,.88,fabric,true);
       for(const x of [-.39,.39])box(x,.73,-.435,.045,.50,.045,dark,true);
-      box(0,.83,-.433,.98,.34,.10,paint,true);box(0,.18,.36,.78,.025,.025,dark);break;
+      box(0,.83,-.433,.98,.34,.10,fabric,true);box(0,.18,.36,.78,.025,.025,dark);break;
     }
-    case 'bench': feet(.88,.40,.045);box(0,.94,0,1,.12,1,wood,true);box(0,.35,0,.83,.08,.055,dark);break;
+    case 'bench': feet(.88,.40,.045,dark);box(0,.94,0,1,.12,1,wood,true);box(0,.35,0,.83,.08,.055,dark);break;
     // Worktable convention: open working side +Z, rear rail -Z (within envelope).
     case 'worktable': box(0,.91,-.46,.94,.10,.04);feet(.93);box(0,.97,0,1,.06,1,steel,true);box(0,.2,0,.89,.035,.86);box(0,.89,-.43,.88,.1,.025);box(0,.89,.43,.88,.1,.025);break;
     case 'buffet': {
       feet(.14,.43,.04);box(0,.37,0,.96,.52,.92,paint,true);box(0,.71,-.42,1,.045,.16,steel,true);box(0,.71,.42,1,.045,.16,steel,true);for(const x of [-.48,-.155,.155,.48])box(x,.71,0,.035,.045,.68,steel,true);
-      for(const x of [-.31,0,.31]){basin(x,.746,0,.235,.53);box(x,.685,0,.20,.008,.45,inside)}
+      const foodColors=['#c97b49','#6f9458','#d4a84f'];
+      [-.31,0,.31].forEach((x,idx)=>{basin(x,.746,0,.235,.53);box(x,.695,0,.20,.02,.44,material(foodColors[idx],0,.55),true)});
       for(const x of [-.46,.46]){box(x,.85,-.35,.018,.28,.018,steel);box(x,.85,.35,.018,.28,.018,steel)}
-      box(0,.984,0,.98,.018,.85,glass);box(0,.88,-.36,.94,.19,.009,glass);
+      box(0,.984,0,.98,.018,.85,glass);box(0,.88,-.36,.94,.19,.009,glass);box(0,.965,0,.88,.014,.06,warmBulb);
       for(const x of [-.24,.24]){box(x,.41,.469,.46,.49,.012,paint,true);handle(x+.14,.48,.49,.12)}break;
     }
     case 'sink': {
@@ -92,7 +355,7 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
       for(const x of [-.242,.242]){box(x,.58,.477,.475,.80,.035,paint,true);handle(x+(x<0?.16:-.16),.60,.492,.19)}
       box(0,.125,.48,.88,.07,.022,dark);
       for(let n=0;n<6;n++)box(0,.099+n*.011,.495,.83,.004,.004,steel);
-      box(.30,.945,.495,.12,.027,.006,black);box(.30,.945,.499,.065,.009,.002,material('#70c9b6',0,.4));break;
+      box(.30,.945,.495,.12,.027,.006,black);box(.30,.945,.499,.065,.009,.002,coolLed);break;
     }
     case 'chest-freezer': {
       feet(.08);box(0,.49,0,1,.82,.98,paint,true);box(0,.92,0,.99,.045,.97,rubber,true);box(0,.965,0,1,.07,1,steel,true);box(0,.88,.493,.22,.035,.014,dark,true);
@@ -108,38 +371,39 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     case 'shelf': {
       feet(1,.46,.035);
       for(const y of [.08,.36,.64,.96]){box(0,y,0,1,.035,1,steel,true);box(0,y-.035,.48,.95,.04,.025,paint);box(0,y-.035,-.48,.95,.04,.025,paint)}
-      // Back cross brace and adjustment holes.
       for(const sign of [-1,1]){const brace=box(0,.53,-.43,.018,1.18,.018,steel);brace.rotation.z=sign*.73}
       for(const x of [-.46,.46])for(let n=1;n<15;n++)box(x,n*.063,.421,.012,.012,.002,black);break;
     }
     case 'partition':
     case 'glass-partition':
     case 'slat-partition': {
-      for(const x of [-.48,.48])box(x,.5,0,.04,1,1,steel,true);
-      box(0,.98,0,.96,.04,1,steel);box(0,.035,0,.96,.07,1,steel);
+      for(const x of [-.48,.48])box(x,.5,0,.04,1,1,dark,true);
+      box(0,.98,0,.96,.04,1,dark);box(0,.035,0,.96,.07,1,dark);
       if(type==='glass-partition')box(0,.51,0,.92,.90,.12,glass);
       else if(type==='slat-partition'){for(let n=0;n<15;n++)box(-.435+n*.062,.51,0,.035,.90,.65,wood,true)}
       else box(0,.51,0,.92,.90,.60,paint,true);
       break;
     }
-    case 'bar-table': feet(.94,.43,.045);box(0,.97,0,1,.06,1,wood,true);box(0,.3,0,.88,.035,.045,dark);break;
+    case 'bar-table': feet(.94,.43,.045,dark);box(0,.97,0,1,.06,1,wood,true);box(0,.3,0,.88,.035,.045,brass);break;
     case 'fold-table': {
       box(0,.97,0,1,.06,1,wood,true);
       for(const z of [-.37,.37])for(const sign of [-1,1]){const leg=box(sign*.15,.47,z,.04,.98,.04,dark,true);leg.rotation.z=sign*.48}break;
     }
-    case 'stool': cylinder(0,.95,0,.5,.10,wood);feet(.89,.30,.055);box(0,.3,.3,.64,.03,.035,dark);box(0,.3,-.3,.64,.03,.035,dark);break;
+    case 'stool': cylinder(0,.95,0,.5,.10,wood);feet(.89,.30,.055,dark);box(0,.3,.3,.64,.03,.035,brass);box(0,.3,-.3,.64,.03,.035,brass);break;
     case 'sofa': {
-      feet(.13,.42,.065);box(0,.29,0,1,.32,1,paint,true);box(0,.74,-.39,1,.52,.22,paint,true);
-      for(const x of [-.24,.24])box(x,.49,.06,.46,.18,.74,paint,true);
-      for(const x of [-.46,.46])box(x,.56,.02,.08,.28,.93,paint,true);break;
+      feet(.13,.42,.065,dark);box(0,.29,0,1,.32,1,fabric,true);box(0,.74,-.39,1,.52,.22,fabric,true);
+      for(const x of [-.24,.24])box(x,.49,.06,.46,.18,.74,fabric,true);
+      for(const x of [-.46,.46])box(x,.56,.02,.08,.28,.93,fabric,true);break;
     }
     case 'waiting-bench': {
-      feet(.5,.42,.035);box(0,.45,0,.9,.08,.06,dark);
-      for(const x of [-.33,0,.33]){box(x,.53,.06,.30,.065,.85,paint,true);box(x,.82,-.4,.30,.36,.09,paint,true);box(x,.70,-.43,.025,.55,.025,steel)}break;
+      feet(.5,.42,.035,dark);box(0,.45,0,.9,.08,.06,dark);
+      for(const x of [-.33,0,.33]){box(x,.53,.06,.30,.065,.85,fabric,true);box(x,.82,-.4,.30,.36,.09,fabric,true);box(x,.70,-.43,.025,.55,.025,steel)}break;
     }
     case 'cashier': {
-      box(0,.37,0,1,.74,1,paint,true);box(0,.77,0,1,.06,1,wood,true);box(-.2,.82,-.32,.6,.1,.3,wood,true);
-      box(.2,.85,0,.05,.12,.05,dark);const display=box(.2,.95,0,.3,.18,.03,black,true);display.rotation.x=-.15;box(.2,.81,.18,.25,.015,.17,dark);break;
+      box(0,.37,0,1,.74,1,paint,true);box(0,.77,0,1,.06,1,wood,true);box(-.2,.82,-.32,.6,.1,.3,marble,true);
+      box(.2,.85,0,.05,.12,.05,dark);const display=box(.2,.95,0,.3,.18,.03,black,true);display.rotation.x=-.15;
+      const posScreen=box(.2,.95,.018,.26,.14,.006,coolLed);posScreen.rotation.x=-.15;
+      box(.2,.81,.18,.25,.015,.17,dark);break;
     }
     case 'return-counter': {
       feet(.12);box(0,.53,0,.97,.82,.96,paint,true);box(0,.965,0,1,.07,1,steel,true);
@@ -159,8 +423,11 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
       feet(.08);box(0,.25,0,1,.42,.95,paint,true);box(0,.49,0,1,.04,1,steel,true);
       for(const x of [-.47,.47])for(const z of [-.45,.45])box(x,.74,z,.025,.5,.025,steel);
       box(0,.99,0,1,.02,1,glass);box(0,.74,-.46,.95,.48,.012,glass);box(-.48,.74,0,.012,.48,.9,glass);box(.48,.74,0,.012,.48,.9,glass);
-      if(type==='display-counter'){box(0,.72,0,.91,.015,.88,glass);for(const x of [-.3,0,.3])box(x,.53,0,.25,.015,.55,steel,true)}
-      else for(const x of [-.33,0,.33])basin(x,.52,0,.27,.65,.1);break;
+      box(0,.95,0,.88,.018,.08,warmBulb);
+      if(type==='display-counter'){
+        box(0,.72,0,.91,.015,.88,glass);
+        for(const x of [-.3,0,.3]){box(x,.53,0,.25,.018,.55,steel,true);box(x,.57,0,.16,.06,.24,material('#d9a86c',0,.55),true);box(x,.76,0,.18,.05,.22,material('#e5c597',0,.55),true)}
+      }else for(const x of [-.33,0,.33])basin(x,.52,0,.27,.65,.1);break;
     }
     case 'beverage': {
       box(0,.14,0,1,.28,1,paint,true);for(const x of [-.25,.25]){cylinder(x,.57,0,.23,.58,glass);cylinder(x,.46,0,.21,.35,material(x<0?'#d8a235':'#ac5b3b',0,.5));cylinder(x,.89,0,.24,.06,black);box(x,.32,.4,.07,.1,.1,dark);box(x,.1,.42,.35,.02,.13,steel)}break;
@@ -176,7 +443,7 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
       const cols=type==='oven'?1:type==='locker'?3:2,rows=type==='oven'||type==='locker'?2:1;
       for(let col=0;col<cols;col++)for(let row=0;row<rows;row++){
         const x=-.48+(col+.5)*.96/cols,y=.14+(row+.5)*.80/rows,cw=.94/cols,ch=.77/rows;
-        if(type==='glass-fridge'||type==='sterilizer'||type==='oven'){box(x,y,.42,cw,ch,.03,dark,true);box(x,y,.444,cw*.8,ch*.72,.012,black);for(let k=0;k<4;k++)box(x,y-ch*.3+k*ch*.2,.453,cw*.78,.008,.004,steel);box(x,y,.461,cw*.82,ch*.74,.008,glass)}
+        if(type==='glass-fridge'||type==='sterilizer'||type==='oven'){box(x,y,.42,cw,ch,.03,dark,true);box(x,y,.444,cw*.8,ch*.72,.012,type==='glass-fridge'?coolLed:black);for(let k=0;k<4;k++)box(x,y-ch*.3+k*ch*.2,.453,cw*.78,.008,.004,steel);box(x,y,.461,cw*.82,ch*.74,.008,glass)}
         else box(x,y,.442,cw,ch,.035,paint,true);
         if(type==='oven')box(x,y+ch*.4,.48,cw*.65,.018,.03,steel,true);else handle(x+cw*.30,y,.48,ch*.3);
       }
@@ -205,7 +472,8 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     case 'hood': {
       for(const x of [-.46,.46])box(x,.45,-.43,.025,.9,.03,steel);
       box(0,.86,0,1,.22,1,steel,true);box(0,.98,-.1,.5,.04,.5,steel);box(0,.745,0,.91,.012,.9,dark);
-      for(let n=0;n<10;n++)box(-.43+n*.095,.735,0,.015,.018,.85,steel);break;
+      box(0,.738,.36,.84,.014,.08,coolLed);
+      for(let n=0;n<10;n++)box(-.43+n*.095,.735,-.06,.015,.018,.72,steel);break;
     }
     case 'single-sink':
     case 'triple-sink':
@@ -230,7 +498,7 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     }
     case 'coffee-machine': {
       box(0,.43,-.05,1,.86,.9,paint,true);box(0,.85,0,1,.08,1,steel,true);box(0,.36,.47,.85,.50,.02,black);box(0,.13,.36,1,.04,.28,steel);
-      for(const x of [-.25,.25]){cylinder(x,.60,.4,.09,.12,steel);box(x,.56,.47,.05,.025,.10,dark);cylinder(x,.24,.35,.09,.16,material('#e9e5d9',0,.4))}box(0,.72,.48,.25,.06,.012,black);break;
+      for(const x of [-.25,.25]){cylinder(x,.60,.4,.09,.12,brass);box(x,.56,.47,.05,.025,.10,dark);cylinder(x,.24,.35,.09,.16,material('#f3eee4',0,.35))}box(0,.72,.48,.25,.06,.012,coolLed);break;
     }
     case 'microwave': {
       box(0,.5,0,1,1,1,paint,true);box(-.08,.5,.48,.73,.78,.025,dark,true);box(-.08,.5,.497,.60,.60,.008,black);handle(.24,.5,.50,.48);box(.39,.72,.495,.12,.15,.008,black);
@@ -240,14 +508,13 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
       cylinder(0,.44,0,.44,.75,paint);cylinder(0,.84,0,.47,.06,dark);cylinder(0,.89,0,.46,.05,steel);box(0,.95,0,.3,.08,.13,dark,true);
       for(const x of [-.47,.47])box(x,.55,0,.06,.08,.30,dark,true);box(0,.25,.43,.25,.16,.04,black,true);break;
     }
-
   }
   // Dispose unused materials too (each model owns its materials).
   const used=new Set<T.Material>();root.traverse(o=>{if(o instanceof T.Mesh)used.add(o.material as T.Material)});
-  [steel,dark,rubber,paint,wood,black,inside,glass].forEach(m=>{if(!used.has(m))m.dispose()});
+  [steel,brass,dark,rubber,paint,wood,fabric,marble,black,inside,warmBulb,coolLed,glass,leafDark,leafMid,leafLight,potMat,soilMat].forEach(m=>{if(!used.has(m))m.dispose()});
   const bounds=new T.Box3().setFromObject(root),size=bounds.getSize(new T.Vector3()),center=bounds.getCenter(new T.Vector3());
   root.children.forEach(child=>{child.position.x-=center.x;child.position.y-=bounds.min.y;child.position.z-=center.z});
-  root.scale.set(item.w/1000/size.x,item.h/1000/size.y,item.d/1000/size.z);return root;
+  root.scale.set(item.w/1000/Math.max(1e-4,size.x),item.h/1000/Math.max(1e-4,size.y),item.d/1000/Math.max(1e-4,size.z));return root;
 }
 
 // Models own their materials; fade each shared material only once.
