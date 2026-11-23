@@ -1,6 +1,26 @@
+# Dependencies and generated output
 node_modules/
 dist/
+coverage/
 *.tsbuildinfo
 
-# Local acceptance output; reviewed historical evidence stays in docs/.
-.local-checks/
+# Local verification and project backups. Keep reviewed fixtures in docs/.
+/.local-checks/
+/archive/g7-integration-2026-11-07/g7-source.zip
+
+# Local environment files. Version only examples with placeholder values.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Package manager diagnostics
+npm-debug.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# System and editor metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp

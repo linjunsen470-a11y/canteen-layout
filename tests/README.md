@@ -1,6 +1,6 @@
 # 定向验收脚本
 
-优先运行 `pnpm typecheck`、`pnpm build`，再按改动选择一个操作流程；不默认执行所有历史脚本或性能测试。本项目不额外安装应用测试依赖，浏览器流程复用已有 Playwright 与本机 Chrome。
+从仓库根目录运行 `pnpm typecheck` 和 `pnpm build`，再按改动选择下方的浏览器流程。浏览器脚本复用已有 Playwright 与本机 Chrome，命令中的路径指向 Playwright 包。性能脚本适用于涉及渲染或交互性能的改动。
 
 ```text
 node tests/g4-workflow.cjs <已有 Playwright 包路径>
@@ -19,6 +19,8 @@ node tests/g4-workflow.cjs <已有 Playwright 包路径> linked
 | `free-rotation.cjs` | 单件与空间构件任意角度旋转 | 5191 |
 | `ux-refinement.cjs` | 门窗约束、双开门/门轴、尺寸反馈、工作区折叠/调宽/专注、保存导入 | 5196 |
 | `g4-workflow.cjs` | 当前 G4 主流程或墙窗补查 | 5192 |
+| `clipboard-doors.cjs` | 门扇开向、剪贴板和跨项目墙窗引用 | 5197 |
+| `viewport-zoom.cjs` | 极端缩放、视图定位及截图恢复 | 5198 |
 
 `g1-storage.browser.js` 和 `g2-invariants.browser.js` 由 G2 脚本导入，必须在一次性浏览器环境运行，不能在用户日常方案库中注入故障。历史脚本会随功能演进按需维护；修改版本断言或通过语法检查不代表本轮已重新跑完其全部流程。
 
