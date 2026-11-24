@@ -47,7 +47,11 @@ try {
   assert.notDeepEqual([tables[0].x, tables[0].y], [tables[1].x, tables[1].y]);
   await button('导出与汇报').click();
   assert.equal((await download('导出 2D 平面图 PNG')).readUInt32BE(0), 0x89504e47);
+  await button('门头外观').click();
   await button('人视点进店').click();
+  await button('换一种摆法').click();
+  assert.equal(await page.locator('.compare-card').count(), 3);
+  await page.locator('.compare-dialog').getByRole('button', { name: '关闭', exact: true }).click();
   await button('导出与汇报').click();
   await button('客户成果').click();
   const html = (await download('下载展示页')).toString('utf8');
@@ -57,11 +61,12 @@ try {
     await image.decode();
     return image.naturalWidth;
   })));
-  assert.equal(images.length, 2);
+  assert.equal(images.length, 4);
   assert.ok(images.every(w => w >= 500));
   assert.match(await report.locator('main').innerText(), /经营测试店/);
+  assert.match(await report.locator('main').innerText(), /临街门头外观效果/);
   assert.deepEqual(errors, []);
-  console.log('PASS 生产版建铺、连续摆放、保存恢复、平面 PNG 与双图方案书');
+  console.log('PASS 生产版建铺、连续摆放、保存恢复、门头外观、三摆法对比、平面 PNG 与四图合伙人方案书');
 } finally {
   await browser?.close();
   await server.close();

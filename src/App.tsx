@@ -11,15 +11,17 @@ import { PlanningBar } from './PlanningFields';
 import { usePlanning } from './planning';
 import type { SceneHandle } from './Scene3D';
 import SceneBoundary from './SceneBoundary';
-import PresentationDialog from './PresentationDialog';
+import PresentationDialog, { PresentationDialogHandle } from './PresentationDialog';
 import PlanEditor, { PlanHandle } from './PlanEditor';
 import SplitView from './SplitView';
 import SidebarResize from './SidebarResize';
-import ShopWizardDialog from './ShopWizardDialog';
+import ShopWizardDialog, { ShopWizardHandle } from './ShopWizardDialog';
+import SchemeCompareDialog, { SchemeCompareHandle } from './SchemeCompareDialog';
 import ShopInsightsDialog from './ShopInsightsDialog';
+import QuickStartBar from './QuickStartBar';
 import { ComboPreset, comboPresets, placeCombo } from './combos';
 import { seatSummary } from './layoutGroups';
-import { Maximize2, Minimize2, ChevronUp, ChevronDown, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download } from 'lucide-react';
+import { Maximize2, Minimize2, ChevronUp, ChevronDown, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download, Share2 } from 'lucide-react';
 import { useStore } from './store';
 import { catalog, Item, resolveStyle } from './model';
 import ProjectLibrary from './ProjectManager';
@@ -62,6 +64,9 @@ export default function App() {
   useEditorKeyboard();
   const [grid, G] = useState(true), [snap, S] = useState(true), [notice, notify] = useState('');
   const plan = useRef<PlanHandle>(null), scene = useRef<SceneHandle>(null);
+  const wizardRef = useRef<ShopWizardHandle>(null);
+  const compareRef = useRef<SchemeCompareHandle>(null);
+  const presentationRef = useRef<PresentationDialogHandle>(null);
   const [librarySignal, setLibrarySignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
@@ -72,17 +77,15 @@ export default function App() {
   const capture = async () => {
     const current = useWorkspace.getState(), previous = { view: current.view, focusMode: current.focusMode, focusView: current.focusView };
     try {
-      const visibleView = current.focusMode ? (current.focusView ?? current.view) : current.view;
-      const existingScene = visibleView !== '2d' ? scene.current?.capturePNG() : undefined;
       prefs.set({ focusMode: false, view: 'split' });
-      for (let attempt = 0; attempt < 30 && (!plan.current || (!existingScene && !scene.current)); attempt++) {
+      for (let attempt = 0; attempt < 30 && (!plan.current || !scene.current); attempt++) {
         await new Promise<void>(resolve => setTimeout(resolve, 100));
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 140))));
-      if (!plan.current || (!existingScene && !scene.current)) throw Error('视图尚未就绪，请稍后重试');
-      const image3D = existingScene ?? scene.current!.capturePNG();
+      if (!plan.current || !scene.current) throw Error('视图尚未就绪，请稍后重试');
+      const gallery = scene.current.captureGallery();
       const image2D = await plan.current.capturePNG();
-      return { plan: image2D, scene: image3D };
+      return { plan: image2D, scene: gallery.birdseye, gallery };
     } finally { prefs.set(previous); }
   };
 
@@ -120,7 +123,7 @@ export default function App() {
 
   const addCombo = useCallback((combo: ComboPreset, point?: { x: number; y: number }) => {
     try {
-      placeCombo(combo, point ?? plan.current?.center(), point === undefined);
+      placeCombo(combo, point);
       notify(`已放置「${combo.name}」（整组可一起拖动与旋转，双击可单件微调）`);
     } catch (e) {
       notify((e as Error).message);
@@ -143,14 +146,18 @@ export default function App() {
         <Store />
         <div>
           <h1>铺位规划 Studio</h1>
-          <small>饭堂 · 商场餐饮 2D/3D 效果图</small>
+          <small>餐饮开店 · 2D 平面与 3D 效果图</small>
         </div>
       </div>
-      <ShopWizardDialog notify={notify} />
+      <ShopWizardDialog ref={wizardRef} notify={notify} />
       <ProjectLibrary />
       <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
       <div className="actions" inert={!sessionReady || sessionBusy}>
-        <ShopInsightsDialog />
+        <SchemeCompareDialog ref={compareRef} notify={notify} />
+        <ShopInsightsDialog onCompare={() => compareRef.current?.open()} />
+        <button className="share-partner-btn" title="一键拍摄 2D 平面 + 3 视角 3D 效果图，生成可发给合伙人讨论的精美方案书" onClick={() => presentationRef.current?.open()}>
+          <Share2 />发给合伙人
+        </button>
         <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
@@ -158,11 +165,18 @@ export default function App() {
           <div className="menu-action-list">
             <ProjectFiles notify={notify} />
             <button className="primary" disabled={view === '3d'} onClick={png}><Download />导出 2D 平面图 PNG</button>
-            <PresentationDialog capture={capture} />
+            <PresentationDialog ref={presentationRef} capture={capture} />
           </div>
         </ToolMenu>
       </div>
     </header>
+
+    {!focusMode && (
+      <QuickStartBar
+        onOpenWizard={tab => wizardRef.current?.open(tab)}
+        onCompare={() => compareRef.current?.open()}
+      />
+    )}
 
     <div inert={!sessionReady || sessionBusy} className={`workspace ${libraryOpen ? '' : 'library-closed'} ${propsOpen ? '' : 'props-closed'}`} style={{ '--library-width': `${prefs.libraryWidth}px`, '--props-width': `${prefs.propsWidth}px` } as React.CSSProperties}>
       <EquipmentLibrary onAdd={addFrom} onAddCombo={addCombo} savedSignal={librarySignal} />
@@ -202,7 +216,7 @@ export default function App() {
           }
           second={
             <div className="three">
-              <div className="viewtitle"><b>3D</b><span>实时效果图</span><small>{lightingText[style.lightingPreset]} · 支持进店人视点与灯光切换</small></div>
+              <div className="viewtitle"><b>3D</b><span>实时效果图</span><small>{lightingText[style.lightingPreset]} · 门头外观 / 进店漫游 / 灯光切换</small></div>
               <SceneBoundary>
                 {sceneMounted && (
                   <Suspense fallback={<div className="scene-loading">正在加载三维渲染引擎…</div>}>
@@ -214,7 +228,7 @@ export default function App() {
           }
         />
         <footer role="status">
-          <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象` : '就绪 · 点击或拖放左侧桌椅、厨具、灯具与绿植即可实时预览 3D 效果')}</span>
+          <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象` : '就绪 · 输入真实尺寸一键生成方案，或点击/拖放左侧桌椅厨具实时看 3D 效果')}</span>
           <span className="project-count">
             <b>{seatsInfo.seats} 座</b> · {(siteArea(project) / 1e6).toFixed(1)} ㎡ · {project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i)).length} 件 · {lightingText[style.lightingPreset]}
           </span>
