@@ -213,6 +213,33 @@ function rectsArea(rects: StripRect[]): number {
   return rects.reduce((s, r) => s + (r.x1 - r.x0) * (r.y1 - r.y0), 0);
 }
 
+// Strips belong to the same kitchen only when they share a wall interval.
+function largestConnectedRegion(rects: StripRect[]) {
+  const remaining = new Set(rects);
+  let best: StripRect[] = [];
+  for (const first of remaining) {
+    remaining.delete(first);
+    const component = [first];
+    for (const a of component) {
+      for (const b of remaining) {
+        if ((a.y1 === b.y0 || b.y1 === a.y0) && Math.min(a.x1, b.x1) > Math.max(a.x0, b.x0)) {
+          component.push(b);
+          remaining.delete(b);
+        }
+      }
+    }
+    if (rectsArea(component) > rectsArea(best)) best = component;
+  }
+  return best;
+}
+
+function coversBox(rects: StripRect[], box: StripRect) {
+  const covered = rects.reduce((area, r) => area
+    + Math.max(0, Math.min(r.x1, box.x1) - Math.max(r.x0, box.x0))
+    * Math.max(0, Math.min(r.y1, box.y1) - Math.max(r.y0, box.y0)), 0);
+  return (box.x1 - box.x0) * (box.y1 - box.y0) - covered < 0.1;
+}
+
 function clipPolygonHalfPlane(poly: Point[], hp: HalfPlane): Point[] {
   const inside = (p: Point) => hp.axis === 'x'
     ? (hp.keepLess ? p.x <= hp.value + 1e-6 : p.x >= hp.value - 1e-6)
@@ -456,10 +483,10 @@ function nearestTableGap(project: Project) {
   return nearest;
 }
 
-export function generateConceptLayout(baseProject: Project, rawOptions: ConceptPlannerOptions): ConceptPlanResult {
+export function generateConceptLayout(baseProject: Project, rawOptions: ConceptPlannerOptions, basic = false): ConceptPlanResult {
   const options: ConceptPlannerOptions = {
     ...rawOptions,
-    kitchenRatioPct: Math.max(20, Math.min(50, Math.round(rawOptions.kitchenRatioPct))),
+    kitchenRatioPct: Math.max(20, Math.min(basic ? 100 : 50, Math.round(rawOptions.kitchenRatioPct))),
     aisleMm: Math.max(650, Math.min(1600, Math.round(rawOptions.aisleMm))),
   };
   const preset = businessTypeDefaults[options.businessType];
@@ -514,6 +541,11 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     diningHp = { ...kitchenHp, keepLess: !keepLess };
     kitchenStrips = interiorStrips.map(r => clipRectHalfPlane(r, kitchenHp!)).filter((r): r is StripRect => !!r);
     diningStrips = interiorStrips.map(r => clipRectHalfPlane(r, diningHp!)).filter((r): r is StripRect => !!r);
+    if (basic) {
+      const connected = largestConnectedRegion(kitchenStrips);
+      diningStrips.push(...kitchenStrips.filter(r => !connected.includes(r)));
+      kitchenStrips = connected;
+    }
   }
 
   const kitchenAreaMm2 = rectsArea(kitchenStrips);
@@ -603,10 +635,11 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     otherGap: number,
     doorGap = 120,
   ): boolean => {
+    if (basic && !coversBox(region, bounded(cand.flatMap(footprint)))) return false;
     for (const item of cand) {
       const fp = footprint(item);
       const shape = bounded(fp);
-      if (!contains(outline, fp)) return false;
+      if (!basic && !contains(outline, fp)) return false;
       if (!polyInsideRects(fp, region)) return false;
       for (const sw of swingPolys) {
         if (closerThan(shape, sw, doorGap)) return false;
@@ -650,6 +683,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
         { kind: 'fridge', model: 'upright-fridge', name: '立式双门冰箱', w: 820, d: 740, h: 1960, color: '#9bb4c2' },
       ];
 
+    if (basic && cooklineSpecs[1]?.isCooking) cooklineSpecs.splice(1, 1);
     const rear = options.kitchenSide === 'rear', right = options.kitchenSide === 'right';
     const alongMin = rear ? kMinX : kMinY, alongMax = rear ? kMaxX : kMaxY;
     const depth = rear ? kMaxY - kMinY : kMaxX - kMinX;
@@ -732,10 +766,12 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     const diningSpanX = dMaxX - dMinX;
 
     // Step 5a: Wall-hugging booth column(s) for balanced / comfort styles (WallFloorItem pattern)
+    // A starter draft stays small enough to edit and render on a laptop.
+    const groupLimit = basic ? 24 : Infinity;
     const tryBoothColumn = (colX: number, prefix: string) => {
       const stepY = options.seatingStyle === 'comfort' ? 2550 : 2300;
       let idx = 1;
-      for (let cy = dMinY + 1120; cy <= dMaxY - 1080;) {
+      for (let cy = dMinY + 1120; cy <= dMaxY - 1080 && newGroups.length < groupLimit;) {
         if (!blocksEntryCorridor(colX, cy)) {
           const cand = makeBooth4(colX, cy, preset.boothColor, preset.tableColor);
           if (fitsInRegion(cand, diningStrips, 40, aisle, 180)) {
@@ -776,9 +812,9 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     const startY = dMinY + (isBench ? 900 : 960);
     let tableIdx = 1;
 
-    for (let cy = startY; cy <= dMaxY - 680;) {
+    for (let cy = startY; cy <= dMaxY - 680 && newGroups.length < groupLimit;) {
       const beforeRow = tableIdx;
-      for (let cx = startX; cx <= dMaxX - 640;) {
+      for (let cx = startX; cx <= dMaxX - 640 && newGroups.length < groupLimit;) {
         if (blocksEntryCorridor(cx, cy)) { cx += 450; continue; }
         let placedThisSpot = false;
         if (isBench) {
@@ -827,10 +863,18 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
             }
           }
         }
+        if (basic && !placedThisSpot && (isBench || isComfort)) {
+          const pair = makeDining2(cx, cy, preset.chairColor, preset.tableColor, false);
+          if (fitsInRegion(pair, diningStrips, 90, aisle, 180)) {
+            recordGroup(`双人餐桌 ${tableIdx++}`, '双人桌', pair, 2, { x: cx, y: cy }, false);
+            placedThisSpot = true;
+          }
+        }
         cx += placedThisSpot ? xStep : 420;
       }
       cy += tableIdx > beforeRow ? yStep : 450;
     }
+    if (basic && newGroups.length === groupLimit) warnings.push('基础草稿先摆 24 组桌椅，剩余面积可按需复制桌组');
   }
 
   // 6. Optional subtle dining pendant lights over placed table groups
@@ -872,7 +916,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
   const breakdownParts = [...seatMix.entries()].map(([name, v]) => `${name} ${v.count} 组（${v.seats} 座）`);
   const seatBreakdown = breakdownParts.length ? breakdownParts.join(' + ') : '空间较紧凑，暂未摆入标准桌椅组';
   if (newGroups.length === 0) {
-    warnings.push('当前就餐区净尺寸或过道设置偏紧，建议调低后厨占比或将过道净距调整至 800 mm');
+    warnings.push(basic ? '当前净尺寸下未摆入桌椅组' : '当前就餐区净尺寸或过道设置偏紧，建议调低后厨占比或将过道净距调整至 800 mm');
   }
 
   const nearestTables = nearestTableGap(candidate);

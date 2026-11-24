@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { testBasicLayout } from './basic-layout.mjs';
 import fs from 'node:fs';
 import { createServer } from 'vite';
 
@@ -8,6 +9,7 @@ const server = await createServer({
 });
 try {
   const load = name => server.ssrLoadModule('/src/' + name + '.ts');
+  await testBasicLayout(load);
   const { shopTemplates, createCustomShopShell, buildPerimeterWalls } = await load('shopTemplates');
   const { analyzeShop } = await load('shopAnalytics');
   const { parseProject } = await load('projectIO');

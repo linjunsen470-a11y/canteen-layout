@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { businessTypeDefaults, defaultConceptOptions, generateConceptLayout, type ConceptBusinessType } from './conceptPlanner';
+import { businessTypeDefaults, type ConceptBusinessType } from './conceptPlanner';
+import { requestBasicLayout } from './requestBasicLayout';
 import { checkSketchEdge, placeSketchFixture, sketchFixtures, sketchShell, type SketchFixture } from './sketchGeometry';
 import type { Point, Project } from './model';
 import { footprint } from './spatial';
@@ -9,8 +10,9 @@ const grid = 100;
 const coords = (pts: Point[]) => pts.map(p => p.x + ',' + p.y).join(' ');
 const metres = (mm: number) => String(Math.round(mm) / 1000);
 
-export default function SketchWizard({ busy, onSave }: {
+export default function SketchWizard({ busy, onSave, onBusy }: {
   busy: boolean;
+  onBusy: (busy: boolean) => void;
   onSave: (project: Project, warnings: string[]) => Promise<void>;
 }) {
   const svg = useRef<SVGSVGElement>(null);
@@ -89,10 +91,12 @@ export default function SketchWizard({ busy, onSave }: {
   }
   async function generate() {
     if (!shell || busy) return;
+    onBusy(true);
     try {
-      const result = generateConceptLayout({ ...shell, name: name.trim() || '我的铺位' }, { ...defaultConceptOptions(business), includeLights: false });
-      await onSave(result.project, result.estimate.warnings);
+      const result = await requestBasicLayout({ ...shell, name: name.trim() || '我的铺位' }, business);
+      await onSave(result.project, result.warnings);
     } catch (e) { setError((e as Error).message); }
+    finally { onBusy(false); }
   }
   const size = camera.width / 900;
   const preview = invalid ?? (cursor && endpoint(cursor));
@@ -145,7 +149,7 @@ export default function SketchWizard({ busy, onSave }: {
         <label>构件宽（米）<input type="number" min=".1" step=".1" value={width} onChange={e => setWidth(e.target.value)}/></label>
         <label>构件深（米）<input type="number" min=".1" step=".1" value={depth} onChange={e => setDepth(e.target.value)}/></label>
       </div>}
-      <button className="primary" onClick={generate}>生成基础布局</button>
+      <button className="primary" onClick={generate}>{busy ? '正在试排…' : '生成基础布局'}</button>
     </>}
     {error && <p role="alert" className="property-error">{error}</p>}
   </fieldset>;

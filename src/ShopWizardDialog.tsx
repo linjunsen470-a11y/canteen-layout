@@ -98,7 +98,7 @@ export default function ShopWizardDialog({ notify }: { notify: (message: string)
         <button disabled={saving} aria-pressed={fromImage} onClick={() => { setMode('image'); setError(''); }}><ImageUp />从户型图描绘</button>
         <button disabled={saving} aria-pressed={mode === 'templates'} onClick={() => { setMode('templates'); setError(''); }}><LayoutGrid />示范案例参考</button>
       </div>
-      {mode === 'sketch' ? <SketchWizard key={sketchNumber} busy={saving || session.busy} onSave={async (project, warnings) => {
+      {mode === 'sketch' ? <SketchWizard key={sketchNumber} onBusy={setSaving} busy={saving || session.busy} onSave={async (project, warnings) => {
         setSaving(true);
         try {
           if (!await copyProject(project.name, project)) throw Error(useProjectSession.getState().message || '保存草稿失败');
