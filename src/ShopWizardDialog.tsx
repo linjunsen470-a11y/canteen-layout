@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { analyzeShop } from './shopAnalytics';
 import { Sparkles, Store, Ruler, Check } from 'lucide-react';
 import { FloorMaterial, LightingPreset, WallMaterial } from './model';
 import { CustomShopSpec, createCustomShopShell, shopTemplates } from './shopTemplates';
@@ -7,6 +8,11 @@ import { useWorkspace } from './workspace';
 
 export default function ShopWizardDialog({ notify }: { notify: (msg: string) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [opened, setOpened] = useState(false);
+  const previews = useMemo(() => opened ? shopTemplates.map(t => {
+    const stats = analyzeShop(t.build());
+    return { ...t, seats: stats.seats, ratio: `${stats.diningRatioPct}∶${stats.kitchenRatioPct}` };
+  }) : [], [opened]);
   const busy = useProjectSession(s => s.busy);
   const [tab, setTab] = useState<'templates' | 'custom'>('templates');
   const [spec, setSpec] = useState<CustomShopSpec>({
@@ -23,6 +29,7 @@ export default function ShopWizardDialog({ notify }: { notify: (msg: string) => 
     addZones: true,
   });
 
+  const areaSqm = spec.widthM * spec.depthM * (spec.shape === 'l-shape' ? 1 - 0.38 * 0.45 : 1);
   const applyTemplate = async (templateId: string) => {
     const tpl = shopTemplates.find(t => t.id === templateId);
     if (!tpl) return;
@@ -47,7 +54,7 @@ export default function ShopWizardDialog({ notify }: { notify: (msg: string) => 
   };
 
   return <>
-    <button className="wizard-trigger" onClick={() => dialog.current?.showModal()}>
+    <button className="wizard-trigger" onClick={() => { setOpened(true); dialog.current?.showModal(); }}>
       <Sparkles />开店模板 / 建铺
     </button>
     <dialog ref={dialog} className="shop-wizard-dialog" aria-labelledby="shop-wizard-heading">
@@ -69,11 +76,11 @@ export default function ShopWizardDialog({ notify }: { notify: (msg: string) => 
 
       {tab === 'templates' ? (
         <div className="template-grid">
-          {shopTemplates.map(tpl => (
+          {previews.map(tpl => (
             <article key={tpl.id} className="template-card">
               <div className="template-badge-row">
                 <span className="template-tag" style={{ background: tpl.accent }}>{tpl.tag}</span>
-                <small>{tpl.areaLabel} · {tpl.seatsLabel}</small>
+                <small>{tpl.areaLabel} · {tpl.seats} 座 · 餐厨比 {tpl.ratio} · {tpl.feature}</small>
               </div>
               <h3>{tpl.name}</h3>
               <p>{tpl.summary}</p>
@@ -129,12 +136,12 @@ export default function ShopWizardDialog({ notify }: { notify: (msg: string) => 
           </label>
           <div className="shell-toggles full">
             <label><input type="checkbox" checked={spec.addWalls} onChange={e => setSpec(s => ({ ...s, addWalls: e.target.checked }))} />自动围合四周外墙</label>
-            <label><input type="checkbox" disabled={!spec.addWalls} checked={spec.addWalls && spec.addStorefront} onChange={e => setSpec(s => ({ ...s, addStorefront: e.target.checked }))} />自动生成临街落地玻璃橱窗、双开玻璃门与发光招牌</label>
+            <label><input type="checkbox" disabled={!spec.addWalls} checked={spec.addWalls && spec.addStorefront} onChange={e => setSpec(s => ({ ...s, addStorefront: e.target.checked }))} />按临街面宽生成入口门、招牌及可容纳的橱窗</label>
             <label><input type="checkbox" checked={spec.addZones} onChange={e => setSpec(s => ({ ...s, addZones: e.target.checked }))} />自动划分前厅客区 / 后厨参考分区</label>
           </div>
           <div className="shell-summary full">
-            预计铺位面积：<b>{(spec.shape === 'l-shape' ? spec.widthM * spec.depthM * 0.83 : spec.widthM * spec.depthM).toFixed(1)} ㎡</b>
-            <span> · 建议客座容量参考 {Math.max(4, Math.round(spec.widthM * spec.depthM * 0.65 / 1.8))} ~ {Math.max(6, Math.round(spec.widthM * spec.depthM * 0.65 / 1.35))} 座</span>
+            预计铺位面积：<b>{areaSqm.toFixed(1)} ㎡</b>
+            <span> · 按面积粗估 {Math.round(areaSqm * 0.65 / 1.8)} ~ {Math.round(areaSqm * 0.65 / 1.35)} 座，实际可用座位以布置结果为准</span>
           </div>
           <div className="dialog-actions full">
             <button type="button" onClick={() => dialog.current?.close()}>取消</button>

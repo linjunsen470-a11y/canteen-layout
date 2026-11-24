@@ -1,7 +1,9 @@
-import { Item, Project, uid } from './model';
-import { sitePlacement } from './site';
+import { Item, Point, Project, uid } from './model';
+import { siteOutline, sitePlacement } from './site';
+import { baseHeight, bounds, contains, doorSwings, footprint } from './spatial';
+import { polygonCoverage } from './polygonArea';
 import { syncStructure } from './structure';
-import { planningEditable, usePlanning } from './planning';
+import { usePlanning } from './planning';
 import { useStore } from './store';
 
 export type ComboPreset = {
@@ -159,23 +161,52 @@ export const comboPresets: ComboPreset[] = [
   },
 ];
 
-export function placeCombo(combo: ComboPreset, point?: { x: number; y: number }) {
+// Reserve the full set as one space, including room between its table and chairs.
+export function fitCombo(project: Project, combo: ComboPreset, point: Point, search: boolean, area?: Point[]): Item[] {
+  const items = combo.build(0, 0);
+  const box = bounds(items);
+  const site = siteOutline(project);
+  const height = Math.max(...items.map(i => baseHeight({ ...project, items }, i) + i.h));
+  const obstacles = project.items.filter(i => !i.hidden && !['zone','text','dimension','leader','utility'].includes(i.kind)
+    && baseHeight(project, i) < height && !(i.wallId && project.items.find(w => w.id === i.wallId)?.hidden));
+  const occupied = obstacles.flatMap(i => i.kind === 'door' ? [footprint(i), ...doorSwings(i)] : [footprint(i)]).map(poly => ({
+    poly, left: Math.min(...poly.map(p => p.x)), right: Math.max(...poly.map(p => p.x)),
+    top: Math.min(...poly.map(p => p.y)), bottom: Math.max(...poly.map(p => p.y)),
+  }));
+  const center = search ? sitePlacement(area ? { ...project, outline: area } : project, point) : point;
+  const x0 = Math.round(center.x / 100) * 100, y0 = Math.round(center.y / 100) * 100;
+  const gap = project.clearance ?? 900;
+  const stepX = Math.ceil((box.w + gap) / 100) * 100, stepY = Math.ceil((box.h + gap) / 100) * 100;
+  const candidates: Point[] = [{ x: x0, y: y0 }];
+  if (search) {
+    for (let row = -3; row <= 3; row++) for (let col = -3; col <= 3; col++) {
+      if (col || row) candidates.push({ x: x0 + col * stepX, y: y0 + row * stepY });
+    }
+    candidates.sort((a, b) => Math.hypot(a.x - x0, a.y - y0) - Math.hypot(b.x - x0, b.y - y0));
+  }
+  for (const { x, y } of candidates) {
+    const left = x + box.x, top = y + box.y, right = left + box.w, bottom = top + box.h;
+    const rect = [{x:left,y:top},{x:right,y:top},{x:right,y:bottom},{x:left,y:bottom}];
+    if (!contains(site, rect) || (area && !contains(area, rect))) continue;
+    const blocked = occupied.some(o => left < o.right && right > o.left && top < o.bottom && bottom > o.top
+      && polygonCoverage(rect, [o.poly]).union > 1);
+    if (!blocked) return items.map(i => ({ ...i, x: i.x + x, y: i.y + y }));
+  }
+  throw Error(search ? '附近没有足够空间，请将组合拖到其他空地。' : '此处空间不足或挡住门扇，请将组合拖到其他空地。');
+}
+
+export function placeCombo(combo: ComboPreset, point?: Point, search = true) {
   const s = useStore.getState();
   const p = s.project;
   const area = p.planningAreas?.find(a => a.id === usePlanning.getState().activeId);
-  const center = point ?? sitePlacement(area ? { ...p, outline: area.outline } : p, { x: p.width / 2, y: p.height / 2 });
-  const items = combo.build(Math.round(center.x / 100) * 100, Math.round(center.y / 100) * 100);
+  const items = fitCombo(p, combo, point ?? { x: p.width / 2, y: p.height / 2 }, search, area?.outline);
   const ids = items.map(i => i.id);
   const next: Project = syncStructure({
     ...p,
     items: [...p.items, ...items],
     groups: [...(p.groups ?? []), { id: uid(), name: combo.name, members: ids, seats: combo.seats }],
   });
-  if (next.items.some(i => ids.includes(i.id) && !planningEditable(i, next))) {
-    throw Error('新组合超出当前规划范围，请移入范围内或切回整场地');
-  }
-  if (s.commit(next)) {
-    s.selectMany(ids);
-    s.setTool('select');
-  }
+  if (!s.commit(next)) throw Error(useStore.getState().error || '组合放置失败');
+  s.selectMany(ids);
+  s.setTool('select');
 }

@@ -17,7 +17,7 @@ export default function ShopInsightsDialog() {
   const insights = useMemo(() => analyzeShop(project), [project]);
 
   const open = () => {
-    setIssues(checkSpace(project, activeId));
+    setIssues(checkSpace(project, activeId).sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')));
     dialog.current?.showModal();
   };
 

@@ -1,5 +1,5 @@
 import { Item, Project, modelOf } from './model';
-import { footprint, bounds, contains, polygonDistance, doorSwings, baseHeight, supportFor } from './spatial';
+import { footprint, bounds, contains, inPolygon, polygonDistance, doorSwings, baseHeight, supportFor } from './spatial';
 import { polygonCoverage } from './polygonArea';
 import { siteOutline } from './site';
 export type SpaceIssue={ids:string[];type:string;message:string};
@@ -14,7 +14,7 @@ function wallsJoined(a:Item,b:Item,fa:ReturnType<typeof footprint>,fb:ReturnType
  const ea=wallEndpoints(a),eb=wallEndpoints(b);
  // L-corner join (endpoints meet) or T-junction join (one wall's endpoint meets the other wall's body).
  if(ea.some(u=>eb.some(v=>Math.hypot(u.x-v.x,u.y-v.y)<1)))return true;
- return ea.some(p=>contains(fb,[p]))||eb.some(p=>contains(fa,[p]));
+ return ea.some(p=>inPolygon(p,fb))||eb.some(p=>inPolygon(p,fa));
 }
 export function checkSpace(p:Project,activeId:string|null){
  const bodies=p.items.filter(i=>!i.hidden&&!['zone','text','dimension','leader','utility'].includes(i.kind)&&!(i.wallId&&p.items.find(w=>w.id===i.wallId)?.hidden)),issues:SpaceIssue[]=[],area=p.planningAreas?.find(a=>a.id===activeId),reference=p.clearance??900;

@@ -120,7 +120,7 @@ export default function App() {
 
   const addCombo = useCallback((combo: ComboPreset, point?: { x: number; y: number }) => {
     try {
-      placeCombo(combo, point ?? plan.current?.center());
+      placeCombo(combo, point ?? plan.current?.center(), point === undefined);
       notify(`已放置「${combo.name}」（整组可一起拖动与旋转，双击可单件微调）`);
     } catch (e) {
       notify((e as Error).message);

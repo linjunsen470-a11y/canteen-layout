@@ -1,5 +1,5 @@
 import { FloorMaterial, Item, LayoutGroup, LightingPreset, Point, Project, ProjectStyle, WallMaterial, projectIdentity, uid } from './model';
-import { segmentPose, syncStructure } from './structure';
+import { segmentPose, syncStructure, wallPoint } from './structure';
 import { siteOutline } from './site';
 
 export type ShopTemplateMeta = {
@@ -7,7 +7,7 @@ export type ShopTemplateMeta = {
   name: string;
   tag: string;
   areaLabel: string;
-  seatsLabel: string;
+  feature: string;
   summary: string;
   accent: string;
   build: (customName?: string) => Project;
@@ -207,7 +207,7 @@ export function createBistroNoodleTemplate(customName?: string): Project {
     style,
     items: b.items,
     groups: b.groups,
-    metadata: { customer: '', site: '购物中心 B1 餐饮街区', purpose: '明档快餐 / 品牌面馆', notes: '前厅 27 座舒适客区 + 明档热厨 + 独立水吧收银，餐厨比约 66:34。' },
+    metadata: { customer: '', site: '购物中心 B1 餐饮街区', purpose: '明档快餐 / 品牌面馆', notes: '明档热厨与独立水吧收银。' },
   });
 }
 
@@ -244,7 +244,7 @@ export function createCafeBakeryTemplate(customName?: string): Project {
   b.add({ kind: 'counter', model: 'tea-bar', name: '精品咖啡吧台', x: 600, y: 1750, w: 2800, d: 750, h: 960, rotation: 0, color: '#4d6459' });
   b.add({ kind: 'counter', model: 'coffee-machine', name: '双头意式咖啡机', x: 1100, y: 1860, w: 760, d: 540, h: 600, rotation: 0, color: '#3b4a4e' });
   b.add({ kind: 'counter', model: 'display-counter', name: '烘焙甜品展示柜', x: 3450, y: 1750, w: 1550, d: 720, h: 1260, rotation: 0, color: '#8d9d97' });
-  b.add({ kind: 'counter', model: 'cashier', name: '收银点单台', x: 5050, y: 1750, w: 1200, d: 680, h: 1100, rotation: 0, color: '#4d6459' });
+  b.add({ kind: 'counter', model: 'cashier', name: '收银点单台', x: 5080, y: 2700, w: 1200, d: 680, h: 1100, rotation: 0, color: '#4d6459' });
   b.add({ kind: 'fridge', model: 'undercounter-fridge', name: '吧台冷藏操作台', x: 600, y: 260, w: 1900, d: 700, h: 820, rotation: 0, color: '#9fb3ba' });
   b.add({ kind: 'sink', model: 'single-sink', name: '吧台洗杯池', x: 2600, y: 260, w: 750, d: 650, h: 850, rotation: 0, color: '#a5b7c0' });
   b.add({ kind: 'fridge', model: 'ice-maker', name: '商用制冰机', x: 3500, y: 260, w: 700, d: 680, h: 1150, rotation: 0, color: '#b0c1c6' });
@@ -327,7 +327,7 @@ export function createEnterpriseCanteenTemplate(customName?: string): Project {
   const kSouth = b.wall(12200, 6650, W - 100, 6650, wallH, '取餐隔墙');
   b.opening(kSouth, { kind: 'door', model: 'double-door', name: '传菜双开门', w: 1600, h: 2200, offset: 5400, color: '#b09169', flipped: false });
 
-  // Dining hall: 3x3 grid of 6-seat canteen bench sets (54 seats) + 3 four-seat sets (12 seats) = 66 seats
+  // Each row has two six-seat bench sets and one four-seat table.
   for (const cy of [2200, 5200, 8200]) {
     addSixBenchSet(b, 2100, cy);
     addSixBenchSet(b, 5500, cy);
@@ -393,7 +393,7 @@ export function createEnterpriseCanteenTemplate(customName?: string): Project {
     },
     items: b.items,
     groups: b.groups,
-    metadata: { customer: '', site: '产业园 1F 员工食堂', purpose: '企业食堂与自助取餐', notes: '66 座宽敞就餐区 + 双取餐档口 + 独立热厨/洗消动线。' },
+    metadata: { customer: '', site: '产业园 1F 员工食堂', purpose: '企业食堂与自助取餐', notes: '双取餐档口与独立热厨、洗消区。' },
   });
 }
 
@@ -495,7 +495,7 @@ export const shopTemplates: ShopTemplateMeta[] = [
     name: '商场明档快餐 / 面馆',
     tag: '最受欢迎 · 110㎡',
     areaLabel: '12m × 9.2m',
-    seatsLabel: '27 座 · 餐厨比 66:34',
+    feature: '明档热厨',
     summary: '含临街落地玻璃橱窗、发光门头、明档出餐窗、完整热厨与水吧收银，可直接微调落地。',
     accent: '#2f5e4b',
     build: createBistroNoodleTemplate,
@@ -505,7 +505,7 @@ export const shopTemplates: ShopTemplateMeta[] = [
     name: '精品咖啡 / 茶饮烘焙铺',
     tag: '轻餐饮 · 80㎡',
     areaLabel: '10m × 8m',
-    seatsLabel: '16 座 · 暖橡木风格',
+    feature: '暖橡木风格',
     summary: '暖橡木地板、临窗吧台、甜品展示柜、意式咖啡吧台与后场烘焙洗消间，氛围感拉满。',
     accent: '#9d6b3f',
     build: createCafeBakeryTemplate,
@@ -515,7 +515,7 @@ export const shopTemplates: ShopTemplateMeta[] = [
     name: '企业员工食堂 / 美食档口',
     tag: '大空间 · 240㎡',
     areaLabel: '20m × 12m',
-    seatsLabel: '66 座 · 双取餐线',
+    feature: '双取餐线',
     summary: '宽敞员工就餐大厅、双自助取餐线、智能结算、独立热厨大锅灶/蒸饭柜与集中洗消间。',
     accent: '#3e6a73',
     build: createEnterpriseCanteenTemplate,
@@ -525,7 +525,7 @@ export const shopTemplates: ShopTemplateMeta[] = [
     name: '商场精品中餐 / 主题小馆',
     tag: '正餐转角铺 · 140㎡',
     areaLabel: '14m × 10m',
-    seatsLabel: '31 座 · 含圆桌雅座',
+    feature: '含圆桌雅座',
     summary: '双面落地转角橱窗、软包卡座、木格栅半包圆桌雅座、明档食材柜与晚间灯光氛围。',
     accent: '#7d4c3b',
     build: createFeaturedRestaurantTemplate,
@@ -566,7 +566,7 @@ export function createCustomShopShell(spec: CustomShopSpec): Project {
 
   if (spec.addZones) {
     const kitchenH = Math.round(H * 0.32);
-    b.add({ kind: 'zone', name: '后厨 / 操作区', x: 300, y: 300, w: W - 600, d: Math.max(1500, kitchenH - 400), h: 0, rotation: 0, color: '#f7ece0' });
+    b.add({ kind: 'zone', name: '后厨 / 操作区', x: 300, y: 300, w: W - 600, d: kitchenH - 400, h: 0, rotation: 0, color: '#f7ece0' });
     b.add({ kind: 'zone', name: '前厅就餐区', x: 300, y: kitchenH + 100, w: (spec.shape === 'l-shape' ? Math.round(W * 0.62) : W) - 600, d: H - kitchenH - 400, h: 0, rotation: 0, color: '#e6f0e6' });
   }
 
@@ -589,11 +589,12 @@ export function createCustomShopShell(spec: CustomShopSpec): Project {
         frontMidX = (p1.x + p2.x) / 2;
       }
     }
-    if (spec.addStorefront && frontWallId && frontLen >= 2600) {
-      const doorW = Math.min(1800, Math.round(frontLen * 0.28));
+    if (spec.addStorefront && frontWallId) {
+      const singleDoor = frontLen < 4000;
+      const doorW = singleDoor ? 900 : Math.min(1800, Math.max(1400, Math.round(frontLen * 0.28)));
       const doorH = Math.min(2350, wallH - 250);
       const doorOffset = Math.round((frontLen - doorW) / 2);
-      b.opening(frontWallId, { kind: 'door', model: 'glass-double-door', name: '商场双开玻璃门', w: doorW, h: doorH, offset: doorOffset, color: '#46585e', flipped: true });
+      b.opening(frontWallId, { kind: 'door', model: singleDoor ? 'door' : 'glass-double-door', name: singleDoor ? '临街单开门' : '商场双开玻璃门', w: doorW, h: doorH, offset: doorOffset, color: '#46585e', flipped: true });
       const leftSpace = doorOffset - 300;
       if (leftSpace >= 1000) {
         const winW = Math.min(3600, Math.round(leftSpace - 100));
@@ -674,9 +675,27 @@ export function buildPerimeterWalls(project: Project): Item[] {
   const walls: Item[] = [];
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i], b = pts[(i + 1) % pts.length];
-    if (Math.hypot(b.x - a.x, b.y - a.y) < 250) continue;
-    const pose = segmentPose(a, b, thickness);
-    walls.push({ id: uid(), kind: 'wall', model: 'wall', name: `外围墙 ${i + 1}`, ...pose, d: thickness, h: wallH, color: '#efe9df' });
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length < 250) continue;
+    const dx = (b.x - a.x) / length, dy = (b.y - a.y) / length;
+    const along = (p: Point) => (p.x - a.x) * dx + (p.y - a.y) * dy;
+    const across = (p: Point) => (p.y - a.y) * dx - (p.x - a.x) * dy;
+    const covered = project.items.filter(w => w.kind === 'wall').flatMap(w => {
+      const from = wallPoint(w, 0), to = wallPoint(w, w.w);
+      if (Math.abs(across(from)) > 1 || Math.abs(across(to)) > 1) return [];
+      const start = Math.max(0, Math.min(along(from), along(to)));
+      const end = Math.min(length, Math.max(along(from), along(to)));
+      return end > start ? [{ start, end }] : [];
+    }).sort((u, v) => u.start - v.start);
+    const at = (n: number) => ({ x: a.x + dx * n, y: a.y + dy * n });
+    let cursor = 0;
+    for (const span of [...covered, { start: length, end: length }]) {
+      if (span.start - cursor >= 250) {
+        const pose = segmentPose(at(cursor), at(span.start), thickness);
+        walls.push({ id: uid(), kind: 'wall', model: 'wall', name: `外围墙 ${i + 1}`, ...pose, d: thickness, h: wallH, color: '#efe9df' });
+      }
+      cursor = Math.max(cursor, span.end);
+    }
   }
   return walls;
 }

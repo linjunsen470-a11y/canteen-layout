@@ -51,11 +51,11 @@ export default function SiteFloor({ project, grid, forceCeiling = false }: { pro
     </lineSegments>
     {/* One-sided downward ceiling: invisible from bird's-eye above, visible when standing inside at eye level */}
     {showCeiling && (
-      <mesh name="site-ceiling" geometry={geometry} rotation={[Math.PI / 2, 0, 0]} position={[0, ceilingY, 0]}>
+      <mesh name="site-ceiling" geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, ceilingY, 0]}>
         <meshStandardMaterial
           color={style.lightingPreset === 'evening' ? '#36322d' : '#f4f0e8'}
           roughness={0.92}
-          side={T.FrontSide}
+          side={T.BackSide}
         />
       </mesh>
     )}
