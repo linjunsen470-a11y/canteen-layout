@@ -171,7 +171,10 @@ export default function App() {
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
         <ImageExport project={project} capture={() => withExportViews(async (flat, scene) => ({
-          plan: await flat.capturePNG(), bird: scene.captureShot('birdseye'), inside: scene.captureShot('interior')
+          plan: await flat.capturePNG(),
+          planBare: await flat.capturePNG({ header: false }),
+          bird: scene.captureShot('birdseye'),
+          inside: scene.captureShot('interior'),
         }))} hasCurrent={view !== '2d'}
           current={() => { if (!scene.current) throw Error('三维视图尚未就绪'); return scene.current.capturePNG(); }}
           flat={async () => {
@@ -259,9 +262,9 @@ export default function App() {
               type="button"
               className={`footer-check-pill ${criticalCount > 0 ? 'is-warn' : 'is-ok'}`}
               onClick={() => setInsightsSignal(n => n + 1)}
-              title="点击查看完整可行性体检与采购预算"
+              title="点击查看完整可行性体检、商用配电与采购预算"
             >
-              {criticalCount > 0 ? <><AlertTriangle />{criticalCount} 处冲突</> : <><CheckCircle2 />无冲突</>}
+              {criticalCount > 0 ? <><AlertTriangle />体检与预算 · {criticalCount} 处冲突</> : <><CheckCircle2 />体检与预算 · 无冲突</>}
             </button>
           </span>
         </footer>

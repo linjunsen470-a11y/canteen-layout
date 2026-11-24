@@ -23,7 +23,7 @@ import { isAnnotation } from './annotations';
 import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeEyeView } from './SceneCapture';
 import InstancedFurniture from './InstancedFurniture';
 import { dragOpening, isAttachedOpening } from './structure';
-import { computeFrontFacingWallIds } from './wallVisibility3D';
+import { computeFrontFacingWallIds, cutawayWallDecorModels, isItemNearWalls } from './wallVisibility3D';
 
 function SelectionBox({ item }: { item: Item }) {
   const geometry = useMemo(() => {
@@ -565,22 +565,11 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
 
   const groups = useMemo(() => {
     const visible = focus ? [focus, ...project.items.filter(i => i.wallId === focus.id)] : project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i));
-    const cutawayHidden = new Set(['shop-sign', 'menu-board', 'tv-screen', 'wall-art']);
     const cutWalls = frontWallIds.size ? project.items.filter(w => w.kind === 'wall' && frontWallIds.has(w.id)) : [];
-    const nearCutWall = (item: Item) => {
-      if (!cutWalls.length) return false;
-      const cx = item.x + item.w / 2, cy = item.y + item.d / 2;
-      return cutWalls.some(w => {
-        const rad = -w.rotation * Math.PI / 180;
-        const dx = cx - (w.x + w.w / 2), dy = cy - (w.y + w.d / 2);
-        const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
-        const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
-        return Math.abs(lx) <= w.w / 2 + 250 && Math.abs(ly) <= w.d / 2 + 320;
-      });
-    };
+    const nearCutWall = (item: Item) => isItemNearWalls(item, cutWalls);
     const shown = visible.filter(i => {
       if (!isVisible(i, project)) return false;
-      if (!focus && cutawayHidden.has(modelOf(i)) && (renderOptions.cutaway || nearCutWall(i))) return false;
+      if (!focus && cutawayWallDecorModels.has(modelOf(i)) && (renderOptions.cutaway || nearCutWall(i))) return false;
       return true;
     });
     const groups = new Map<string, Item[]>();
@@ -588,7 +577,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
       const m = modelOf(original);
       const h = (renderOptions.cutaway || nearCutWall(original)) && !focus && m === 'wood-feature-wall' ? Math.min(original.h, 1180) : original.h;
       const i = { ...original, h, sill: baseHeight(project, original) };
-      const key = ['wall', 'door', 'window'].includes(i.kind)
+      const key = ['wall', 'door', 'window'].includes(i.kind) || cutawayWallDecorModels.has(m)
         ? i.id
         : JSON.stringify([i.kind, m, i.w, i.d, i.h, i.color, i.flipped, i.pointType, i.verification, m === 'shop-sign' ? i.name : '', faded(i)]);
       const group = groups.get(key);

@@ -1,6 +1,20 @@
-import { Item, Point, Project } from './model';
+import { Item, Point, Project, modelOf } from './model';
 import { pointInSite, siteOutline } from './site';
 import { surveyWall } from './interiorSurvey';
+
+export const cutawayWallDecorModels = new Set(['shop-sign', 'menu-board', 'tv-screen', 'wall-art']);
+
+export function isItemNearWalls(item: Item, walls: Item[]): boolean {
+  if (!walls.length) return false;
+  const cx = item.x + item.w / 2, cy = item.y + item.d / 2;
+  return walls.some(w => {
+    const rad = (-w.rotation * Math.PI) / 180;
+    const dx = cx - (w.x + w.w / 2), dy = cy - (w.y + w.d / 2);
+    const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
+    const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
+    return Math.abs(lx) <= w.w / 2 + 250 && Math.abs(ly) <= w.d / 2 + 320;
+  });
+}
 
 function pointToSegmentDist(p: Point, a: Point, b: Point): number {
   const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
@@ -56,4 +70,26 @@ export function computeFrontFacingWallIds(project: Project, cameraXZ: { x: numbe
     if (dot > 0.18) result.add(wall.id);
   }
   return result;
+}
+
+/**
+ * Returns item IDs that should be hidden for an unobstructed birdseye capture:
+ * front-facing exterior walls, openings attached to them, and wall-mounted decor
+ * (signs, menu boards, TVs, wall art) sitting along those hidden walls.
+ */
+export function computeBirdseyeHiddenItemIds(project: Project, cameraXZ: { x: number; z: number }): Set<string> {
+  const near = computeFrontFacingWallIds(project, cameraXZ);
+  if (!near.size) return new Set();
+  const cutWalls = project.items.filter(w => w.kind === 'wall' && near.has(w.id));
+  const hidden = new Set<string>();
+  for (const item of project.items) {
+    if (
+      near.has(item.id) ||
+      (item.wallId && near.has(item.wallId)) ||
+      (cutawayWallDecorModels.has(modelOf(item)) && isItemNearWalls(item, cutWalls))
+    ) {
+      hidden.add(item.id);
+    }
+  }
+  return hidden;
 }

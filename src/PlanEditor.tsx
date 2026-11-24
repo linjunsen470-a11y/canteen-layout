@@ -20,7 +20,7 @@ import { Item, modelOf, resolveStyle } from './model';
 import { useStore } from './store';
 import { UnderlayLayer, UnderlayInteraction } from './UnderlayLayer';
 import { insidePlanning, usePlanning } from './planning';
-import { capturePlan } from './capturePlan';
+import { capturePlan, type CapturePlanOptions } from './capturePlan';
 import AnnotationSymbol from './AnnotationSymbol';
 import { isAnnotation } from './annotations';
 import BuildingSymbol from './BuildingSymbol';
@@ -33,7 +33,7 @@ import { isBuilding, isOpening, isAttachedOpening, wallPoint, segmentPose, dragO
 type Point={x:number;y:number};
 type Camera={x:number;y:number;zoom:number};
 type Gesture={type:'pan'|'move'|'resize'|'box'|'build'|'endpoint';buildKind?:'wall'|'partition'|'zone'|'text'|'dimension'|'leader';endpoint?:'start'|'end';start:Point;camera:Camera;origins:Item[];id?:string;additive?:boolean};
-export type PlanHandle={capturePNG:()=>Promise<string>;exportPNG:()=>void;center:()=>Point};
+export type PlanHandle={capturePNG:(options?:CapturePlanOptions)=>Promise<string>;exportPNG:()=>void;center:()=>Point};
 type Props={active?:boolean;grid:boolean;snap:boolean;onDropItem:(name:string,kind:string,point:Point,id?:string)=>void;onDropCombo?:(comboId:string,point:Point)=>void;onOpenConcept?:()=>void;notify:(text:string)=>void};
 function itemBounds(i:Item){const angle=i.rotation*Math.PI/180,c=Math.abs(Math.cos(angle)),s=Math.abs(Math.sin(angle));const w=i.w*c+i.d*s,d=i.w*s+i.d*c;return{x:i.x+i.w/2-w/2,y:i.y+i.d/2-d/2,w,d}}
 const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,grid,snap,onDropItem,onDropCombo,onOpenConcept,notify},ref){
@@ -78,7 +78,7 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
   useLayoutEffect(()=>{const el=svg.current!;const wheel=(e:WheelEvent)=>{e.preventDefault();if(gesture.current||useStore.getState().gesture)return;const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?size.h:1);zoomAt(Math.exp(-Math.max(-180,Math.min(180,delta))*.002),screen(e))};el.addEventListener('wheel',wheel,{passive:false});return()=>el.removeEventListener('wheel',wheel)},[fit,size.w,size.h,drawingTop,project.width,project.height]);
   const focus=()=>{const items=project.items.filter(i=>ids.includes(i.id));if(!items.length)return;const bounds=items.map(itemBounds),left=Math.min(...bounds.map(b=>b.x)),top=Math.min(...bounds.map(b=>b.y)),right=Math.max(...bounds.map(b=>b.x+b.w)),bottom=Math.max(...bounds.map(b=>b.y+b.d));setCamera({x:(left+right)/2,y:(top+bottom)/2,zoom:Math.max(.2,Math.min(12,Math.min(Math.max(20,size.w-100)/Math.max(1,right-left),Math.max(20,size.h-120)/Math.max(1,bottom-top))/fit))})};
   useEffect(()=>{if(focusRequest)focus()},[focusRequest]);
-  useImperativeHandle(ref,()=>({capturePNG:()=>svg.current?capturePlan(svg.current,project):Promise.reject(Error('平面图尚未就绪')),center:()=>({x:cam.x,y:cam.y}),exportPNG:()=>{
+  useImperativeHandle(ref,()=>({capturePNG:(options?:CapturePlanOptions)=>svg.current?capturePlan(svg.current,project,options):Promise.reject(Error('平面图尚未就绪')),center:()=>({x:cam.x,y:cam.y}),exportPNG:()=>{
     if(svg.current)capturePlan(svg.current,project).then(data=>{const link=document.createElement('a');link.href=data;link.download=project.name+'-平面.png';link.click();notify('已导出完整场地平面图')}).catch(e=>notify(e.message));
   }}));
   const snapPoint=(p:Point,enabled=snap)=>enabled?{x:Math.round(p.x/snapSize)*snapSize,y:Math.round(p.y/snapSize)*snapSize}:p;
