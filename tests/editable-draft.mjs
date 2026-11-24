@@ -40,6 +40,8 @@ export async function testEditableDraft(browser, url) {
     assert.equal(before.items.filter(i => i.kind === 'wall').length,6);
     assert.ok(before.items.some(i => i.kind === 'door') && before.items.some(i => i.kind === 'column'));
     assert.equal(before.survey.source,'estimated');
+    const booth = before.items.find(i => i.model === 'curved-booth');
+    if (booth) assert.equal(await page.locator('[data-plan]').getByText(booth.name,{exact:true}).count(),0);
     const group = before.groups[0];
     const members = before.items.filter(i => group.members.includes(i.id));
     const table = members.find(i => i.kind === 'table');
@@ -58,6 +60,7 @@ export async function testEditableDraft(browser, url) {
     assert.ok(delta.every(d => d[0] === delta[0][0] && d[1] === delta[0][1]));
     const c = await objectCenter(chair.id);
     await page.mouse.dblclick(c.x,c.y);
+    await page.locator(`[data-plan] [data-item-id="${chair.id}"] text`).filter({hasText:chair.name}).waitFor();
     await page.keyboard.press('Delete');
     const edited = await project();
     assert.equal(edited.items.length, moved.items.length-1);
