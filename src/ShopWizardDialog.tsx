@@ -1,23 +1,47 @@
-import { useRef, useState } from 'react';
-import { ImageUp, Ruler } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { ImageUp, LayoutGrid, Ruler } from 'lucide-react';
 import { blankProject } from './model';
 import SurveyFields, { draftLegs, initialSurvey } from './SurveyFields';
 import { createSurveyShop } from './interiorSurvey';
-import { createCustomShopShell } from './shopTemplates';
+import { createCustomShopShell, shopTemplates } from './shopTemplates';
 import { copyProject, useProjectSession } from './projectSession';
 import { useWorkspace } from './workspace';
 import { useStore } from './store';
 import { importImage } from './imageAssets';
+import { seatSummary } from './layoutGroups';
+import PlanMiniPreview from './PlanMiniPreview';
 
 export default function ShopWizardDialog({ notify }: { notify: (message: string) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [mode, setMode] = useState<'survey' | 'outer' | 'image'>('survey');
+  const [mode, setMode] = useState<'survey' | 'outer' | 'image' | 'templates'>('survey');
   const [survey, setSurvey] = useState(initialSurvey);
   const fromImage = mode === 'image';
   const [shape, setShape] = useState<'rectangle' | 'l-shape'>('rectangle');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const session = useProjectSession();
+
+  const templatePreviews = useMemo(
+    () => (mode === 'templates' ? shopTemplates.map(t => ({ meta: t, project: t.build() })) : []),
+    [mode],
+  );
+
+  async function openTemplate(templateId: string) {
+    if (saving || session.busy) return;
+    const found = shopTemplates.find(t => t.id === templateId);
+    if (!found) return;
+    setSaving(true);
+    setError('');
+    try {
+      const proj = found.build();
+      if (!await copyProject(proj.name, proj)) throw Error(useProjectSession.getState().message || '打开示范案例失败');
+      dialog.current?.close();
+      useWorkspace.getState().set({ view: 'split', focusMode: false, propsOpen: false, libraryOpen: true });
+      useStore.getState().setTool('select');
+      notify(`已打开示范案例「${proj.name}」（可自由微调或对照 3D 效果）`);
+    } catch (e) { setError((e as Error).message); }
+    finally { setSaving(false); }
+  }
 
   async function create(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,7 +78,7 @@ export default function ShopWizardDialog({ notify }: { notify: (message: string)
       useWorkspace.getState().set({ view: mode === 'outer' ? 'split' : '2d', focusMode: false, propsOpen: true,
         ...(mode === 'survey' ? { libraryOpen: true, leftTab: 'catalog' as const } : {}) });
       useStore.getState().setTool(fromImage ? 'underlay-calibrate' : 'select');
-      notify(fromImage ? '请在底图上点选两个已知距离的点' : '铺位已创建，可按现场位置添加门窗、柱子和桌椅');
+      notify(fromImage ? '请在底图上点选两个已知距离的点' : '铺位已创建：可直接点顶部「智能分区估算」快速算餐厨比和桌椅数，或按现场添加门窗');
     } catch (e) { setError((e as Error).message); }
     finally { setSaving(false); }
   }
@@ -69,26 +93,54 @@ export default function ShopWizardDialog({ notify }: { notify: (message: string)
         <button disabled={saving} aria-pressed={mode === 'survey'} onClick={() => { setMode('survey'); setError(''); }}><Ruler />按内墙净尺寸</button>
         <button disabled={saving} aria-pressed={mode === 'outer'} onClick={() => { setMode('outer'); setError(''); }}>按外轮廓尺寸</button>
         <button disabled={saving} aria-pressed={fromImage} onClick={() => { setMode('image'); setError(''); }}><ImageUp />从户型图描绘</button>
+        <button disabled={saving} aria-pressed={mode === 'templates'} onClick={() => { setMode('templates'); setError(''); }}><LayoutGrid />示范案例参考</button>
       </div>
-      <form onSubmit={create}><fieldset disabled={saving} className="custom-shell-form">
-        <label className="full">铺位名称<input name="name" defaultValue="我的铺位" required /></label>
-        {mode === 'survey' ? <SurveyFields value={survey} onChange={s => { setSurvey(s); setError(''); }} /> : <>
-        <label>{fromImage ? '底图覆盖宽度' : '外轮廓开间'}（米）<input name="width" type="number" required min="1" max="60" step="0.001" defaultValue="10" /></label>
-        <label>{fromImage ? '底图覆盖深度' : '外轮廓进深'}（米）<input name="depth" type="number" required min="1" max="60" step="0.001" defaultValue="8" /></label></>}
-        {fromImage ? <label className="full">户型图（PNG / JPEG）<input name="image" type="file" accept="image/png,image/jpeg" required /></label> : <>
-          <label>层高（米）<input name="ceiling" type="number" required min="2.4" max="6" step="0.001" defaultValue="3.2" /></label>
-          {mode === 'outer' && <>
-          <label>铺位轮廓<select value={shape} onChange={e => setShape(e.target.value as typeof shape)}>
-            <option value="rectangle">矩形</option><option value="l-shape">L 形（右下缺口）</option></select></label>
-          {shape === 'l-shape' && <>
-            <label>缺口宽度（米）<input name="notchWidth" type="number" min="0.001" step="0.001" required /></label>
-            <label>缺口深度（米）<input name="notchDepth" type="number" min="0.001" step="0.001" required /></label>
+      {mode === 'templates' ? (
+        <div className="template-gallery">
+          <p className="template-gallery-note">
+            以下示范案例供快速预览 2D/3D 效果参考；若要按您租下的真实铺位尺寸规划，请先用「按内墙净尺寸」建铺，再点击顶部 <b>「智能分区估算」</b>。
+          </p>
+          <div className="template-gallery-grid">
+            {templatePreviews.map(({ meta, project }) => (
+              <button
+                key={meta.id}
+                type="button"
+                className="template-card"
+                disabled={saving}
+                onClick={() => void openTemplate(meta.id)}
+              >
+                <PlanMiniPreview project={project} showZoneLabels={false} />
+                <div className="template-card-meta">
+                  <strong>{meta.name}</strong>
+                  <span>{meta.areaLabel} · {seatSummary(project).seats} 座 · {meta.feature}</span>
+                  <small>{meta.summary}</small>
+                </div>
+              </button>
+            ))}
+          </div>
+          {error && <p className="property-error" role="alert">{error}</p>}
+        </div>
+      ) : (
+        <form onSubmit={create}><fieldset disabled={saving} className="custom-shell-form">
+          <label className="full">铺位名称<input name="name" defaultValue="我的铺位" required /></label>
+          {mode === 'survey' ? <SurveyFields value={survey} onChange={s => { setSurvey(s); setError(''); }} /> : <>
+          <label>{fromImage ? '底图覆盖宽度' : '外轮廓开间'}（米）<input name="width" type="number" required min="1" max="60" step="0.001" defaultValue="10" /></label>
+          <label>{fromImage ? '底图覆盖深度' : '外轮廓进深'}（米）<input name="depth" type="number" required min="1" max="60" step="0.001" defaultValue="8" /></label></>}
+          {fromImage ? <label className="full">户型图（PNG / JPEG）<input name="image" type="file" accept="image/png,image/jpeg" required /></label> : <>
+            <label>层高（米）<input name="ceiling" type="number" required min="2.4" max="6" step="0.001" defaultValue="3.2" /></label>
+            {mode === 'outer' && <>
+            <label>铺位轮廓<select value={shape} onChange={e => setShape(e.target.value as typeof shape)}>
+              <option value="rectangle">矩形</option><option value="l-shape">L 形（右下缺口）</option></select></label>
+            {shape === 'l-shape' && <>
+              <label>缺口宽度（米）<input name="notchWidth" type="number" min="0.001" step="0.001" required /></label>
+              <label>缺口深度（米）<input name="notchDepth" type="number" min="0.001" step="0.001" required /></label>
+            </>}
+            <div className="shell-toggles full"><label><input name="walls" type="checkbox" defaultChecked />沿轮廓生成外墙</label></div></>}
           </>}
-          <div className="shell-toggles full"><label><input name="walls" type="checkbox" defaultChecked />沿轮廓生成外墙</label></div></>}
-        </>}
-        {error && <p className="full property-error" role="alert">{error}</p>}
-        <div className="dialog-actions full"><button className="primary" type="submit">{saving ? '正在保存…' : fromImage ? '导入并两点校准' : '创建铺位'}</button></div>
-      </fieldset></form>
+          {error && <p className="full property-error" role="alert">{error}</p>}
+          <div className="dialog-actions full"><button className="primary" type="submit">{saving ? '正在保存…' : fromImage ? '导入并两点校准' : '创建铺位'}</button></div>
+        </fieldset></form>
+      )}
     </dialog>
   </>;
 }

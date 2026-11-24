@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef } from 'react';
-import { closureMessage, directions, rectangleLegs, traceLegs } from './interiorSurvey';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { autoCloseLegs, closureMessage, directions, rectangleLegs, traceLegs } from './interiorSurvey';
 import type { SurveyLeg } from './interiorSurvey';
+import { polygonArea } from './site';
 
 export type SurveyDraft = { mode: 'rectangle' | 'chain'; width: number; depth: number; legs: SurveyLeg[]; thickness: number };
 export const initialSurvey: SurveyDraft = { mode: 'rectangle', width: 10000, depth: 8000, thickness: 200, legs: [] };
@@ -17,6 +18,7 @@ function SurveyPreview({ legs }: { legs: SurveyLeg[] }) {
   const pts = points.map(p => ({ x: 198 + (p.x - x0 - w / 2) * scale, y: 104 + (p.y - y0 - h / 2) * scale }));
   const end = points[points.length - 1], last = pts[pts.length - 1], first = pts[0];
   const closed = !end.x && !end.y && legs.length >= 4 && legs.every(l => l.length > 0);
+  const netAreaM2 = closed ? polygonArea(points.slice(0, -1)) / 1e6 : 0;
   return <div className="survey-preview">
     <svg viewBox="0 0 400 212" aria-label="内墙净尺寸预览" role="img">
       <polyline points={pts.map(p => p.x + ',' + p.y).join(' ')} fill={closed ? '#dce9db' : 'none'} stroke="#375c47" strokeWidth="2.5" />
@@ -31,18 +33,23 @@ function SurveyPreview({ legs }: { legs: SurveyLeg[] }) {
       <circle cx={first.x} cy={first.y} r="4" fill="#375c47" />
       <text x={first.x} y={first.y-15} textAnchor="middle">起点</text>
     </svg>
-    <small role="status">{closed ? '首尾已闭合' : closureMessage(end) || '从一个内墙角开始，按顺序录入'}</small>
+    <small role="status">
+      {closed
+        ? `首尾已闭合 · 室内净面积 ${netAreaM2.toFixed(2)} ㎡（外包 ${(w / 1000).toFixed(2)} × ${(h / 1000).toFixed(2)} m）`
+        : closureMessage(end) || '从一个内墙角开始，按顺序录入'}
+    </small>
   </div>;
 }
 
 export default function SurveyFields({ value, onChange }: { value: SurveyDraft; onChange: (draft: SurveyDraft) => void }) {
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const addedRow = useRef(false);
+  const [closeNote, setCloseNote] = useState('');
   useLayoutEffect(() => {
     if (addedRow.current) inputs.current[value.legs.length-1]?.focus();
     addedRow.current = false;
   }, [value.legs.length]);
-  function patch(update: Partial<SurveyDraft>) { onChange({ ...value, ...update }); }
+  function patch(update: Partial<SurveyDraft>) { setCloseNote(''); onChange({ ...value, ...update }); }
   function setRow(i: number, update: Partial<SurveyLeg>) {
     patch({ legs: value.legs.map((l, n) => n === i ? { ...l, ...update } : l) });
   }
@@ -53,6 +60,8 @@ export default function SurveyFields({ value, onChange }: { value: SurveyDraft; 
     addedRow.current = true;
     patch({ legs: [...value.legs, { direction: last ? next[last.direction] : 'right', length: 0 }] });
   }
+  const chainEnd = value.mode === 'chain' ? traceLegs(value.legs).at(-1)! : { x: 0, y: 0 };
+  const canAutoClose = value.mode === 'chain' && value.legs.filter(l => l.length > 0).length >= 2 && (chainEnd.x !== 0 || chainEnd.y !== 0);
   return <>
     <label>铺位轮廓<select value={value.mode} onChange={e => patch({ mode: e.target.value as SurveyDraft['mode'],
       legs: value.legs.length ? value.legs : [{ direction: 'right', length: 0 }] })}>
@@ -60,8 +69,8 @@ export default function SurveyFields({ value, onChange }: { value: SurveyDraft; 
     </select></label>
     <label>墙厚（mm）<input type="number" required min="50" max="1000" value={value.thickness || ''} onChange={e => patch({ thickness: Number(e.target.value) })} /></label>
     {value.mode === 'rectangle' && <>
-      <label>室内净宽（mm）<input type="number" required min="1" max="60000" value={value.width || ''} onChange={e => patch({width:Number(e.target.value)})} /></label>
-      <label>室内净深（mm）<input type="number" required min="1" max="60000" value={value.depth || ''} onChange={e => patch({depth:Number(e.target.value)})} /></label>
+      <label>室内净宽（mm{value.width > 0 ? ` · ${(value.width / 1000).toFixed(2)}m` : ''}）<input type="number" required min="1" max="60000" value={value.width || ''} onChange={e => patch({width:Number(e.target.value)})} /></label>
+      <label>室内净深（mm{value.depth > 0 ? ` · ${(value.depth / 1000).toFixed(2)}m` : ''}）<input type="number" required min="1" max="60000" value={value.depth || ''} onChange={e => patch({depth:Number(e.target.value)})} /></label>
     </>}
     <div className={'full survey-layout ' + (value.mode === 'chain' ? 'has-legs' : '')}>
       {value.mode === 'chain' && <div className="survey-entry">
@@ -81,8 +90,14 @@ export default function SurveyFields({ value, onChange }: { value: SurveyDraft; 
               if (end.x || end.y) addRow();
             }} />
         </div>)}</div>
-        <div className="survey-row-actions"><button type="button" disabled={value.legs.length >= 64} onClick={addRow}>加一段</button>
-          <button type="button" disabled={!value.legs.length} onClick={() => patch({legs:value.legs.slice(0,-1)})}>退回上一段</button></div>
+        <div className="survey-row-actions">
+          <button type="button" disabled={value.legs.length >= 64} onClick={addRow}>加一段</button>
+          <button type="button" disabled={!value.legs.length} onClick={() => patch({legs:value.legs.slice(0,-1)})}>退回上一段</button>
+          <button type="button" disabled={!canAutoClose} onClick={() => {
+            try { patch({ legs: autoCloseLegs(value.legs) }); } catch (e) { setCloseNote((e as Error).message); }
+          }}>自动闭合</button>
+        </div>
+        {closeNote && <small className="property-error" role="alert">{closeNote}</small>}
       </div>}
       <SurveyPreview legs={draftLegs(value)} />
     </div>

@@ -1,9 +1,10 @@
 # 文档索引
 
-项目用法和当前格式见 [项目 README](../README.md)，后续范围见 [商业路线图](commercial-roadmap.md)，历史产品目标见 [PRD](../prd.md)。
+项目用法和当前格式见 [项目 README](../README.md)，**当前产品定位与演进原则见 [产品定位与路线图](product-vision-and-roadmap.md)**，后续范围见 [商业路线图](commercial-roadmap.md)，历史产品目标见 [PRD](../prd.md)。
 
 | 记录 | 范围 |
 | --- | --- |
+| [产品定位与路线图](product-vision-and-roadmap.md) | 任意直角铺位智能分区估算、实测壳体保护原则、GitHub 开源借鉴与分阶段演进计划 |
 | [缩放与空白区域修复](viewport-zoom-fix.md) | 二维滚轮累积、三维距离与裁切约束及视口恢复验证 |
 | [三维空格拖动平移](space-pan-2026-11-06.md) | 临时平移观察中心、设备移动隔离、光标反馈及取消恢复 |
 | [第五轮画图优先界面](ui-round5-2026-11-06.md) | 按需属性、文件与工具菜单、设备库管理模式、画布前后尺寸及浏览器回归 |

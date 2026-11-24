@@ -88,6 +88,36 @@ export function createSurveyShop(name: string, legs: SurveyLeg[], thickness: num
     style: { ...project.style, ceilingHeight: ceiling, floorMaterial: 'concrete', wallMaterial: 'plaster', lightingPreset: 'daylight' } };
 }
 
+export function autoCloseLegs(legs: SurveyLeg[]): SurveyLeg[] {
+  const valid = legs.filter(l => Number.isInteger(l.length) && l.length > 0);
+  if (valid.length < 2) throw Error('请先录入至少 2 段有效墙长再自动闭合');
+  const path = traceLegs(valid);
+  const end = path[path.length - 1];
+  if (!end.x && !end.y) return valid;
+  const horiz = (d: SurveyLeg['direction']) => d === 'left' || d === 'right';
+  const hLeg: SurveyLeg | null = end.x ? { direction: end.x > 0 ? 'left' : 'right', length: Math.abs(end.x) } : null;
+  const vLeg: SurveyLeg | null = end.y ? { direction: end.y > 0 ? 'up' : 'down', length: Math.abs(end.y) } : null;
+  const candidates: SurveyLeg[][] = [];
+  if (hLeg && vLeg) {
+    candidates.push([...valid, vLeg, hLeg], [...valid, hLeg, vLeg]);
+  } else if (hLeg) {
+    candidates.push([...valid, hLeg]);
+  } else if (vLeg) {
+    candidates.push([...valid, vLeg]);
+  }
+  const chosen = candidates.find(list => {
+    if (list.length < 4 || list.length > 64) return false;
+    const prev = list[valid.length - 1], firstAdded = list[valid.length], lastAdded = list[list.length - 1], first = list[0];
+    if (horiz(prev.direction) === horiz(firstAdded.direction)) return false;
+    if (horiz(lastAdded.direction) === horiz(first.direction)) return false;
+    const pts = traceLegs(list);
+    pts.pop();
+    try { validateCorners(pts); return true; } catch { return false; }
+  });
+  if (!chosen) throw Error('当前折线无法直接用 1–2 段直角闭合，请微调最后一段方向或长度');
+  return chosen;
+}
+
 // The recorded corners are usable as a datum only while both adjoining
 // junctions still match the surveyed walls. Deleted wall IDs remain historical.
 export function surveyWall(project: Project, wall: Item) {
@@ -103,8 +133,15 @@ export function surveyWall(project: Project, wall: Item) {
     if (Math.hypot(start.x - centers[j].x, start.y - centers[j].y) > 0.01 || Math.hypot(end.x - next.x, end.y - next.y) > 0.01) return;
   }
   const a = s.corners[i], b = s.corners[(i + 1) % count];
-  return { a, b, start: Math.round(projectOnWall(wall, a).offset * 1000) / 1000,
-    end: Math.round(projectOnWall(wall, b).offset * 1000) / 1000, index: i };
+  const start = Math.round(projectOnWall(wall, a).offset * 1000) / 1000;
+  const end = Math.round(projectOnWall(wall, b).offset * 1000) / 1000;
+  // Reconcile inner-face span with structural openingError() 50mm centerline bounds
+  // so concave interior corners never accept an offset that syncStructure() rejects.
+  const minOffset = Math.max(start, 50);
+  const maxEnd = Math.min(end, wall.w - 50);
+  const minStartGap = Math.max(0, Math.ceil(minOffset - start));
+  const minEndGap = Math.max(0, Math.ceil(end - maxEnd));
+  return { a, b, start, end, minOffset, maxEnd, minStartGap, minEndGap, index: i };
 }
 
 type WallDatum = NonNullable<ReturnType<typeof surveyWall>>;
@@ -114,5 +151,14 @@ export function cornerDistance(datum: WallDatum, offset: number, width: number, 
 export function openingOffset(datum: WallDatum, distance: number, width: number, fromEnd: boolean) {
   if (!Number.isFinite(distance) || !Number.isFinite(width) || width < 100) throw Error('请填写有效距离，洞口宽度至少 100 mm');
   if (distance < 0 || distance + width > datum.end - datum.start) throw Error('洞口超出内墙净长');
-  return fromEnd ? datum.end - distance - width : datum.start + distance;
+  const offset = fromEnd ? datum.end - distance - width : datum.start + distance;
+  if (offset < datum.minOffset - 1e-6) {
+    const need = Math.ceil(datum.minOffset - datum.start);
+    throw Error(`受墙角结构限制，距起角至少需留 ${need} mm（避免切入相邻墙体）`);
+  }
+  if (offset + width > datum.maxEnd + 1e-6) {
+    const need = Math.ceil(datum.end - datum.maxEnd);
+    throw Error(`受墙角结构限制，距末角至少需留 ${need} mm（避免切入相邻墙体）`);
+  }
+  return offset;
 }

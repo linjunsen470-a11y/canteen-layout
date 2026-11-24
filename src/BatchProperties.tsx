@@ -27,9 +27,9 @@ export default function BatchProperties() {
   const translate = (dx: number, dy: number) => layoutAction(() => {
     s.updateMany(movableSelection(project, selectedIds).map(i => ({ id: i.id, patch: { x: i.x + dx, y: i.y + dy } })));
   });
-  const copyBeside = (right: boolean) => layoutAction(() => {
+  const copyBeside = (dxSign: -1 | 0 | 1, dySign: -1 | 0 | 1) => layoutAction(() => {
     const ids = movableSelection(project, selectedIds).map(i => i.id);
-    const copy = duplicateItems(project, ids, right ? box.w + gap : 0, right ? 0 : box.h + gap);
+    const copy = duplicateItems(project, ids, dxSign * (box.w + gap), dySign * (box.h + gap));
     const added = new Set(copy.ids);
     if (copy.project.items.some(i => added.has(i.id) && !planningEditable(i, copy.project))) throw Error('该位置超出当前规划范围');
     const conflict = checkSpace(copy.project, null).find(v => v.type !== '参考净距' && v.ids.some(id => added.has(id)));
@@ -48,7 +48,8 @@ export default function BatchProperties() {
     </fieldset>
     <fieldset disabled={!canTransform || !!s.placement}><legend>相邻复制</legend>
       <label className="full-field">边缘间距（mm）<NumberField value={gap} min={0} onCommit={setGap} /></label>
-      <button onClick={() => copyBeside(true)}>向右复制</button><button onClick={() => copyBeside(false)}>向下复制</button>
+      <button onClick={() => copyBeside(-1, 0)}>向左复制</button><button onClick={() => copyBeside(1, 0)}>向右复制</button>
+      <button onClick={() => copyBeside(0, -1)}>向上复制</button><button onClick={() => copyBeside(0, 1)}>向下复制</button>
     </fieldset>
     <fieldset disabled={!!s.placement}>
       <button disabled={!editable} onClick={() => layoutAction(group ? ungroupSelected : groupSelected)}>{group ? '解散组合' : '编为一组'}</button>
