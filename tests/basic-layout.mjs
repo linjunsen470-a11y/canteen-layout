@@ -8,6 +8,15 @@ export async function testBasicLayout(load, loadScene) {
   const { checkSpace } = await load('spaceChecks');
   const { entryRoutes } = await load('entryAccess');
   const shape = points => sketchShell(points.map(([x,y]) => ({ x:x*1000, y:y*1000 })));
+  const { dimensionedOutline, polygonArea } = await load('site');
+  assert.equal(polygonArea(dimensionedOutline(60000,2400)),144000000);
+  for (const corner of ['top-left','top-right','bottom-left','bottom-right']) {
+    const points = dimensionedOutline(8500,6000,{ width:3000, depth:2000, corner });
+    assert.equal(polygonArea(points),45000000);
+    const cutout = { x: corner.endsWith('left') ? 500 : 8000, y: corner.startsWith('top') ? 500 : 5500 };
+    assert.equal(inPolygon(cutout,points),false);
+    assert.equal(sketchShell(points).items.length,6);
+  }
   const rect = (w,d) => [[0,0],[w,0],[w,d],[0,d]];
   assert.throws(() => shape([[0,0],[5,1],[5,5],[0,5]]));
   assert.throws(() => shape([[0,0],[6,0],[6,4],[2,4],[2,-1],[0,-1]]));

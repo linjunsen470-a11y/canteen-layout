@@ -4,6 +4,7 @@ import { requestBasicLayout } from './requestBasicLayout';
 import { checkSketchEdge, placeSketchFixture, sketchFixtures, sketchShell, type SketchFixture } from './sketchGeometry';
 import type { Point, Project } from './model';
 import { footprint } from './spatial';
+import SketchDimensions from './SketchDimensions';
 import { polygonArea } from './site';
 
 const grid = 100;
@@ -17,6 +18,7 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const [corners, setCorners] = useState<Point[]>([]);
+  const [fromDimensions, setFromDimensions] = useState(false);
   const [shells, setShells] = useState<Project[]>([]);
   const shell = shells.at(-1);
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -47,8 +49,18 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
   }
   function undo() {
     setError(''); setInvalid(null); setLength('');
-    if (shell) setShells(shells.slice(0, -1));
+    if (fromDimensions && shells.length === 1) {
+      setShells([]); setCorners([]); setFromDimensions(false);
+    } else if (shell) setShells(shells.slice(0, -1));
     else setCorners(corners.slice(0, -1));
+  }
+  function applyDimensions(points: Point[]) {
+    const next = sketchShell(points);
+    const w = Math.max(...points.map(p => p.x)), d = Math.max(...points.map(p => p.y));
+    const width = Math.max(2000, w * 1.2, d * 1.2 / .56);
+    setCamera({ width, x: (w - width) / 2, y: (d - width * .56) / 2 });
+    setCorners(points); setShells([next]); setFromDimensions(true);
+    setError(''); setInvalid(null); setLength(''); setPanMode(false);
   }
   function zoom(factor: number, anchor?: Point) {
     setCamera(c => {
@@ -120,6 +132,9 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
       <label>餐饮业态<select value={business} onChange={e => setBusiness(e.target.value as ConceptBusinessType)}>
         {Object.entries(businessTypeDefaults).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
       </select></label>
+    </div>
+    <div hidden={corners.length > 0 && (!fromDimensions || shells.length > 1)}>
+      <SketchDimensions onApply={applyDimensions} editing={fromDimensions} />
     </div>
     <div className="sketch-controls">
       <strong>{shell ? '已闭合 · 估算 ' + (polygonArea(corners) / 1e6).toFixed(1) + ' ㎡' : '沿内墙依次点出墙角，点回起点闭合'}</strong>

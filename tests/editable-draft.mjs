@@ -40,6 +40,8 @@ export async function testEditableDraft(browser, url) {
     assert.equal(before.items.filter(i => i.kind === 'wall').length,6);
     assert.ok(before.items.some(i => i.kind === 'door') && before.items.some(i => i.kind === 'column'));
     assert.equal(before.survey.source,'estimated');
+    const booth = before.items.find(i => i.model === 'curved-booth');
+    if (booth) assert.equal(await page.locator('[data-plan]').getByText(booth.name,{exact:true}).count(),0);
     const group = before.groups[0];
     const members = before.items.filter(i => group.members.includes(i.id));
     const table = members.find(i => i.kind === 'table');
@@ -58,6 +60,7 @@ export async function testEditableDraft(browser, url) {
     assert.ok(delta.every(d => d[0] === delta[0][0] && d[1] === delta[0][1]));
     const c = await objectCenter(chair.id);
     await page.mouse.dblclick(c.x,c.y);
+    await page.locator(`[data-plan] [data-item-id="${chair.id}"] text`).filter({hasText:chair.name}).waitFor();
     await page.keyboard.press('Delete');
     const edited = await project();
     assert.equal(edited.items.length, moved.items.length-1);
@@ -101,6 +104,29 @@ export async function testEditableDraft(browser, url) {
     assert.notEqual(imported.id,edited.id);
     assert.deepEqual(imported.items,edited.items);
     assert.deepEqual(imported.basicDraft,edited.basicDraft);
+    await button('新建铺位').click();
+    await page.getByText('按尺寸画矩形或 L 形',{exact:true}).click();
+    await page.getByLabel('铺位净宽（米）').fill('8.5');
+    await page.getByLabel('铺位净深（米）').fill('6');
+    await button('应用尺寸').click();
+    await page.getByText('已闭合 · 估算 51.0 ㎡',{exact:true}).waitFor();
+    await page.getByText('修改轮廓尺寸',{exact:true}).click();
+    await page.getByLabel('铺位形状').selectOption('l-shape');
+    await page.getByLabel('缺口位置').selectOption('top-left');
+    await page.getByLabel('缺口宽度（米）').fill('9');
+    await page.getByLabel('缺口深度（米）').fill('2');
+    await button('应用尺寸').click();
+    await page.getByRole('alert').filter({hasText:'缺口宽度和深度'}).waitFor();
+    await page.getByLabel('缺口宽度（米）').fill('3');
+    await button('应用尺寸').click();
+    await page.getByText('已闭合 · 估算 45.0 ㎡',{exact:true}).waitFor();
+    await point(8400,3200);
+    await button('生成基础布局').click();
+    await page.locator('.shop-wizard-dialog').waitFor({state:'hidden'});
+    const quick = await project();
+    assert.equal(quick.survey.corners.length,6);
+    assert.ok(quick.groups.length && quick.items.some(i => i.pointType === 'entrance'));
+    assert.equal(quick.survey.source,'estimated');
     assert.deepEqual(errors,[]);
     console.log('PASS 格网 L 铺、后台生成、双视图、整组拖动、单椅删改与撤销、双图导出、独立新稿与项目包回读');
   } finally { await page.close(); }
