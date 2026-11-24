@@ -33,9 +33,16 @@ export function sketchShell(corners: Point[]) {
     return { direction: b.x > a.x ? 'right' : b.x < a.x ? 'left' : b.y > a.y ? 'down' : 'up',
       length: Math.abs(b.x - a.x) + Math.abs(b.y - a.y) };
   });
-  const project = createSurveyShop('我的铺位', legs, 200, 3200);
-  project.survey!.source = 'estimated';
-  return project;
+  // A narrow exterior notch can close at a 200 mm offset. Keep the inner
+  // measurements and choose the thickest representable schematic wall.
+  for (const thickness of [200, 100, 50]) {
+    try {
+      const project = createSurveyShop('我的铺位', legs, thickness, 3200);
+      project.survey!.source = 'estimated';
+      return project;
+    } catch (error) { if (thickness === 50) throw error; }
+  }
+  throw Error('铺位外墙无法按这些墙角生成');
 }
 
 export const sketchFixtures = { column: '柱', shaft: '管井', room: '固定隔间', entrance: '入口' } as const;

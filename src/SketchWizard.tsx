@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { businessTypeDefaults, type ConceptBusinessType } from './conceptPlanner';
 import { requestBasicLayout } from './requestBasicLayout';
 import { checkSketchEdge, placeSketchFixture, sketchFixtures, sketchShell, type SketchFixture } from './sketchGeometry';
@@ -50,12 +50,24 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
     if (shell) setShells(shells.slice(0, -1));
     else setCorners(corners.slice(0, -1));
   }
-  function zoom(factor: number) {
+  function zoom(factor: number, anchor?: Point) {
     setCamera(c => {
       const w = Math.min(140000, Math.max(2000, c.width * factor));
-      return { width: w, x: c.x + (c.width - w) / 2, y: c.y + (c.width - w) * 0.28 };
+      const x = anchor?.x ?? c.x + c.width / 2;
+      const y = anchor?.y ?? c.y + c.width * .28;
+      return { width: w, x: x + (c.x - x) * w / c.width, y: y + (c.y - y) * w / c.width };
     });
   }
+  useEffect(() => {
+    const element = svg.current;
+    if (!element || busy) return;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (!pan.current && e.deltaY) zoom(e.deltaY > 0 ? 1.15 : 1/1.15, world(e.clientX, e.clientY));
+    };
+    element.addEventListener('wheel', wheel, { passive: false });
+    return () => element.removeEventListener('wheel', wheel);
+  }, [busy]);
   function stamp(point: Point, type: SketchFixture) {
     if (!shell) return;
     const next = placeSketchFixture(shell, type, { x: point.x + shift.x, y: point.y + shift.y },
@@ -68,9 +80,11 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
       if (shell) { stamp(point, fixture); return; }
       const first = corners[0];
       const closing = close || (corners.length >= 4 && Math.hypot(first.x - point.x, first.y - point.y) < camera.width / 80);
-      if (!closing && length && !(Number(length) > 0 && Number(length) <= 60)) throw Error('边长须大于 0 米且不超过 60 米');
+      if (length && !(Number(length) > 0 && Number(length) <= 60)) throw Error('边长须大于 0 米且不超过 60 米');
       const end = closing ? first : endpoint(point);
       checkSketchEdge(corners, end, closing);
+      if (closing && length && last && Math.abs(Math.hypot(first.x-last.x, first.y-last.y) - Number(length)*1000) > .5)
+        throw Error('输入的末段长度与起点位置不符，请修改边长或退回上一点');
       if (closing) setShells([sketchShell(corners)]);
       else setCorners([...corners, end]);
       setLength('');
@@ -142,7 +156,7 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
       <span>每格 1 米</span><label>下一段边长（米）<input type="number" min=".001" step=".001" placeholder="随点位" value={length} onChange={e => setLength(e.target.value)}/></label>
       <button disabled={corners.length < 4} onClick={() => place(corners[0], true)}>闭合轮廓</button>
     </div> : <>
-      <div className="sketch-controls"><span>点外墙标入口，或拖入固定构件</span>{Object.entries(sketchFixtures).map(([key,label]) =>
+      <div className="sketch-controls"><span>知道入口可点外墙，也可拖入固定构件</span>{Object.entries(sketchFixtures).map(([key,label]) =>
         <button draggable key={key} aria-pressed={fixture === key} onClick={() => setFixture(key as SketchFixture)}
           onDragStart={e => e.dataTransfer.setData('application/canteen-sketch',key)}>{label}</button>)}</div>
       {fixture !== 'entrance' && <div className="sketch-controls">

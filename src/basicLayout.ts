@@ -88,5 +88,6 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
       }), groups: accepted.groups, clearance: options.aisleMm }), warnings, score };
     }
   }
-  return { project: best!.project, warnings: best!.warnings };
+  const { project, warnings } = best!;
+  return { project: { ...project, basicDraft: { business, warnings } }, warnings };
 }

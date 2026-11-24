@@ -23,6 +23,7 @@ export function reachableFromEntry(project: Project) {
     const b = bounds([item]);
     boxes.set(item.id, b);
     const [x0,x1] = range(b.x, b.w, cols, halfWidth), [y0,y1] = range(b.y, b.h, rows, halfWidth);
+    if (x1 < x0) continue;
     for (let y = y0; y <= y1; y++) cells.fill(1, y * cols + x0, y * cols + x1 + 1);
   }
   const visit = (n: number) => { if (cells[n] === 0) { cells[n] = 2; queue.push(n); } };

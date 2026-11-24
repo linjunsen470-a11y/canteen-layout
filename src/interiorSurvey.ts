@@ -56,6 +56,7 @@ export function validateSurvey(s: InteriorSurvey) {
   if (!s || !Array.isArray(s.corners) || !Array.isArray(s.wallIds) || s.wallIds.length !== s.corners.length
     || s.wallIds.some(id => typeof id !== 'string' || !id) || new Set(s.wallIds).size !== s.wallIds.length)
     throw Error('现场测量记录的墙段无效');
+  if (s.source !== undefined && s.source !== 'estimated') throw Error('铺位尺寸来源无效');
   if (!Number.isInteger(s.thickness) || s.thickness < 50 || s.thickness > 1000) throw Error('墙厚须为 50–1000 mm');
   validateCorners(s.corners);
 }

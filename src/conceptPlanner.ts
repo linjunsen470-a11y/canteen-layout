@@ -12,7 +12,7 @@ import { analyzeShop } from './shopAnalytics';
 import { checkSpace } from './spaceChecks';
 import { polygonPatch } from './zones';
 
-export type ConceptBusinessType = 'bistro' | 'cafe' | 'restaurant' | 'canteen';
+export type ConceptBusinessType = NonNullable<Project['basicDraft']>['business'];
 export type ConceptKitchenSide = 'rear' | 'left' | 'right' | 'none';
 export type ConceptSeatingStyle = 'balanced' | 'compact' | 'comfort' | 'canteen-bench';
 export type ConceptThemeId = 'keep' | 'oak-bistro' | 'cream-cafe' | 'warm-restaurant' | 'bright-canteen' | 'raw-concrete';
@@ -898,7 +898,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
 
   // Applying and saving a variant must both produce a project the reader can open.
   const candidate = parseProject({
-    ...baseProject,
+    ...baseProject, basicDraft: undefined,
     clearance: options.aisleMm,
     style: nextStyle,
     items: [...zoneItems, ...preservedItems, ...placedInterior],

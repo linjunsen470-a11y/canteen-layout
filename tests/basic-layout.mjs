@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function testBasicLayout(load) {
+export async function testBasicLayout(load, loadScene) {
   const { sketchShell, placeSketchFixture } = await load('sketchGeometry');
   const { generateBasicLayout } = await load('basicLayout');
   const { parseProject } = await load('projectIO');
@@ -12,6 +12,12 @@ export async function testBasicLayout(load) {
   assert.throws(() => shape([[0,0],[5,1],[5,5],[0,5]]));
   assert.throws(() => shape([[0,0],[6,0],[6,4],[2,4],[2,-1],[0,-1]]));
   assert.throws(() => shape(rect(61,2)));
+  const stairs = [[0,0],[32,0]];
+  for (let level = 0; level < 31; level++) stairs.push([32-level,level+1], [level === 30 ? 0 : 31-level,level+1]);
+  assert.equal(shape(stairs).survey.corners.length,64);
+  assert.throws(() => shape([...stairs.slice(0,-1),[1,31],[1,32],[0,32]]), /64/);
+  const thinNotch = shape([[0,0],[8,0],[8,6],[5,6],[5,4],[4.8,4],[4.8,6],[0,6]]);
+  assert.equal(thinNotch.survey.thickness, 50);
   function generate(shell, business) {
     const { project, warnings } = generateBasicLayout(shell, business);
     const parsed = parseProject(JSON.parse(JSON.stringify(project)));
@@ -30,6 +36,10 @@ export async function testBasicLayout(load) {
   assert.throws(() => placeSketchFixture(fixture,'column',{x:8800,y:6000},500,500));
   const placed = generate(fixture,'bistro').project;
   assert.ok(placed.groups.length && placed.items.some(i => i.kind === 'sink') && placed.items.some(i => i.model === 'cashier'));
+  const { computeInteriorShot, computeStorefrontShot } = await loadScene();
+  const inside = computeInteriorShot(placed), outside = computeStorefrontShot(placed);
+  assert.ok(inside.pos.z < 1 && inside.target.z > inside.pos.z, 'north-side entrance looks inward');
+  assert.ok(outside.pos.z < 0 && outside.target.z > outside.pos.z, 'storefront follows the marked entrance');
   const reachable = reachableFromEntry(placed);
   assert.ok(placed.items.filter(i => i.kind === 'chair' || i.model === 'cashier').every(reachable));
   let rotated = l;
@@ -48,6 +58,10 @@ export async function testBasicLayout(load) {
   ]) assert.ok(generate(shape(points),'cafe').project.groups.length);
   const small = generate(shape(rect(1,1)),'restaurant');
   assert.equal(small.project.groups.length,0);
+  assert.ok(small.project.items.some(i => i.kind === 'fridge'));
+  const empty = generate(shape(rect(.6,.6)), 'restaurant');
+  assert.ok(empty.project.items.every(i => i.kind === 'wall'));
+  assert.deepEqual(small.project.basicDraft,{business:'restaurant',warnings:small.warnings});
   assert.match(small.warnings.join(' '), /未摆入/);
   const divided = placeSketchFixture(shape(rect(10,6)), 'entrance', {x:1500,y:200},0,0);
   const blocked = placeSketchFixture(divided,'room',{x:5200,y:3200},1000,6000);

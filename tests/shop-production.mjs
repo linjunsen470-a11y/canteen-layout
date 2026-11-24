@@ -1,3 +1,4 @@
+import { testEditableDraft } from './editable-draft.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -10,6 +11,7 @@ try {
     channel: process.env.CI ? undefined : 'chrome',
     args: ['--enable-unsafe-swiftshader'],
   });
+  await testEditableDraft(browser, 'http://127.0.0.1:' + server.httpServer.address().port);
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   page.setDefaultTimeout(45000);
   const errors = [];

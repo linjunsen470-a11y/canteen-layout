@@ -81,12 +81,12 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
   };
 
   const applyToCurrent = () => {
-    if (!result) return;
+    if (!result || project.basicDraft) return;
     if (commit(result.project)) {
       dialog.current?.close();
       setOpen(false);
       useWorkspace.getState().set({ view: 'split', focusMode: false });
-      notify(`已按实测壳体落位：后厨 ${result.estimate.kitchenAreaSqm.toFixed(1)}㎡ · 前厅 ${result.estimate.diningAreaSqm.toFixed(1)}㎡ · ${result.estimate.seats} 座（可一键撤销）`);
+      notify(`已按当前铺位落位，后厨 ${result.estimate.kitchenAreaSqm.toFixed(1)}㎡ · 前厅 ${result.estimate.diningAreaSqm.toFixed(1)}㎡ · ${result.estimate.seats} 座（可一键撤销）`);
     }
   };
 
@@ -380,14 +380,14 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
             >
               <CopyPlus />{saving ? '正在另存…' : '另存为对比方案'}
             </button>
-            <button
+            {!project.basicDraft && <button
               type="button"
               className="primary"
               disabled={!result || saving}
               onClick={applyToCurrent}
             >
               <Sparkles />应用到当前铺位（可撤销）
-            </button>
+            </button>}
           </div>
         </footer>
       </dialog>

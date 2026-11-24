@@ -9,7 +9,7 @@ const server = await createServer({
 });
 try {
   const load = name => server.ssrLoadModule('/src/' + name + '.ts');
-  await testBasicLayout(load);
+  await testBasicLayout(load, () => server.ssrLoadModule('/src/SceneCapture.tsx'));
   const { shopTemplates, createCustomShopShell, buildPerimeterWalls } = await load('shopTemplates');
   const { analyzeShop } = await load('shopAnalytics');
   const { parseProject } = await load('projectIO');
