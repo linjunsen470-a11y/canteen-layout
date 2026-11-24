@@ -21,15 +21,41 @@ try {
   };
   await page.goto('http://127.0.0.1:' + server.httpServer.address().port);
   await button('已保存').waitFor();
-  await button('开店模板 / 建铺').click();
-  assert.match(await page.locator('.template-card').filter({ hasText: '企业员工食堂' }).innerText(), /48 座/);
-  await page.getByRole('tab', { name: '按实测尺寸新建铺位' }).click();
-  await page.getByLabel('铺位 / 门店名称').fill('经营测试店');
-  await button('立即生成铺位框架').click();
+  assert.match(await page.locator('.project-count').innerText(), /0 座/);
+  await button('新建铺位').click();
+  await page.getByLabel('铺位名称').fill('经营测试店');
+  await button('创建铺位').click();
   await page.locator('.shop-wizard-dialog').waitFor({ state: 'hidden' });
   const combo = page.locator('.combo-card').filter({ hasText: '双人咖啡圆桌组' });
-  await combo.click();
-  await combo.click();
+  assert.equal(await combo.locator('svg.combo-plan polygon').count(), 3);
+  assert.ok(await page.locator('.combo-card').evaluateAll(cards => cards.every(card => {
+    const sidebar = card.closest('.library').getBoundingClientRect();
+    const rect = card.getBoundingClientRect();
+    return rect.left >= sidebar.left && rect.right <= sidebar.right && card.scrollWidth <= card.clientWidth;
+  })), '组合卡片及其内容应完整显示在素材库中');
+  const plan = page.getByLabel('二维布局画布');
+  const targetPosition = await plan.evaluate(svg => {
+    const pt = new DOMPoint(2500, 3500).matrixTransform(svg.querySelector('[data-plan]').getScreenCTM());
+    const rect = svg.getBoundingClientRect();
+    return { x: pt.x - rect.left, y: pt.y - rect.top };
+  });
+  await combo.dragTo(plan, { targetPosition });
+  const batch = page.locator('.batch-props');
+  assert.match(await batch.locator('.batch-summary').innerText(), /2020 × 850 mm · 2 座/);
+  const field = batch.getByLabel('左边缘 X（mm）');
+  await field.fill('1000');
+  await field.press('Enter');
+  await batch.getByRole('button', { name: '右转 90°' }).click();
+  assert.match(await batch.locator('.batch-summary').innerText(), /850 × 2020 mm/);
+  await batch.getByLabel('边缘间距（mm）').fill('800');
+  await batch.getByRole('button', { name: '向右复制' }).click();
+  await batch.getByLabel('边缘间距（mm）').fill('20000');
+  await batch.getByRole('button', { name: '向右复制' }).click();
+  assert.match(await page.locator('.props [role="alert"]').innerText(), /无法在此处复制/);
+  assert.match(await page.locator('.project-count').innerText(), /4 座/);
+  await button('撤销').click();
+  assert.match(await page.locator('.project-count').innerText(), /2 座/);
+  await button('重做').click();
   await button('开店概览').click();
   const dialog = page.locator('.insights-dialog');
   assert.match(await dialog.innerText(), /4 座/);
@@ -44,14 +70,14 @@ try {
   const project = JSON.parse(await download('JSON'));
   const tables = project.items.filter(i => i.kind === 'table');
   assert.equal(tables.length, 2);
+  assert.equal(tables[0].rotation, 90);
+  assert.equal(tables[1].x - tables[0].x, 1650);
+  assert.equal(project.groups.length, 2);
   assert.notDeepEqual([tables[0].x, tables[0].y], [tables[1].x, tables[1].y]);
   await button('导出与汇报').click();
   assert.equal((await download('导出 2D 平面图 PNG')).readUInt32BE(0), 0x89504e47);
   await button('门头外观').click();
   await button('人视点进店').click();
-  await button('换一种摆法').click();
-  assert.equal(await page.locator('.compare-card').count(), 3);
-  await page.locator('.compare-dialog').getByRole('button', { name: '关闭', exact: true }).click();
   await button('导出与汇报').click();
   await button('客户成果').click();
   const html = (await download('下载展示页')).toString('utf8');
@@ -95,8 +121,28 @@ try {
   await button('关闭成果').click();
   assert.equal(await page.locator('.scene-caption b').innerText(), closeupCaption);
   assert.ok(await button('物体特写').evaluate(b => b.classList.contains('active')));
+  await button('新建铺位').click();
+  await button('从户型图描绘').click();
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100; canvas.height = 80;
+    return canvas.toDataURL().split(',')[1];
+  });
+  await page.locator('input[name=image]').setInputFiles({ name: 'survey.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  await button('导入并两点校准').click();
+  const underlay = page.locator('[data-underlay]');
+  await underlay.waitFor();
+  for (const x of [1000, 6000]) {
+    const point = await plan.evaluate((svg, x) => {
+      const p = new DOMPoint(x, 3500).matrixTransform(svg.querySelector('[data-plan]').getScreenCTM());
+      return { x: p.x, y: p.y };
+    }, x);
+    await page.mouse.click(point.x, point.y);
+  }
+  await button('应用校准').click();
+  await page.getByText(/已校准 5000mm/).waitFor();
   assert.deepEqual(errors, []);
-  console.log('PASS 生产版建铺、连续摆放、保存恢复、门头外观、三摆法对比、平面 PNG 与四图合伙人方案书');
+  console.log('PASS 实测建铺、底图两点校准、组合预览与拖放、整组定位旋转、按间距复制与越界拦截、撤销重做、保存恢复及图文导出');
 } finally {
   await browser?.close();
   await server.close();

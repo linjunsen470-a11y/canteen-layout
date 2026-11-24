@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Columns3, Lightbulb } from 'lucide-react';
+import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Lightbulb } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
 import { usePlanning } from './planning';
@@ -9,7 +9,7 @@ import { download } from './projectIO';
 
 const fmtYuan = (n: number) => n >= 10000 ? `¥${(n / 10000).toFixed(1)}万` : `¥${n.toLocaleString()}`;
 
-export default function ShopInsightsDialog({ onCompare }: { onCompare?: () => void }) {
+export default function ShopInsightsDialog() {
   const dialog = useRef<HTMLDialogElement>(null);
   const project = useStore(s => s.project);
   const commit = useStore(s => s.commit);
@@ -51,11 +51,6 @@ export default function ShopInsightsDialog({ onCompare }: { onCompare?: () => vo
           <p>汇总实测面积、客座舒适度、餐厨比、商用配电预估、空间体检与分类采购预算</p>
         </div>
         <div className="insights-header-actions">
-          {onCompare && (
-            <button type="button" onClick={() => { dialog.current?.close(); onCompare(); }}>
-              <Columns3 />换一种摆法
-            </button>
-          )}
           <button type="button" onClick={exportCSV}><Download />导出清单 CSV</button>
           <button type="button" onClick={() => dialog.current?.close()}>关闭</button>
         </div>

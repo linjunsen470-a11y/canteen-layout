@@ -541,25 +541,32 @@ export type CustomShopSpec = {
   floorMaterial: FloorMaterial;
   wallMaterial: WallMaterial;
   lightingPreset: LightingPreset;
+  notchWidthM?: number;
+  notchDepthM?: number;
   addWalls: boolean;
   addStorefront: boolean;
   addZones: boolean;
 };
 
 export function createCustomShopShell(spec: CustomShopSpec): Project {
-  const W = Math.max(4000, Math.min(60000, Math.round(spec.widthM * 1000)));
-  const H = Math.max(4000, Math.min(60000, Math.round(spec.depthM * 1000)));
+  const minExtent = spec.addZones || spec.addStorefront ? 4000 : 1000;
+  const W = Math.max(minExtent, Math.min(60000, Math.round(spec.widthM * 1000)));
+  const H = Math.max(minExtent, Math.min(60000, Math.round(spec.depthM * 1000)));
   const wallH = Math.max(2400, Math.min(6000, Math.round(spec.ceilingM * 1000)));
   const b = createBuilder();
 
   let outline: Point[] | undefined;
+  const innerX = W - Math.round((spec.notchWidthM ?? W * 0.38 / 1000) * 1000);
+  const innerY = H - Math.round((spec.notchDepthM ?? H * 0.45 / 1000) * 1000);
   if (spec.shape === 'l-shape') {
+    if (!(innerX > 0 && innerY > 0 && innerX < W && innerY < H)) throw Error('缺口宽度和深度必须分别小于开间和进深');
+    if (spec.addWalls && Math.min(innerX - 200, innerY - 200, W - innerX, H - innerY) < 300) throw Error('外墙中心线最短需 300 mm。请核对缺口尺寸，或取消围墙后手动画墙');
     outline = [
       { x: 0, y: 0 },
       { x: W, y: 0 },
-      { x: W, y: Math.round(H * 0.55) },
-      { x: Math.round(W * 0.62), y: Math.round(H * 0.55) },
-      { x: Math.round(W * 0.62), y: H },
+      { x: W, y: innerY },
+      { x: innerX, y: innerY },
+      { x: innerX, y: H },
       { x: 0, y: H },
     ];
   }
@@ -567,7 +574,7 @@ export function createCustomShopShell(spec: CustomShopSpec): Project {
   if (spec.addZones) {
     const kitchenH = Math.round(H * 0.32);
     b.add({ kind: 'zone', name: '后厨 / 操作区', x: 300, y: 300, w: W - 600, d: kitchenH - 400, h: 0, rotation: 0, color: '#f7ece0' });
-    b.add({ kind: 'zone', name: '前厅就餐区', x: 300, y: kitchenH + 100, w: (spec.shape === 'l-shape' ? Math.round(W * 0.62) : W) - 600, d: H - kitchenH - 400, h: 0, rotation: 0, color: '#e6f0e6' });
+    b.add({ kind: 'zone', name: '前厅就餐区', x: 300, y: kitchenH + 100, w: (spec.shape === 'l-shape' ? innerX : W) - 600, d: H - kitchenH - 400, h: 0, rotation: 0, color: '#e6f0e6' });
   }
 
   if (spec.addWalls) {

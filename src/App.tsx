@@ -15,10 +15,8 @@ import PresentationDialog, { PresentationDialogHandle } from './PresentationDial
 import PlanEditor, { PlanHandle } from './PlanEditor';
 import SplitView from './SplitView';
 import SidebarResize from './SidebarResize';
-import ShopWizardDialog, { ShopWizardHandle } from './ShopWizardDialog';
-import SchemeCompareDialog, { SchemeCompareHandle } from './SchemeCompareDialog';
+import ShopWizardDialog from './ShopWizardDialog';
 import ShopInsightsDialog from './ShopInsightsDialog';
-import QuickStartBar from './QuickStartBar';
 import { ComboPreset, comboPresets, placeCombo } from './combos';
 import { seatSummary } from './layoutGroups';
 import { Maximize2, Minimize2, ChevronUp, ChevronDown, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download, Share2 } from 'lucide-react';
@@ -64,8 +62,6 @@ export default function App() {
   useEditorKeyboard();
   const [grid, G] = useState(true), [snap, S] = useState(true), [notice, notify] = useState('');
   const plan = useRef<PlanHandle>(null), scene = useRef<SceneHandle>(null);
-  const wizardRef = useRef<ShopWizardHandle>(null);
-  const compareRef = useRef<SchemeCompareHandle>(null);
   const presentationRef = useRef<PresentationDialogHandle>(null);
   const [librarySignal, setLibrarySignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
@@ -125,7 +121,7 @@ export default function App() {
 
   const addCombo = useCallback((combo: ComboPreset, point?: { x: number; y: number }) => {
     try {
-      placeCombo(combo, point);
+      placeCombo(combo, point, point === undefined);
       notify(`已放置「${combo.name}」（整组可一起拖动与旋转，双击可单件微调）`);
     } catch (e) {
       notify((e as Error).message);
@@ -151,12 +147,11 @@ export default function App() {
           <small>餐饮开店 · 2D 平面与 3D 效果图</small>
         </div>
       </div>
-      <ShopWizardDialog ref={wizardRef} notify={notify} />
+      <ShopWizardDialog notify={notify} />
       <ProjectLibrary />
       <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
       <div className="actions" inert={!sessionReady || sessionBusy}>
-        <SchemeCompareDialog ref={compareRef} notify={notify} />
-        <ShopInsightsDialog onCompare={() => compareRef.current?.open()} />
+        <ShopInsightsDialog />
         <button className="share-partner-btn" title="一键拍摄 2D 平面 + 3 视角 3D 效果图，生成可发给合伙人讨论的精美方案书" onClick={() => presentationRef.current?.open()}>
           <Share2 />发给合伙人
         </button>
@@ -172,13 +167,6 @@ export default function App() {
         </ToolMenu>
       </div>
     </header>
-
-    {!focusMode && (
-      <QuickStartBar
-        onOpenWizard={tab => wizardRef.current?.open(tab)}
-        onCompare={() => compareRef.current?.open()}
-      />
-    )}
 
     <div inert={!sessionReady || sessionBusy} className={`workspace ${libraryOpen ? '' : 'library-closed'} ${propsOpen ? '' : 'props-closed'}`} style={{ '--library-width': `${prefs.libraryWidth}px`, '--props-width': `${prefs.propsWidth}px` } as React.CSSProperties}>
       <EquipmentLibrary onAdd={addFrom} onAddCombo={addCombo} savedSignal={librarySignal} />
@@ -230,7 +218,7 @@ export default function App() {
           }
         />
         <footer role="status">
-          <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象` : '就绪 · 输入真实尺寸一键生成方案，或点击/拖放左侧桌椅厨具实时看 3D 效果')}</span>
+          <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象` : '就绪 · 可从素材库拖入桌椅和设备')}</span>
           <span className="project-count">
             <b>{seatsInfo.seats} 座</b> · {(siteArea(project) / 1e6).toFixed(1)} ㎡ · {project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i)).length} 件 · {lightingText[style.lightingPreset]}
           </span>
