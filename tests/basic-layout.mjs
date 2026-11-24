@@ -46,6 +46,10 @@ export async function testBasicLayout(load) {
     [[0,0],[12,0],[12,3],[8,3],[8,8],[4,8],[4,3],[0,3]],
     l.map(([x,y]) => [-x,y]), rect(3.1,14), rect(60,60),
   ]) assert.ok(generate(shape(points),'cafe').project.groups.length);
+  const compact = placeSketchFixture(shape(rect(4,4)), 'entrance', {x:1250,y:200},0,0);
+  const dineIn = generate(compact,'bistro').project;
+  assert.ok(dineIn.groups.length && dineIn.items.some(i => i.kind === 'sink') && dineIn.items.some(i => i.model === 'noodle-cooker'),
+    'a usable compact dining room takes priority over an equipment-only kitchen');
   const small = generate(shape(rect(1,1)),'restaurant');
   assert.equal(small.project.groups.length,0);
   assert.match(small.warnings.join(' '), /未摆入/);
