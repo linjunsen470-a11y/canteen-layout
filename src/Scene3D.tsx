@@ -384,7 +384,7 @@ const presetLabels: Record<LightingPreset, string> = {
 export type SceneHandle = {
   galleryReady: () => boolean;
   capturePNG: () => string;
-  captureGallery: () => SceneGalleryShots;
+  captureShot: (kind: keyof SceneGalleryShots) => string;
 };
 
 function CameraWallCutaway({ project, enabled, onChange }: { project: Project; enabled: boolean; onChange: (key: string) => void }) {
@@ -437,8 +437,8 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
       if (!data) throw Error('三维场景尚未就绪');
       return data;
     },
-    captureGallery: () => {
-      const shots = capture.current?.captureGallery(useStore.getState().project);
+    captureShot: kind => {
+      const shots = capture.current?.captureShot(useStore.getState().project, kind);
       if (!shots) throw Error('三维场景尚未就绪');
       return shots;
     },

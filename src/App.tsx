@@ -1,3 +1,4 @@
+import ImageExport from './ImageExport';
 import ToolMenu from './ToolMenu';
 import EditorToolbar from './EditorToolbar';
 import EquipmentLibrary from './EquipmentLibrary';
@@ -22,7 +23,7 @@ import ConceptPlannerDialog from './ConceptPlannerDialog';
 import { ComboPreset, comboPresets, placeCombo } from './combos';
 import { analyzeShop } from './shopAnalytics';
 import { checkSpace } from './spaceChecks';
-import { Maximize2, Minimize2, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download, AlertTriangle, CheckCircle2, Zap } from 'lucide-react';
+import { Maximize2, Minimize2, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useStore } from './store';
 import { catalog, Item } from './model';
 import ProjectLibrary from './ProjectManager';
@@ -56,21 +57,8 @@ export default function App() {
   const V = (nextView: '2d' | 'split' | '3d') => { s.cancelInteraction(); prefs.set({ view: nextView, focusMode: false }); };
   const setLibraryOpen = (value: boolean | ((v: boolean) => boolean)) => prefs.set({ focusMode: false, libraryOpen: typeof value === 'function' ? value(libraryOpen) : value });
   const setPropsOpen = (value: boolean | ((v: boolean) => boolean)) => prefs.set({ focusMode: false, propsOpen: typeof value === 'function' ? value(propsOpen) : value });
+  const wizardTrigger = useRef<HTMLButtonElement>(null);
   const multi = s.selectedIds;
-
-  const activeStage: 'shell' | 'layout' | 'showcase' = view === '3d' ? 'showcase' : s.mode === 'site' ? 'shell' : 'layout';
-  const enterStage = (stage: 'shell' | 'layout' | 'showcase') => {
-    s.cancelInteraction();
-    if (stage === 'shell') {
-      s.setMode('site');
-      prefs.set({ view: view === '3d' ? '2d' : view, propsOpen: true, focusMode: false });
-    } else if (stage === 'layout') {
-      s.setMode('layout');
-      prefs.set({ view: view === '3d' ? 'split' : view, libraryOpen: true, focusMode: false });
-    } else {
-      prefs.set({ view: '3d', focusMode: false });
-    }
-  };
 
   useEditorKeyboard();
   const [grid, G] = useState(true), [snap, S] = useState(true), [notice, notify] = useState('');
@@ -93,7 +81,7 @@ export default function App() {
   const png = () => plan.current?.exportPNG();
 
   const [takingGallery, setTakingGallery] = useState(false);
-  const capture = async () => {
+  async function withExportViews<T>(take: (plan: PlanHandle, scene: SceneHandle) => Promise<T>) {
     const current = useWorkspace.getState(), previous = { view: current.view, focusMode: current.focusMode, focusView: current.focusView };
     try {
       setTakingGallery(true);
@@ -103,11 +91,13 @@ export default function App() {
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 140))));
       if (!plan.current || !scene.current?.galleryReady()) throw Error('视图尚未就绪，请稍后重试');
-      const gallery = scene.current.captureGallery();
-      const image2D = await plan.current.capturePNG();
-      return { plan: image2D, scene: gallery.birdseye, gallery };
+      return await take(plan.current, scene.current);
     } finally { setTakingGallery(false); prefs.set(previous); }
-  };
+  }
+  const capture = () => withExportViews(async (flat, scene) => {
+    const gallery = { birdseye: scene.captureShot('birdseye'), interior: scene.captureShot('interior'), storefront: scene.captureShot('storefront') };
+    return { plan: await flat.capturePNG(), scene: gallery.birdseye, gallery };
+  });
 
   const addFrom = useCallback((c: CatalogItem, point?: { x: number; y: number }) => {
     const state = useStore.getState(), proj = state.project, item = proj.items.find(i => i.id === state.selected), p = useWorkspace.getState(), planning = usePlanning.getState(), M = state.selectMany;
@@ -166,13 +156,13 @@ export default function App() {
         <Store />
         <h1>铺位规划</h1>
       </div>
-      <ShopWizardDialog notify={notify} />
+      <ShopWizardDialog trigger={wizardTrigger} notify={notify} />
       <ProjectLibrary />
       <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
-      <div className="stage-stepper" role="group" aria-label="开店规划步骤" inert={!sessionReady || sessionBusy}>
-        <button type="button" aria-pressed={activeStage === 'shell'} onClick={() => enterStage('shell')}><span>1</span>铺位</button>
-        <button type="button" aria-pressed={activeStage === 'layout'} onClick={() => enterStage('layout')}><span>2</span>布局</button>
-        <button type="button" aria-pressed={activeStage === 'showcase'} onClick={() => enterStage('showcase')}><span>3</span>效果</button>
+      <div className="tabs" aria-label="画布视图">
+        {(['2d', 'split', '3d'] as const).map(v => (
+          <button key={v} aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => V(v)}>{v === '2d' ? '2D 平面' : v === '3d' ? '3D 效果图' : '2D + 3D 分屏'}</button>
+        ))}
       </div>
       <div className="actions" inert={!sessionReady || sessionBusy}>
         <ConceptPlannerDialog notify={notify} openSignal={conceptSignal} />
@@ -180,7 +170,24 @@ export default function App() {
         <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
-        <ToolMenu label="导出与汇报" dismissOnAction>
+        <ImageExport project={project} capture={() => withExportViews(async (flat, scene) => ({
+          plan: await flat.capturePNG(), bird: scene.captureShot('birdseye'), inside: scene.captureShot('interior')
+        }))} hasCurrent={view !== '2d'}
+          current={() => { if (!scene.current) throw Error('三维视图尚未就绪'); return scene.current.capturePNG(); }}
+          flat={async () => {
+            const previous = useWorkspace.getState();
+            try {
+              if (view === '3d') {
+                prefs.set({ view: '2d', focusMode: false });
+                await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+              }
+              if (!plan.current) throw Error('平面图尚未就绪');
+              return await plan.current.capturePNG();
+            } finally {
+              if (view === '3d') prefs.set({ view: previous.view, focusMode: previous.focusMode, focusView: previous.focusView });
+            }
+          }} />
+        <ToolMenu label="项目文件" dismissOnAction>
           <div className="menu-action-list">
             <ProjectFiles notify={notify} />
             <button className="primary" disabled={view === '3d'} onClick={png}><Download />导出 2D 平面图 PNG</button>
@@ -204,11 +211,6 @@ export default function App() {
             </div>
           )}
           <div className="editor-heading-right">
-            <div className="tabs" aria-label="画布视图">
-              {(['2d', 'split', '3d'] as const).map(v => (
-                <button key={v} aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => V(v)}>{v === '2d' ? '2D 平面' : v === '3d' ? '3D 效果图' : '2D + 3D 分屏'}</button>
-              ))}
-            </div>
             <button className="site-settings-button" onClick={() => { s.setMode('site'); setPropsOpen(true); }}>铺位与装修风格</button>
             <button className="focus-toggle" title="专注画布 · F；Esc 退出" aria-pressed={focusMode} onClick={toggleFocus}>{focusMode ? <Minimize2 /> : <Maximize2 />}{focusMode ? '退出专注' : '专注画布'}</button>
             <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !s.selectedIds.length) s.setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
@@ -226,6 +228,8 @@ export default function App() {
           view={view}
           first={
             <div className="plan">
+              {sessionReady && !project.items.length && !project.outline && !project.underlay && !project.survey && s.tool === 'select' &&
+                <button className="blank-start" onClick={() => wizardTrigger.current?.click()}>输入铺位尺寸，生成第一稿</button>}
               <PlanEditor active={view !== '3d'} ref={plan} grid={grid} snap={snap} notify={notify} onDropItem={dropItem} onDropCombo={dropCombo} onOpenConcept={() => setConceptSignal(n => n + 1)} />
             </div>
           }
@@ -250,12 +254,6 @@ export default function App() {
             {insights.kitchenRatioPct !== null && insights.diningRatioPct !== null && <>
               <span>·</span>
               <span>厨 {insights.kitchenRatioPct}% / 厅 {insights.diningRatioPct}%</span>
-            </>}
-            {insights.estimatedPowerKw > 0 && <>
-              <span>·</span>
-              <span className={insights.estimatedPowerKw >= 10 ? 'kpi-power-high' : ''} title={insights.powerAdvice}>
-                <Zap />{insights.estimatedPowerKw} kW{insights.estimatedPowerKw >= 10 ? ' · 380V' : ''}
-              </span>
             </>}
             <button
               type="button"

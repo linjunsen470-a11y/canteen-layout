@@ -12,7 +12,7 @@ import { importImage } from './imageAssets';
 import { seatSummary } from './layoutGroups';
 import PlanMiniPreview from './PlanMiniPreview';
 
-export default function ShopWizardDialog({ notify }: { notify: (message: string) => void }) {
+export default function ShopWizardDialog({ notify, trigger }: { trigger: React.RefObject<HTMLButtonElement | null>; notify: (message: string) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [mode, setMode] = useState<'sketch' | 'survey' | 'outer' | 'image' | 'templates'>('sketch');
   const [sketchNumber, setSketchNumber] = useState(0);
@@ -86,13 +86,13 @@ export default function ShopWizardDialog({ notify }: { notify: (message: string)
   }
 
   return <>
-    <button className="wizard-trigger" disabled={!session.ready || session.busy}
+    <button ref={trigger} className="wizard-trigger" disabled={!session.ready || session.busy}
       onClick={() => { setMode('sketch'); setError(''); dialog.current?.showModal(); }}><Ruler />新建铺位</button>
     <dialog ref={dialog} className="shop-wizard-dialog" aria-labelledby="new-shop-heading" onCancel={e => { if (saving) e.preventDefault(); }}>
       <header className="wizard-header"><h2 id="new-shop-heading">新建铺位</h2>
         <button disabled={saving} onClick={() => dialog.current?.close()}>关闭</button></header>
       <div className="wizard-tabs" role="group" aria-label="建铺方式">
-        <button disabled={saving} aria-pressed={mode === 'sketch'} onClick={() => { setMode('sketch'); setError(''); }}>格网点角</button>
+        <button disabled={saving} aria-pressed={mode === 'sketch'} onClick={() => { setMode('sketch'); setError(''); }}>输入尺寸 / 画异形</button>
         <button disabled={saving} aria-pressed={mode === 'survey'} onClick={() => { setMode('survey'); setError(''); }}><Ruler />按内墙净尺寸</button>
         <button disabled={saving} aria-pressed={mode === 'outer'} onClick={() => { setMode('outer'); setError(''); }}>按外轮廓尺寸</button>
         <button disabled={saving} aria-pressed={fromImage} onClick={() => { setMode('image'); setError(''); }}><ImageUp />从户型图描绘</button>
