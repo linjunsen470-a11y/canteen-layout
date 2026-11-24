@@ -24,6 +24,8 @@ export function createBuildingModel(item: Spec, openings: Item[] = [], profile?:
         color: wallColor,
         roughness: wallTex ? wallTex.roughness : 0.86,
         map: wallTex ? wallTex.map : null,
+        bumpMap: wallTex?.bumpMap ?? null,
+        bumpScale: wallTex?.bumpScale ?? 0,
     });
     const baseboardMat = new T.MeshStandardMaterial({
         color: isClay ? '#d7d5ce' : '#534538',

@@ -20,7 +20,7 @@ import SiteFloor from './SiteFloor';
 import SiteOverlay3D from './SiteOverlay3D';
 import { usePlanning, insidePlanning } from './planning';
 import { isAnnotation } from './annotations';
-import SceneCapture from './SceneCapture';
+import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeInteriorShot, computeStorefrontShot } from './SceneCapture';
 import InstancedFurniture from './InstancedFurniture';
 import { dragOpening, isAttachedOpening } from './structure';
 
@@ -186,34 +186,31 @@ function InteriorLights({ project, preset }: { project: Project; preset: Lightin
   </>;
 }
 
-const eyeViewNames = ['进店视角', '客区漫游视角', '吧台/明档视角'];
+const eyeViewNames = ['进店视角', '客区漫游视角', '吧台/明档视角', '临街门头外观'];
 function computeEyeView(project: Project, index: number) {
   const w = project.width / 1000;
   const h = project.height / 1000;
   const eyeY = 1.62;
-  // Find entrance door if present for realistic walk-in angle
-  const door = project.items.find(i => i.kind === 'door' && !i.hidden);
-  const counter = project.items.find(i => (i.kind === 'counter' || i.model === 'serving-window') && !i.hidden);
-  const idx = ((index % 3) + 3) % 3;
+  const idx = ((index % 4) + 4) % 4;
+  if (idx === 3) {
+    return computeStorefrontShot(project);
+  }
   if (idx === 0) {
-    // Walk-in entrance perspective looking across the shop interior
-    const startX = door ? Math.min(w - 0.8, Math.max(0.8, (door.x + door.w / 2) / 1000)) : w * 0.25;
-    const startZ = door && (door.y + door.d / 2) / 1000 > h * 0.6 ? h - 1.15 : Math.max(1.15, h * 0.84);
-    const targetX = counter ? (counter.x + counter.w / 2) / 1000 : w * 0.55;
-    const targetZ = counter ? (counter.y + counter.d / 2) / 1000 : h * 0.35;
-    return { pos: new T.Vector3(startX, eyeY, startZ), target: new T.Vector3(targetX, 1.15, targetZ) };
+    return computeInteriorShot(project);
   }
   if (idx === 1) {
     // Diagonal dining hall showcase view from front-left corner
     return {
       pos: new T.Vector3(Math.max(0.9, w * 0.14), eyeY + 0.12, Math.max(1.0, h * 0.82)),
       target: new T.Vector3(w * 0.62, 1.1, h * 0.32),
+      fov: 50,
     };
   }
   // Right-side angle looking back toward seating & storefront windows
   return {
     pos: new T.Vector3(Math.min(w - 0.9, w * 0.82), eyeY + 0.08, Math.max(1.0, h * 0.72)),
     target: new T.Vector3(w * 0.3, 1.15, h * 0.42),
+    fov: 50,
   };
 }
 
@@ -240,6 +237,39 @@ function CameraRig({
   const framed = useRef(''), lastCenter = useRef<T.Vector3 | null>(null);
   const extent = Math.max(0.1, frame ? Math.max(...frame.max.map((v, n) => v - frame.min[n])) : focus ? Math.max(focus.w, focus.d, focus.h) / 1000 : Math.max(width, height) / 1000);
   const maxDistance = Math.max(width, height) / 1000 * 12, minDistance = Math.max(0.05, extent * 0.01);
+
+  // Allow smooth WASD walking in eye-level walkthrough mode when the 3D scene has focus.
+  useEffect(() => {
+    if (!active || pose !== 'eye-level') return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const shell = gl.domElement.closest('.scene-shell');
+      if (!shell || !shell.contains(document.activeElement)) return;
+      const k = e.key.toLowerCase();
+      if (!['w', 'a', 's', 'd'].includes(k)) return;
+      const c = controls.current;
+      if (!c) return;
+      const forward = c.target.clone().sub(camera.position);
+      forward.y = 0;
+      if (forward.lengthSq() < 1e-4) return;
+      forward.normalize();
+      const right = new T.Vector3(-forward.z, 0, forward.x);
+      const step = 0.45;
+      const delta = new T.Vector3();
+      if (k === 'w') delta.addScaledVector(forward, step);
+      if (k === 's') delta.addScaledVector(forward, -step);
+      if (k === 'd') delta.addScaledVector(right, step);
+      if (k === 'a') delta.addScaledVector(right, -step);
+      camera.position.add(delta);
+      c.target.add(delta);
+      c.update();
+      invalidate();
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, pose, camera, gl, invalidate]);
 
   useEffect(() => {
     navigation.current = {
@@ -375,9 +405,13 @@ const presetLabels: Record<LightingPreset, string> = {
   'clay': '白模',
 };
 
-export type SceneHandle = { capturePNG: () => string };
+export type SceneHandle = {
+  galleryReady: () => boolean;
+  capturePNG: () => string;
+  captureGallery: () => SceneGalleryShots;
+};
 
-export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }>(function Scene3D({ active = true, snap = true }, ref) {
+export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; takingGallery?: boolean }>(function Scene3D({ active = true, snap = true, takingGallery = false }, ref) {
   const live = useStore(s => active ? s.project : null), lastProject = useRef(useStore.getState().project);
   if (live) lastProject.current = live;
   const project = lastProject.current;
@@ -397,13 +431,19 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
   const [eyeIndex, setEyeIndex] = useState(0);
   const [dragging, setDragging] = useState(false), [captureError, setCaptureError] = useState('');
   const pan = useRef(false), [panMode, setPanMode] = useState<ScenePanMode>('off');
-  const capture = useRef<(() => string) | null>(null);
+  const capture = useRef<SceneCaptureAPI | null>(null);
 
   useImperativeHandle(ref, () => ({
+    galleryReady: () => takingGallery && !!capture.current?.galleryReady(),
     capturePNG: () => {
-      const data = capture.current?.();
+      const data = capture.current?.captureCurrent();
       if (!data) throw Error('三维场景尚未就绪');
       return data;
+    },
+    captureGallery: () => {
+      const shots = capture.current?.captureGallery(useStore.getState().project);
+      if (!shots) throw Error('三维场景尚未就绪');
+      return shots;
     },
   }));
 
@@ -414,7 +454,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
 
   const screenshot = () => {
     try {
-      const data = capture.current?.();
+      const data = capture.current?.captureCurrent();
       if (!data) throw Error();
       const link = document.createElement('a');
       link.href = data;
@@ -500,7 +540,8 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
   }), [moveMode, snap, prefs.snapSize, ids]);
 
   const item = project.items.find(i => i.id === selected && i.kind !== 'zone' && !isAnnotation(i) && isVisible(i, project));
-  const focus = closeup ? (item?.wallId ? project.items.find(w => w.id === item.wallId) : item) : undefined;
+  const inspectionFocus = closeup ? (item?.wallId ? project.items.find(w => w.id === item.wallId) : item) : undefined;
+  const focus = takingGallery ? undefined : inspectionFocus;
   const profiles = useMemo(() => wallProfiles(project), [project.items]);
   const renderOptions: BuildingRenderOptions = useMemo(() => ({
     wallMaterial: style.wallMaterial,
@@ -510,7 +551,8 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
 
   const groups = useMemo(() => {
     const visible = focus ? [focus, ...project.items.filter(i => i.wallId === focus.id)] : project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i));
-    const shown = visible.filter(i => isVisible(i, project) && !(renderOptions.cutaway && !focus && modelOf(i) === 'shop-sign'));
+    const cutawayHidden = new Set(['shop-sign', 'menu-board', 'tv-screen', 'wall-art']);
+    const shown = visible.filter(i => isVisible(i, project) && !(renderOptions.cutaway && !focus && cutawayHidden.has(modelOf(i))));
     const groups = new Map<string, Item[]>();
     for (const original of shown) {
       const m = modelOf(original);
@@ -536,8 +578,9 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
     <div className="scene-toolbar">
       <div className="scene-segment" role="group" aria-label="三维视角">
         <button aria-pressed={prefs.camera === 'oblique' && !focus && !frame} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'oblique' }); setReset(n => n + 1); }}>鸟瞰</button>
-        <button aria-pressed={prefs.camera === 'eye-level' && !focus && !frame} title="1.6m 真实进店人视点，再次点击切换机位" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); if (prefs.camera === 'eye-level') setEyeIndex(i => (i + 1) % 3); prefs.set({ camera: 'eye-level' }); setReset(n => n + 1); }}>
-          {prefs.camera === 'eye-level' ? `进店 · ${eyeViewNames[eyeIndex]}` : '人视点进店'}
+        <button aria-pressed={prefs.camera === 'eye-level' && eyeIndex === 3 && !focus && !frame} title="站在街面/商场通道直视门头招牌、落地橱窗与店门" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setEyeIndex(3); prefs.set({ camera: 'eye-level' }); setReset(n => n + 1); }}>门头外观</button>
+        <button aria-pressed={prefs.camera === 'eye-level' && eyeIndex !== 3 && !focus && !frame} title="1.6m 真实进店人视点，再次点击切换室内机位，可用 WASD 漫步" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setEyeIndex(i => (prefs.camera === 'eye-level' && i !== 3 ? (i + 1) % 3 : 0)); prefs.set({ camera: 'eye-level' }); setReset(n => n + 1); }}>
+          {prefs.camera === 'eye-level' && eyeIndex !== 3 ? `进店 · ${eyeViewNames[eyeIndex]}` : '人视点进店'}
         </button>
         <button aria-pressed={prefs.camera === 'top' && !focus && !frame} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'top' }); setReset(n => n + 1); }}>俯视</button>
       </div>
@@ -579,7 +622,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
           <planeGeometry args={[1000, 1000]} />
           <meshStandardMaterial color={cfg.ground} roughness={0.94} />
         </mesh>
-        {!focus && <><SiteFloor project={project} grid={grid} forceCeiling={prefs.camera === 'eye-level'} /><SiteOverlay3D /></>}
+        {!focus && <><SiteFloor project={project} grid={grid} forceCeiling={prefs.camera === 'eye-level' && eyeIndex !== 3} /><SiteOverlay3D /></>}
         {!focus && project.items.filter(i => i.kind === 'zone' && ids.includes(i.id) && isVisible(i, project)).map(i => <ZoneHighlight key={i.id} item={i} />)}
         {[...groups].map(([spec, items]) => items.length >= 3
           ? <InstancedFurniture key={spec} spec={spec} items={items} handlers={handlers} faded={faded(items[0])} renderOptions={renderOptions} />
@@ -587,12 +630,12 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
         )}
         {[...groups.values()].filter(items => items.length >= 3).flat().filter(i => ids.includes(i.id)).map(i => <group key={i.id} position={[(i.x + i.w / 2) / 1000, (i.sill ?? 0) / 1000, (i.y + i.d / 2) / 1000]} rotation={[0, -i.rotation * Math.PI / 180, 0]}><SelectionBox item={i} /></group>)}
         {focus && <ContactShadows key={[focus.id, focus.x, focus.y, focus.w, focus.d, focus.h, focus.rotation].join('-')} position={[(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000]} scale={Math.max(focus.w, focus.d) / 1000 * 2.5} far={focus.h / 1000 * 1.5} resolution={256} blur={2.5} opacity={0.4} frames={1} color="#3e453d" />}
-        <CameraRig pan={pan} onPanChange={setPanMode} navigation={navigation} frame={frame} active={active} focus={focus} reset={reset} dragging={dragging} picking={picking} pose={prefs.camera} eyeIndex={eyeIndex} />
+        <CameraRig pan={pan} onPanChange={setPanMode} navigation={navigation} frame={frame} active={active} focus={inspectionFocus} reset={reset} dragging={dragging} picking={picking} pose={prefs.camera} eyeIndex={eyeIndex} />
       </Canvas>
       {picking && <SceneRegionPicker navigation={navigation} onCancel={() => setPicking(false)} onPick={points => showFrame(framePoints(points, 0, '框选区域'))} />}
       <div className={`scene-caption ${style.lightingPreset === 'evening' ? 'is-dark' : ''}`}>
         <b>{panMode !== 'off' ? '平移视图 · 松开空格恢复' : focus ? focus.name : frame?.label ?? `${presetLabels[style.lightingPreset]} · ${prefs.camera === 'eye-level' ? eyeViewNames[eyeIndex] : prefs.camera === 'top' ? '立体俯视' : '鸟瞰效果图'}`}</b>
-        <span>{focus ? `${focus.w} × ${focus.d} × ${focus.h} mm` : moveMode ? '拖物体移动 · 空格＋左键平移 · Alt 关闭吸附' : '左键环绕 · 滚轮缩放 · 右键／空格平移'}</span>
+        <span>{focus ? `${focus.w} × ${focus.d} × ${focus.h} mm` : prefs.camera === 'eye-level' ? '左键环视 · WASD 室内漫步 · 滚轮缩放' : moveMode ? '拖物体移动 · 空格＋左键平移 · Alt 关闭吸附' : '左键环绕 · 滚轮缩放 · 右键／空格平移'}</span>
       </div>
     </div>
   </div>;

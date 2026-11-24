@@ -104,7 +104,7 @@ export function fabricTexture() {
   }, 3, 3);
 }
 
-export function floorMaterialTexture(material: FloorMaterial, showGrid: boolean, gridSize: number): { map: T.CanvasTexture; roughness: number; tint: string } {
+export function floorMaterialTexture(material: FloorMaterial, showGrid: boolean, gridSize: number): { map: T.CanvasTexture; bumpMap?: T.CanvasTexture; bumpScale?: number; roughness: number; tint: string } {
   const key = `floor:${material}:${showGrid}:${gridSize}`;
   if (material === 'oak-wood') {
     const map = cached(key, 512, 512, (ctx, w, h) => {
@@ -244,7 +244,41 @@ function drawOverlayGrid(ctx: CanvasRenderingContext2D, w: number, h: number, gr
   }
 }
 
-export function wallMaterialTexture(material: WallMaterial): { map: T.CanvasTexture; roughness: number; tint: string } {
+export function floorBumpTexture(material: FloorMaterial): { bumpMap: T.CanvasTexture; bumpScale: number } | null {
+  if (material === 'oak-wood') {
+    const bumpMap = cached('floor-bump:oak', 256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#c8c8c8';
+      ctx.fillRect(0, 0, w, h);
+      const rh = h / 8;
+      ctx.strokeStyle = '#404040';
+      ctx.lineWidth = 2;
+      for (let r = 0; r <= 8; r++) {
+        ctx.beginPath(); ctx.moveTo(0, r * rh); ctx.lineTo(w, r * rh); ctx.stroke();
+      }
+    }, 0.5, 0.5);
+    return { bumpMap, bumpScale: 0.012 };
+  }
+  if (material === 'warm-tile' || material === 'terrazzo') {
+    const cells = material === 'warm-tile' ? 3 : 2;
+    const bumpMap = cached(`floor-bump:${material}`, 256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#d4d4d4';
+      ctx.fillRect(0, 0, w, h);
+      const step = w / cells;
+      ctx.strokeStyle = '#505050';
+      ctx.lineWidth = 3;
+      for (let n = 0; n <= cells; n++) {
+        ctx.beginPath();
+        ctx.moveTo(n * step, 0); ctx.lineTo(n * step, h);
+        ctx.moveTo(0, n * step); ctx.lineTo(w, n * step);
+        ctx.stroke();
+      }
+    }, 0.5, 0.5);
+    return { bumpMap, bumpScale: material === 'warm-tile' ? 0.014 : 0.008 };
+  }
+  return null;
+}
+
+export function wallMaterialTexture(material: WallMaterial): { map: T.CanvasTexture; bumpMap?: T.CanvasTexture; bumpScale?: number; roughness: number; tint: string } {
   const key = `wall:${material}`;
   if (material === 'wood-panel') {
     const map = cached(key, 512, 512, (ctx, w, h) => {
@@ -267,7 +301,14 @@ export function wallMaterialTexture(material: WallMaterial): { map: T.CanvasText
         }
       }
     }, 1, 1);
-    return { map, roughness: 0.58, tint: '#ffffff' };
+    const bumpMap = cached('wall-bump:wood-panel', 256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#dcdcdc';
+      ctx.fillRect(0, 0, w, h);
+      const sw = w / 16;
+      ctx.fillStyle = '#303030';
+      for (let i = 0; i < 16; i++) ctx.fillRect((i + 1) * sw - 3, 0, 3, h);
+    }, 1, 1);
+    return { map, bumpMap, bumpScale: 0.02, roughness: 0.56, tint: '#ffffff' };
   }
   if (material === 'brick-white') {
     const map = cached(key, 512, 512, (ctx, w, h) => {
@@ -289,7 +330,17 @@ export function wallMaterialTexture(material: WallMaterial): { map: T.CanvasText
         }
       }
     }, 1, 1);
-    return { map, roughness: 0.78, tint: '#ffffff' };
+    const bumpMap = cached('wall-bump:brick-white', 256, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#484848';
+      ctx.fillRect(0, 0, w, h);
+      const rh = h / 12, cw = w / 4;
+      ctx.fillStyle = '#dfdfdf';
+      for (let row = 0; row < 12; row++) {
+        const shift = (row % 2) * (cw / 2);
+        for (let col = -1; col <= 4; col++) ctx.fillRect(col * cw + shift + 2, row * rh + 2, cw - 4, rh - 4);
+      }
+    }, 1, 1);
+    return { map, bumpMap, bumpScale: 0.018, roughness: 0.78, tint: '#ffffff' };
   }
   if (material === 'concrete') {
     const map = cached(key, 512, 512, (ctx, w, h) => {
@@ -371,24 +422,30 @@ export function menuBoardTexture() {
   });
 }
 
-export function shopSignTexture(title = 'BISTRO · 品牌餐饮空间') {
+export function shopSignTexture(title = 'BISTRO · 品牌餐饮空间', bgColor = '#223e34') {
   return createCanvasTexture(512, 160, (ctx, w, h) => {
+    const base = new T.Color(bgColor || '#223e34');
+    const darker = base.clone().multiplyScalar(0.76);
+    const lighter = base.clone().lerp(new T.Color('#ffffff'), 0.12);
     const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, '#1e382f');
-    grad.addColorStop(1, '#2a4a3f');
+    grad.addColorStop(0, `#${darker.getHexString()}`);
+    grad.addColorStop(1, `#${lighter.getHexString()}`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = '#d7ad6a';
     ctx.lineWidth = 4;
     ctx.strokeRect(10, 10, w - 20, h - 20);
-    ctx.fillStyle = '#f8ecd4';
+    ctx.strokeStyle = 'rgba(215, 173, 106, 0.32)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(18, 18, w - 36, h - 36);
+    ctx.fillStyle = '#fbf2e0';
     ctx.font = 'bold 42px "Microsoft YaHei", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(title.slice(0, 12), w / 2, h * 0.44);
-    ctx.fillStyle = '#d7ad6a';
-    ctx.font = '600 16px sans-serif';
-    ctx.fillText('FRESH KITCHEN · CAFE & DINING', w / 2, h * 0.76);
+    ctx.fillText(title.slice(0, 14), w / 2, h * 0.44);
+    ctx.fillStyle = '#e0b977';
+    ctx.font = '600 15px sans-serif';
+    ctx.fillText('CRAFTED DINING · SIGNATURE SPACE', w / 2, h * 0.76);
   });
 }
 

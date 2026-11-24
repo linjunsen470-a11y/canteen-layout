@@ -21,6 +21,13 @@ export type ReadinessItem = {
   detail: string;
 };
 
+export type CategoryBudget = {
+  category: string;
+  count: number;
+  min: number;
+  max: number;
+};
+
 export type ShopInsights = {
   areaSqm: number;
   seats: number;
@@ -37,11 +44,36 @@ export type ShopInsights = {
   lightingCount: number;
   decorCount: number;
   kitchenEquipCount: number;
+  estimatedPowerKw: number;
+  powerAdvice: string;
+  categoryBudgets: CategoryBudget[];
   bom: BomRow[];
   budgetMin: number;
   budgetMax: number;
   readiness: ReadinessItem[];
+  actionTips: string[];
 };
+
+function estimatePowerKw(item: Item): number {
+  const m = modelOf(item);
+  switch (m) {
+    case 'induction': case 'fryer': case 'griddle': return 5.0;
+    case 'noodle-cooker': case 'oven': case 'steamer': return 6.0;
+    case 'stove': case 'wok': return 2.5; // gas or hybrid blower + ignition
+    case 'dishwasher': return 6.5;
+    case 'coffee-machine': return 3.6;
+    case 'water-boiler': return 3.0;
+    case 'rice-cooker': case 'microwave': case 'sterilizer': return 2.0;
+    case 'buffet': return 2.4;
+    case 'hood': return 1.8;
+    case 'upright-fridge': case 'glass-fridge': case 'undercounter-fridge': case 'chest-freezer': case 'salad-counter': return 0.55;
+    case 'ice-maker': case 'beverage': return 0.7;
+    case 'hotpot-table': return 3.6;
+    case 'pendant-lamp': case 'wall-sconce': case 'linear-light': case 'track-light': case 'chandelier': case 'kitchen-panel-light': return 0.04;
+    case 'shop-sign': case 'menu-board': case 'tv-screen': return 0.18;
+    default: return 0;
+  }
+}
 
 function estimateUnitPrice(item: Item): [number, number] {
   const m = modelOf(item);
@@ -139,8 +171,10 @@ export function analyzeShop(project: Project): ShopInsights {
   }
 
   const map = new Map<string, BomRow>();
-  let budgetMin = 0, budgetMax = 0;
+  const catMap = new Map<string, CategoryBudget>();
+  let budgetMin = 0, budgetMax = 0, rawPowerKw = 0;
   for (const item of visible) {
+    rawPowerKw += estimatePowerKw(item);
     if (item.kind === 'wall' || item.kind === 'column' || item.kind === 'utility') continue;
     const [uMin, uMax] = estimateUnitPrice(item);
     const category = bomCategory(item);
@@ -149,12 +183,24 @@ export function analyzeShop(project: Project): ShopInsights {
     const existing = map.get(key);
     if (existing) existing.count += 1;
     else map.set(key, { category, name: item.name, spec, count: 1, unitPriceMin: uMin, unitPriceMax: uMax });
+    const catRow = catMap.get(category) ?? { category, count: 0, min: 0, max: 0 };
+    catRow.count += 1;
+    catRow.min += uMin;
+    catRow.max += uMax;
+    catMap.set(category, catRow);
     budgetMin += uMin;
     budgetMax += uMax;
   }
 
   const order = ['餐桌椅与卡座', '后厨与洗消设备', '吧台与服务收纳', '商业照明灯具', '软装绿植与门头', '墙窗隔断构件', '现场设施'];
   const bom = [...map.values()].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category) || b.count - a.count);
+  const categoryBudgets = [...catMap.values()].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+  const estimatedPowerKw = Math.round((rawPowerKw + areaSqm * 0.04) * 10) / 10; // include HVAC/misc baseline
+  const powerAdvice = estimatedPowerKw < 10
+    ? `预估总负荷约 ${estimatedPowerKw} kW（含基础照明空调），常见 220V 商用电通常可满足。`
+    : estimatedPowerKw <= 25
+      ? `预估总负荷约 ${estimatedPowerKw} kW，签约前请向房东/商场确认是否具备 380V 三相电入户。`
+      : `预估总负荷约 ${estimatedPowerKw} kW（重餐饮配置），务必核实配电增容、独立排烟井与隔油池条件。`;
 
   const hasEntrance = visible.some(i => i.kind === 'door');
   const hasCashier = visible.some(i => ['cashier', 'tea-bar', 'buffet', 'podium'].includes(modelOf(i)));
@@ -174,6 +220,23 @@ export function analyzeShop(project: Project): ShopInsights {
     { label: '商业灯光与氛围软装', ok: lightingCount >= 2 && decorCount >= 1, detail: lightingCount >= 2 && decorCount >= 1 ? `已布置 ${lightingCount} 盏灯具、${decorCount} 件软装门头` : '添加吊灯、轨道灯、绿植与门头招牌可大幅提升 3D 效果图质感' },
   ];
 
+  const actionTips: string[] = [];
+  if (sqmPerSeat !== null && sqmPerSeat > 2.6 && seats > 0) {
+    actionTips.push(`当前客座较宽松（${sqmPerSeat.toFixed(1)} ㎡/座），若追求更高翻台坪效，可点击「换一种摆法」对比高坪效散台方案。`);
+  }
+  if (sqmPerSeat !== null && sqmPerSeat < 1.25) {
+    actionTips.push(`当前客座偏紧凑（${sqmPerSeat.toFixed(1)} ㎡/座），高峰期拉椅可能较局促，建议适当减少一组餐桌以留宽主通道。`);
+  }
+  if (hasCooking && !hasHood) {
+    actionTips.push('后厨已放置热厨灶具但尚未配排烟罩，建议先确认商场排烟井口位置后再落位灶具。');
+  }
+  if (!hasWash) {
+    actionTips.push('尚未放置洗消水槽，建议在靠给排水立管一侧补充三槽洗涤池或吧台水槽。');
+  }
+  if (actionTips.length === 0) {
+    actionTips.push('整体功能分区、客座舒适度与基础配套已较完整，可直接导出「合伙人方案书」用于选址讨论与施工复尺。');
+  }
+
   return {
     areaSqm,
     seats,
@@ -190,10 +253,14 @@ export function analyzeShop(project: Project): ShopInsights {
     lightingCount,
     decorCount,
     kitchenEquipCount,
+    estimatedPowerKw,
+    powerAdvice,
+    categoryBudgets,
     bom,
     budgetMin,
     budgetMax,
     readiness,
+    actionTips,
   };
 }
 

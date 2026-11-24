@@ -122,20 +122,29 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     }
     // === NEW DECOR & BRANDING ===
     case 'potted-plant': {
-      // Sculpted ceramic/terracotta planter + dark soil + multi-tier lush botanical foliage
-      mesh(new T.CylinderGeometry(.32,.23,.34,32),potMat,0,.17,0);
-      cylinder(0,.33,0,.30,.025,soilMat);
-      cylinder(0,.55,0,.04,.44,material('#5a4330',0,.85));
-      for(const [ang,tilt,y,r,mat] of [
-        [0,0.45,.66,.26,leafDark],[1.1,0.52,.62,.24,leafMid],[2.2,0.48,.70,.25,leafDark],
-        [3.3,0.46,.64,.23,leafMid],[4.5,0.50,.68,.26,leafDark],[5.4,0.44,.72,.22,leafLight],
-        [0.6,0.32,.84,.22,leafMid],[2.7,0.34,.86,.21,leafLight],[4.8,0.30,.82,.23,leafMid],
-      ] as [number,number,number,number,T.Material][]){
-        const leaf=mesh(new T.SphereGeometry(r,14,10),mat,Math.cos(ang)*.22,y,Math.sin(ang)*.22);
-        leaf.scale.set(1,.42,1.25);
-        leaf.rotation.set(tilt,ang,0);
-      }
-      mesh(new T.SphereGeometry(.17,14,10),leafLight,0,.94,0).scale.set(1,.62,1);
+      // Architectural ceramic planter with brass rim + multi-stem indoor olive / fiddle-leaf tree
+      const trunkMat = material('#594331', 0, .86);
+      mesh(new T.CylinderGeometry(.30, .22, .32, 28), potMat, 0, .16, 0);
+      const potRim = mesh(new T.TorusGeometry(.295, .016, 10, 28), brass, 0, .32, 0); potRim.rotation.x = Math.PI / 2;
+      cylinder(0, .31, 0, .28, .02, soilMat);
+      // Natural forked multi-stem trunks
+      const t1 = cylinder(-.04, .54, .02, .024, .46, trunkMat); t1.rotation.z = .12; t1.rotation.x = -.06;
+      const t2 = cylinder(.05, .52, -.02, .020, .42, trunkMat); t2.rotation.z = -.15; t2.rotation.x = .08;
+      const t3 = cylinder(0, .48, .05, .018, .34, trunkMat); t3.rotation.x = .18;
+      // Layered architectural angled leaf sprigs (crisp silhouette, no blobby spheres)
+      const fronds: [number, number, number, number, number, number, T.Material][] = [
+        [-.16, .66, .08, .22, .04, .14, leafDark], [.18, .64, -.06, .20, .04, .13, leafMid],
+        [.02, .62, .18, .19, .04, .12, leafDark], [-.06, .68, -.16, .21, .04, .13, leafMid],
+        [-.14, .78, -.06, .20, .04, .13, leafMid], [.15, .76, .10, .18, .04, .12, leafLight],
+        [.00, .82, -.12, .19, .04, .12, leafDark], [-.10, .86, .10, .17, .04, .11, leafLight],
+        [.10, .88, -.04, .16, .04, .11, leafMid], [.00, .94, .02, .15, .04, .11, leafLight],
+        [-.22, .72, -.02, .16, .035, .10, leafLight], [.22, .70, .02, .16, .035, .10, leafDark],
+      ];
+      fronds.forEach(([x, y, z, rx, ry, rz, mat], idx) => {
+        const leaf = mesh(new T.SphereGeometry(1, 10, 8), mat, x, y, z);
+        leaf.scale.set(rx, ry, rz);
+        leaf.rotation.set(((idx % 3) - 1) * 0.28, idx * 0.9, ((idx % 2) ? 1 : -1) * 0.24);
+      });
       break;
     }
     case 'planter-divider': {
@@ -177,7 +186,7 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     }
     case 'shop-sign': {
       // Mall storefront fascia signboard with brushed brass trim & glowing brand face
-      const signTex=isClay?null:shopSignTexture(item.name||'品牌餐饮');
+      const signTex=isClay?null:shopSignTexture(item.name||'品牌餐饮',item.color);
       if(signTex)root.userData.ownedTextures=[...(root.userData.ownedTextures??[]),signTex];
       const faceMat=new T.MeshStandardMaterial({
         color:'#ffffff',
@@ -231,21 +240,35 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     }
     // === NEW COMMERCIAL HOSPITALITY FURNITURE & COUNTERS ===
     case 'booth-table': {
-      // Sturdy pedestal restaurant booth table with chamfered wood top
+      // Sturdy pedestal restaurant booth table with chamfered wood top & subtle dining styling
       box(0,.965,0,1,.07,1,wood,true);
       for(const x of [-.26,.26]){
         cylinder(x,.47,0,.055,.88,dark);
         box(x,.03,0,.28,.06,.68,dark,true);
       }
       box(0,.90,0,.72,.04,.36,dark);
+      if(!isClay){
+        const ceramic=material('#f2eee6',0,.26);
+        // Subtle centerpiece condiment tray & tiny warm table lamp
+        box(0,1.01,0,.14,.02,.20,dark,true);
+        cylinder(0,1.055,-.03,.032,.07,brass);
+        cylinder(0,1.10,-.03,.055,.04,warmBulb);
+        for(const x of [-.26,.26])for(const z of [-.28,.28])cylinder(x,1.008,z,.095,.016,ceramic);
+      }
       break;
     }
     case 'marble-round-table': {
-      // Café / bistro marble round top + brushed brass pedestal & base
+      // Café / bistro marble round top + brushed brass pedestal & coffee cup / bud vase styling
       cylinder(0,.968,0,.5,.058,marble);
       const rim=mesh(new T.TorusGeometry(.498,.012,12,48),brass,0,.968,0);rim.rotation.x=Math.PI/2;
       cylinder(0,.47,0,.048,.90,brass);
       cylinder(0,.028,0,.28,.056,dark);
+      if(!isClay){
+        const ceramic=material('#f5f1e8',0,.22);
+        cylinder(0,1.045,0,.04,.095,brass);
+        mesh(new T.SphereGeometry(.055,10,8),leafMid,0,1.12,0).scale.set(1.2,.8,1.2);
+        for(const x of [-.24,.24]){cylinder(x,1.005,.04,.075,.012,ceramic);cylinder(x,1.032,.04,.042,.048,ceramic);}
+      }
       break;
     }
     case 'dining-armchair': {
@@ -285,6 +308,7 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
       box(0,.90,.10,1,.06,.78,steel,true);
       box(0,.97,-.34,1,.06,.32,marble,true);
       box(0,.92,-.47,.94,.02,.04,warmBulb);
+      box(0,.09,-.49,.94,.016,.02,warmBulb);
       break;
     }
     case 'sushi-display': {
@@ -319,9 +343,23 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     }
     case 'rect-table':
     case 'round-table': {
+      const ceramic=material('#f2eee6',0,.26);
       if(type==='round-table'){
         cylinder(0,.972,0,.5,.056,wood);cylinder(0,.47,0,.055,.91,dark);cylinder(0,.028,0,.30,.056,dark);
-      }else{box(0,.97,0,1,.06,1,wood,true);feet(.92,.41,.045,dark);box(0,.87,-.4,.86,.10,.035,dark);box(0,.87,.4,.86,.10,.035,dark);box(-.41,.87,0,.035,.10,.8,dark);box(.41,.87,0,.035,.10,.8,dark)}
+        if(!isClay){
+          // Lazy Susan turntable & warm centerpiece
+          cylinder(0,1.012,0,.27,.022,marble);
+          cylinder(0,1.06,0,.04,.075,brass);
+          mesh(new T.SphereGeometry(.055,10,8),leafMid,0,1.115,0).scale.set(1.2,.8,1.2);
+        }
+      }else{
+        box(0,.97,0,1,.06,1,wood,true);feet(.92,.41,.045,dark);box(0,.87,-.4,.86,.10,.035,dark);box(0,.87,.4,.86,.10,.035,dark);box(-.41,.87,0,.035,.10,.8,dark);box(.41,.87,0,.035,.10,.8,dark);
+        if(!isClay){
+          box(0,1.01,0,.12,.02,.18,dark,true);
+          cylinder(0,1.055,0,.032,.075,brass);
+          for(const x of [-.26,.26])for(const z of [-.27,.27])cylinder(x,1.008,z,.085,.014,ceramic);
+        }
+      }
       break;
     }
     case 'chair': {

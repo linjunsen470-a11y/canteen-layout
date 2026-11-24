@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed } from 'lucide-react';
+import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Columns3, Lightbulb } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
 import { usePlanning } from './planning';
@@ -9,9 +9,10 @@ import { download } from './projectIO';
 
 const fmtYuan = (n: number) => n >= 10000 ? `¥${(n / 10000).toFixed(1)}万` : `¥${n.toLocaleString()}`;
 
-export default function ShopInsightsDialog() {
+export default function ShopInsightsDialog({ onCompare }: { onCompare?: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const project = useStore(s => s.project);
+  const commit = useStore(s => s.commit);
   const activeId = usePlanning(s => s.activeId);
   const [issues, setIssues] = useState<SpaceIssue[] | null>(null);
   const insights = useMemo(() => analyzeShop(project), [project]);
@@ -36,23 +37,31 @@ export default function ShopInsightsDialog() {
     dialog.current?.close();
   };
 
+  const criticalCount = (issues ?? []).filter(i => i.type !== '参考净距').length;
+  const clearanceCount = (issues ?? []).filter(i => i.type === '参考净距').length;
+
   return <>
-    <button onClick={open} title="查看面积坪效、餐厨比、空间体检与设备采购清单">
+    <button onClick={open} title="查看面积坪效、餐厨比、配电负荷、动线体检与采购预算">
       <BarChart3 />开店概览
     </button>
     <dialog ref={dialog} className="insights-dialog" aria-labelledby="insights-heading">
       <header className="wizard-header">
         <div>
-          <h2 id="insights-heading">{project.name} · 开店经营规划概览</h2>
-          <p>实时汇总铺位面积、座位坪效、餐厨比、动线体检与采购参考清单</p>
+          <h2 id="insights-heading">{project.name} · 可行性体检与预算概览</h2>
+          <p>汇总实测面积、客座舒适度、餐厨比、商用配电预估、空间体检与分类采购预算</p>
         </div>
         <div className="insights-header-actions">
+          {onCompare && (
+            <button type="button" onClick={() => { dialog.current?.close(); onCompare(); }}>
+              <Columns3 />换一种摆法
+            </button>
+          )}
           <button type="button" onClick={exportCSV}><Download />导出清单 CSV</button>
           <button type="button" onClick={() => dialog.current?.close()}>关闭</button>
         </div>
       </header>
 
-      <div className="kpi-grid">
+      <div className="kpi-grid kpi-grid-5">
         <div className="kpi-card">
           <small>实用规划面积</small>
           <strong>{insights.areaSqm.toFixed(1)} ㎡</strong>
@@ -69,13 +78,21 @@ export default function ShopInsightsDialog() {
           <span>{insights.diningSqm > 0 ? `客区 ${insights.diningSqm.toFixed(1)}㎡ · 后厨 ${insights.kitchenSqm.toFixed(1)}㎡` : '可添加分区查看'}</span>
         </div>
         <div className="kpi-card">
+          <small>预估商用配电</small>
+          <strong>{insights.estimatedPowerKw} kW</strong>
+          <span>{insights.estimatedPowerKw >= 10 ? '建议核实 380V 三相电' : '220V 商用电通常够用'}</span>
+        </div>
+        <div className="kpi-card">
           <small>设备软装估算参考</small>
           <strong>{insights.budgetMax > 0 ? `${fmtYuan(insights.budgetMin)} ~ ${fmtYuan(insights.budgetMax)}` : '待布置'}</strong>
-          <span>共 {insights.bom.reduce((sum, r) => sum + r.count, 0)} 件（不含土建硬装）</span>
+          <span>共 {insights.bom.reduce((sum, r) => sum + r.count, 0)} 件（不含硬装）</span>
         </div>
       </div>
 
-      <p className="insights-advice">{insights.ratioAdvice}</p>
+      <div className="insights-advice-grid">
+        <div className="insights-advice"><Lightbulb /><span>{insights.ratioAdvice} {insights.actionTips[0]}</span></div>
+        <div className="insights-advice is-power"><Zap /><span>{insights.powerAdvice}</span></div>
+      </div>
 
       <div className="insights-columns">
         <section className="insights-section">
@@ -91,13 +108,13 @@ export default function ShopInsightsDialog() {
         </section>
 
         <section className="insights-section">
-          <h3>空间碰撞与通道体检（{issues ? issues.length : 0} 条提示）</h3>
+          <h3>空间碰撞与通道体检（{criticalCount > 0 ? `${criticalCount} 项冲突 · ` : '0 项冲突 · '}{clearanceCount} 条净距参考）</h3>
           {issues && issues.length === 0 ? (
-            <p className="check-clear">未发现明显碰撞、门扇冲突或越界问题，动线状态良好。</p>
+            <p className="check-clear">未发现碰撞、门扇冲突或越界问题，动线状态良好。</p>
           ) : (
             <div className="insights-issues">
               {(issues ?? []).slice(0, 20).map((issue, idx) => (
-                <button type="button" key={idx} onClick={() => locateIssue(issue.ids)}>
+                <button type="button" key={idx} className={issue.type !== '参考净距' ? 'is-critical' : ''} onClick={() => locateIssue(issue.ids)}>
                   <span><strong>{issue.type}</strong> {issue.message}</span>
                   <LocateFixed />
                 </button>
@@ -107,6 +124,31 @@ export default function ShopInsightsDialog() {
           )}
         </section>
       </div>
+
+      {insights.categoryBudgets.length > 0 && (
+        <section className="insights-section">
+          <h3>分类投入占比一览</h3>
+          <div className="cat-budget-strip">
+            {insights.categoryBudgets.map(cb => (
+              <div key={cb.category} className="cat-budget-pill">
+                <small>{cb.category}（{cb.count} 件）</small>
+                <b>{cb.max > 0 ? `${fmtYuan(cb.min)} ~ ${fmtYuan(cb.max)}` : '按实测计价'}</b>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="insights-section">
+        <h3>给合伙人 / 房东的讨论备注（将同步写入导出的方案书）</h3>
+        <textarea
+          className="partner-notes-input"
+          rows={2}
+          value={project.metadata.notes}
+          onChange={e => commit({ ...project, metadata: { ...project.metadata, notes: e.target.value } })}
+          placeholder="例如：月租 2.8 万，需向物业核实排烟井口位置及 380V 三相电增容条件，周末约合伙人看 A/B 两版摆法…"
+        />
+      </section>
 
       <section className="insights-section">
         <h3>分类设备、灯具与软装参考清单</h3>
