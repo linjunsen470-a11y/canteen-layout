@@ -1576,3 +1576,12 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
   color: #9e560d;
 }
 .footer-check-pill:hover { filter: brightness(0.96); }
+
+.sketch-wizard { margin:0; padding:0; border:0; display:grid; gap:10px; }
+.sketch-options, .sketch-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.sketch-options label, .sketch-controls label { display:flex; gap:6px; align-items:center; }
+.sketch-controls strong { margin-right:auto; }
+.sketch-controls input { width:85px; }
+.sketch-controls button[aria-pressed=true] { color:white; background:#335e4b; }
+.sketch-grid { display:block; width:100%; aspect-ratio:100/56; background:#f5f8f3; border:1px solid #ccd8cc; border-radius:6px; touch-action:none; user-select:none; }
+.sketch-grid text { fill:#274637; paint-order:stroke; stroke:#f5f8f3; stroke-width:.15em; }
