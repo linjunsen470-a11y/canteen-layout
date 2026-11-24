@@ -50,9 +50,9 @@ try {
   assert.deepEqual(checkSpace(measured, null).filter(i => i.type !== '参考净距'), []);
   assert.throws(() => createCustomShopShell({ ...spec, shape: 'l-shape', notchWidthM: 11 }), /缺口/);
 
-  const { createSurveyShop, rectangleLegs, surveyWall, cornerDistance, openingOffset } = await load('interiorSurvey');
+  const { createSurveyShop, rectangleLegs, autoCloseLegs, surveyWall, cornerDistance, openingOffset } = await load('interiorSurvey');
   const { siteArea, planningArea } = await load('site');
-  const { wallPoint } = await load('structure');
+  const { wallPoint, syncStructure } = await load('structure');
   const { alignUnderlay, imageToWorld } = await load('siteExtras');
   const { bomCSV } = await load('shopAnalytics');
   const { wallProfiles } = await load('wallJoints');
@@ -62,6 +62,8 @@ try {
   assert.match(bomCSV(rect,analyzeShop(rect)), /现场记录净面积 24.00㎡.*外轮廓面积 28.16㎡/);
   const lLegs = [['right',6000],['down',2500],['left',2000],['down',1500],['left',4000],['up',4000]]
     .map(([direction,length])=>({direction,length}));
+  // Auto-close should complete the last 2 legs of an L-shape cleanly
+  assert.deepEqual(autoCloseLegs(lLegs.slice(0, 4)), lLegs);
   const lShop = createSurveyShop('现场凹角',lLegs,201,3200);
   const ccw = createSurveyShop('反向',lLegs.toReversed().map(leg=>({
     ...leg,direction:({left:'right',right:'left',up:'down',down:'up'})[leg.direction]})),201,3200);
@@ -77,10 +79,23 @@ try {
       const vertices=profiles.get(wall.id).map(v=>({x:wall.x+wall.w/2+v.x*Math.cos(axis)-v.y*Math.sin(axis),
         y:wall.y+wall.d/2+v.x*Math.sin(axis)+v.y*Math.cos(axis)}));
       for(const pt of [a,b]) assert.ok(vertices.some(v=>Math.hypot(v.x-pt.x,v.y-pt.y)<1e-6));
-      const offset=openingOffset(face,100,250,false);
-      assert.equal(openingOffset(face,face.end-face.start-350,250,true),offset);
+      const safeGap = Math.max(100, face.minStartGap);
+      const offset=openingOffset(face,safeGap,250,false);
+      assert.equal(openingOffset(face,face.end-face.start-safeGap-250,250,true),offset);
+      // Every offset returned by openingOffset MUST be accepted by syncStructure()
+      const withDoor = syncStructure({ ...p, items: [...p.items, { id: 'test-door-' + i, kind: 'door', model: 'door', name: '测试门', w: 250, d: wall.d, h: 2100, x: 0, y: 0, rotation: wall.rotation, wallId: wall.id, offset, sill: 0, color: '#aa8866' }] });
+      assert.equal(withDoor.items.find(x => x.id === 'test-door-' + i).offset, offset);
     });
   }
+  // PR #4 concave-corner regression: 100mm from concave corner on 200mm wall must be rejected cleanly by openingOffset before syncStructure
+  const l200 = createSurveyShop('L200', lLegs, 200, 3200);
+  const concaveWall = l200.items[2];
+  const concaveFace = surveyWall(l200, concaveWall);
+  assert.ok(concaveFace.minEndGap >= 150, `expected minEndGap>=150, got ${concaveFace.minEndGap}`);
+  assert.throws(() => openingOffset(concaveFace, 100, 900, true), /墙角结构限制/);
+  const validConcaveOffset = openingOffset(concaveFace, concaveFace.minEndGap, 900, true);
+  assert.doesNotThrow(() => syncStructure({ ...l200, items: [...l200.items, { id: 'concave-door', kind: 'door', model: 'door', name: '凹角旁门', w: 900, d: 200, h: 2100, x: 0, y: 0, rotation: concaveWall.rotation, wallId: concaveWall.id, offset: validConcaveOffset, sill: 0, color: '#aa8866' }] }));
+
   const recesses = [['right',6000],['down',4000],['left',1800],['up',500],['left',800],
     ['down',500],['left',1000],['up',700],['left',900],['down',700],['left',1500],['up',4000]]
     .map(([direction,length])=>({direction,length}));
@@ -104,7 +119,7 @@ try {
     const actual=imageToWorld(aligned,pixel);
     assert.ok(Math.hypot(pt.x-actual.x,pt.y-actual.y)<1e-6);
   }
-  console.log('PASS 内净尺寸、反向与奇数墙厚、渲染墙面、闭合差、净面积、双端洞口及底图配准');
+  console.log('PASS 内净尺寸、反向与奇数墙厚、凹角门洞一致校验、自动闭合、净面积、双端洞口及底图配准');
   const furniture = (id, kind, x, y, w, d) => ({ id, name: id, kind, x, y, w, d, rotation: 0, h: 800, color: '#aa8866' });
   const aisle = { ...project, clearance: 800, items: [
     furniture('t1', 'table', 1700, 2000, 1200, 800), furniture('c1', 'chair', 2950, 2175, 450, 450),
@@ -114,6 +129,43 @@ try {
   assert.deepEqual(clearances.map(gap => gap.distance), [600]);
   assert.ok(issues.some(i => i.message.includes('600mm，小于参考 800mm')));
   console.log('PASS 实测 L 形缺口与椅背净距');
+
+  // Verify non-destructive parametric concept planner on arbitrary surveyed rectangular & L-shaped shops
+  const { generateConceptLayout, defaultConceptOptions } = await load('conceptPlanner');
+  const arbitraryShells = [
+    createSurveyShop('宽面铺', rectangleLegs(11400, 6800), 200, 3400),
+    createSurveyShop('深窄铺', rectangleLegs(6200, 10800), 200, 3200),
+    createSurveyShop('社区小铺', rectangleLegs(7200, 5600), 200, 3200),
+    createSurveyShop('实测L铺', [['right',11000],['down',4500],['left',3500],['down',3500],['left',7500],['up',8000]].map(([direction,length])=>({direction,length})), 200, 3400),
+  ];
+  for (const shell of arbitraryShells) {
+    // Add an existing column & exterior door to verify strict shell preservation
+    const frontWall = shell.items.find(w => w.kind === 'wall' && Math.abs(w.y - (shell.height - 200)) < 300) ?? shell.items[0];
+    const withObstacles = syncStructure({
+      ...shell,
+      items: [
+        ...shell.items,
+        { id: 'orig-door', kind: 'door', model: 'glass-double-door', name: '原有大门', w: 1400, d: frontWall.d, h: 2200, x: 0, y: 0, rotation: frontWall.rotation, wallId: frontWall.id, offset: Math.round((frontWall.w - 1400) / 2), sill: 0, color: '#455961', flipped: true },
+        { id: 'orig-col', kind: 'column', model: 'column', name: '原有承重柱', w: 500, d: 500, h: 3200, x: 2600, y: 3600, rotation: 0, color: '#8a8d89' },
+      ],
+    });
+    for (const side of ['rear', 'left', 'right', 'none']) {
+      const opts = { ...defaultConceptOptions('bistro'), kitchenSide: side, kitchenRatioPct: 32 };
+      const { project: out, estimate } = generateConceptLayout(withObstacles, opts);
+      assert.deepEqual(out.survey, withObstacles.survey, `${shell.name}/${side} survey preserved`);
+      assert.deepEqual(out.outline, withObstacles.outline, `${shell.name}/${side} outline preserved`);
+      assert.ok(out.items.some(i => i.id === 'orig-door'), `${shell.name}/${side} door preserved`);
+      assert.ok(out.items.some(i => i.id === 'orig-col'), `${shell.name}/${side} column preserved`);
+      assert.equal(estimate.criticalConflicts, 0, `${shell.name}/${side} zero conflicts`);
+      assert.ok(estimate.seats >= 4, `${shell.name}/${side} placed seats=${estimate.seats}`);
+      if (side !== 'none') {
+        assert.ok(Math.abs(estimate.kitchenPct - 32) <= 6, `${shell.name}/${side} kitchenPct=${estimate.kitchenPct}`);
+      } else {
+        assert.equal(estimate.kitchenAreaSqm, 0);
+      }
+    }
+  }
+  console.log('PASS 任意直角实测铺位（矩形/深窄/L形）智能分区估算与原壳体零破坏');
 
   const examplePkg = JSON.parse(fs.readFileSync(new URL('../examples/songjian-noodle-bistro.canteen.json', import.meta.url), 'utf8'));
   assert.equal(examplePkg.format, 'canteen-layout-package');

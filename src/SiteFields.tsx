@@ -6,6 +6,7 @@ import { NumberField } from './NumberField';
 import { planningArea, siteArea, siteOutline, SitePoint } from './site';
 import { FloorMaterial, LightingPreset, ProjectStyle, WallMaterial, resolveStyle } from './model';
 import { buildPerimeterWalls } from './shopTemplates';
+import { decorThemePresets } from './conceptPlanner';
 
 export default function SiteFields({ onEdit }: { onEdit: (draw?: boolean) => void }) {
   const { project: p, commit, resize } = useStore();
@@ -21,6 +22,22 @@ export default function SiteFields({ onEdit }: { onEdit: (draw?: boolean) => voi
   return <>
     <details className="site-data" open>
       <summary>装修材质与 3D 效果氛围</summary>
+      <div className="theme-chip-row" role="group" aria-label="一键装修风格主题">
+        {decorThemePresets.map(t => {
+          const active = style.floorMaterial === t.floorMaterial && style.wallMaterial === t.wallMaterial && style.lightingPreset === t.lightingPreset;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`theme-chip ${active ? 'active' : ''}`}
+              title={t.subtitle}
+              onClick={() => updateStyle({ floorMaterial: t.floorMaterial, wallMaterial: t.wallMaterial, lightingPreset: t.lightingPreset })}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
       <label>地面材质
         <select aria-label="地面材质" value={style.floorMaterial} onChange={e => updateStyle({ floorMaterial: e.target.value as FloorMaterial })}>
           <option value="oak-wood">暖橡木地板（咖啡/主题餐馆）</option>
