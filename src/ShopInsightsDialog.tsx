@@ -1,30 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Lightbulb } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
-import { usePlanning } from './planning';
 import { planningAreaLabel, siteArea } from './site';
-import { analyzeShop, bomCSV } from './shopAnalytics';
-import { checkSpace, SpaceIssue } from './spaceChecks';
+import { type ShopInsights, bomCSV } from './shopAnalytics';
+import type { SpaceIssue } from './spaceChecks';
 import { download } from './projectIO';
 
 const fmtYuan = (n: number) => n >= 10000 ? `¥${(n / 10000).toFixed(1)}万` : `¥${n.toLocaleString()}`;
 
-export default function ShopInsightsDialog({ openSignal }: { openSignal?: number }) {
+type Props = {
+  openSignal: number;
+  insights: ShopInsights;
+  issues: SpaceIssue[];
+  criticalCount: number;
+};
+
+export default function ShopInsightsDialog({ openSignal, insights, issues, criticalCount }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const project = useStore(s => s.project);
   const commit = useStore(s => s.commit);
-  const activeId = usePlanning(s => s.activeId);
-  const [issues, setIssues] = useState<SpaceIssue[] | null>(null);
-  const insights = useMemo(() => analyzeShop(project), [project]);
-
-  const open = () => {
-    setIssues(checkSpace(project, activeId).sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')));
-    dialog.current?.showModal();
-  };
+  const open = () => dialog.current?.showModal();
 
   useEffect(() => {
-    if (openSignal && openSignal > 0) open();
+    if (openSignal > 0) open();
   }, [openSignal]);
 
   const exportCSV = () => {
@@ -42,8 +41,7 @@ export default function ShopInsightsDialog({ openSignal }: { openSignal?: number
     dialog.current?.close();
   };
 
-  const criticalCount = (issues ?? []).filter(i => i.type !== '参考净距').length;
-  const clearanceCount = (issues ?? []).filter(i => i.type === '参考净距').length;
+  const clearanceCount = issues.length - criticalCount;
 
   return <>
     <button onClick={open} title="查看面积坪效、餐厨比、配电负荷、动线体检与采购预算">
@@ -109,17 +107,17 @@ export default function ShopInsightsDialog({ openSignal }: { openSignal?: number
 
         <section className="insights-section">
           <h3>空间碰撞与通道体检（{criticalCount > 0 ? `${criticalCount} 项冲突 · ` : '0 项冲突 · '}{clearanceCount} 条净距参考）</h3>
-          {issues && issues.length === 0 ? (
+          {issues.length === 0 ? (
             <p className="check-clear">未发现碰撞、门扇冲突或越界问题，动线状态良好。</p>
           ) : (
             <div className="insights-issues">
-              {(issues ?? []).slice(0, 20).map((issue, idx) => (
+              {issues.slice(0, 20).map((issue, idx) => (
                 <button type="button" key={idx} className={issue.type !== '参考净距' ? 'is-critical' : ''} onClick={() => locateIssue(issue.ids)}>
                   <span><strong>{issue.type}</strong> {issue.message}</span>
                   <LocateFixed />
                 </button>
               ))}
-              {issues && issues.length > 20 && <small>还有 {issues.length - 20} 条提示，可在「排列与检查」面板分步查看。</small>}
+              {issues.length > 20 && <small>还有 {issues.length - 20} 条提示，可在「排列与检查」面板分步查看。</small>}
             </div>
           )}
         </section>

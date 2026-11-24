@@ -80,13 +80,13 @@ export default function App() {
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
   const insights = useMemo(() => analyzeShop(project), [project.items, project.groups, project.outline, project.survey, project.width, project.height]);
-  const lastCriticalCount = useRef(0);
-  const criticalCount = useMemo(() => {
-    if (s.gesture) return lastCriticalCount.current;
-    const count = checkSpace(project, null).filter(i => i.type !== '参考净距').length;
-    lastCriticalCount.current = count;
-    return count;
-  }, [project.items, project.outline, project.survey, s.gesture]);
+  const activeAreaId = usePlanning(state => state.activeId);
+  // During a drag, inspect the committed layout until the gesture finishes.
+  const inspectionProject = s.gesture ?? project;
+  const issues = useMemo(() => checkSpace(inspectionProject, activeAreaId)
+    .sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')),
+    [inspectionProject, activeAreaId]);
+  const criticalCount = issues.filter(issue => issue.type !== '参考净距').length;
 
   const save = () => { void saveProject(); };
   const png = () => plan.current?.exportPNG();
@@ -175,7 +175,7 @@ export default function App() {
       </div>
       <div className="actions" inert={!sessionReady || sessionBusy}>
         <ConceptPlannerDialog notify={notify} openSignal={conceptSignal} />
-        <ShopInsightsDialog openSignal={insightsSignal} />
+        <ShopInsightsDialog openSignal={insightsSignal} insights={insights} issues={issues} criticalCount={criticalCount} />
         <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>

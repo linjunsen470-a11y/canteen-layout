@@ -365,6 +365,58 @@ try {
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   console.log('PASS 试排应用、墙体快捷加门、吊灯点击穿透、三步导航、3D 悬浮胶囊与底部开店指标条');
 
+  const atmosphere = page.locator('.scene-atmos-menu');
+  for (const preset of ['自然光', '暖光营业']) {
+    await atmosphere.locator('summary').click();
+    await atmosphere.getByRole('button', { name: preset, exact: true }).click();
+    assert.equal(await atmosphere.locator('summary').innerText(), preset);
+    assert.equal(await atmosphere.getAttribute('open'), null);
+  }
+
+  await button('2D 平面').click();
+  const wall = item('定位墙', 'wall', 1000, 1000, 6000, 200, 2800);
+  const table = item('定位桌', 'table', 3000, 3000, 1200, 800, 750);
+  await importFixture({
+    ...fixture, name: '规划范围与离墙定位', survey: undefined, outline: undefined,
+    width: 10000, height: 8000, items: [wall, table],
+    planningAreas: [{ id: 'front', name: '前厅', color: '#347755', outline: [
+      { x: 0, y: 0 }, { x: 8000, y: 0 }, { x: 8000, y: 2500 }, { x: 0, y: 2500 },
+    ] }],
+  });
+  const scope = page.getByLabel('当前规划范围');
+  const pill = page.locator('.footer-check-pill');
+  async function checkScope(expected) {
+    assert.equal(await pill.innerText(), expected ? `${expected} 处冲突` : '无冲突');
+    await pill.click();
+    const heading = dialog.getByRole('heading', { name: /空间碰撞与通道体检/ });
+    assert.ok((await heading.innerText()).includes(`${expected} 项冲突`));
+    assert.equal(await dialog.locator('.insights-issues .is-critical').count(), expected);
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  }
+  await scope.selectOption('front');
+  await checkScope(1);
+  await scope.selectOption('');
+  await checkScope(0);
+
+  await page.getByRole('tab', { name: '对象列表' }).click();
+  await page.locator('.object-select', { hasText: table.name }).click();
+  await page.locator('.props-advanced > summary').click();
+  await button('精确离墙定位').click();
+  assert.equal(await page.getByLabel('Y 坐标（mm）', { exact: true }).isDisabled(), true);
+  await page.getByLabel('参考墙面').selectOption(wall.id + '|1');
+  await page.getByLabel('目标净距（mm）').fill('300');
+  await button('预览移动').click();
+  assert.match(await page.locator('.wall-placement-bar').innerText(), /预览 300 mm/);
+  await button('确认落位').click();
+  await page.locator('.wall-placement-bar').waitFor({ state: 'hidden' });
+  const y = page.getByLabel('Y 坐标（mm）', { exact: true });
+  assert.equal(Number(await y.inputValue()), wall.y + wall.d + 300);
+  await scope.selectOption('front');
+  await checkScope(0);
+  await button('撤销').click();
+  await checkScope(1);
+  console.log('PASS 鼠标切换 3D 光照、精确离墙预览与确认、范围冲突数量随选择和撤销同步');
+
   assert.deepEqual(errors, []);
   console.log('PASS 实测建铺、底图两点校准、智能分区估算与同壳对比、示范案例参考、组合预览与拖放、整组四向复制与图文导出');
 } finally {

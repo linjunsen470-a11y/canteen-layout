@@ -1439,6 +1439,7 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
   border-color: #244b3c;
 }
 .scene-atmos-menu, .scene-toolbar.is-floating .scene-more {
+  pointer-events: auto;
   position: relative;
   flex-shrink: 0;
 }
@@ -1575,5 +1576,3 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
   color: #9e560d;
 }
 .footer-check-pill:hover { filter: brightness(0.96); }
-
-
