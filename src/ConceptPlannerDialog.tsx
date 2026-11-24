@@ -272,7 +272,7 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
                     在餐厨交界加明档半高隔断
                   </label>
                 )}
-                {!project.items.some(i => i.kind === 'door') && project.items.some(i => i.kind === 'wall') && (
+                {!project.items.some(i => i.kind === 'door' && !(i.generated === 'concept' && !i.locked)) && project.items.some(i => i.kind === 'wall') && (
                   <label>
                     <input
                       type="checkbox"

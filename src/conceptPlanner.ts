@@ -468,7 +468,10 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
 
   if (!isOrthogonalPolygon(outline)) throw Error('试排仅支持直角铺位，当前外轮廓含斜边');
   const fixedKinds = new Set<Item['kind']>(['wall', 'partition', 'door', 'window', 'column', 'stairs', 'fixture', 'utility']);
-  const preservedIds = new Set(baseProject.items.filter(i => i.locked || fixedKinds.has(i.kind) || isAnnotation(i)).map(i => i.id));
+  // Schematic items the planner itself generated (storefront door/window, open-kitchen partition) are
+  // regenerated on every run instead of becoming permanent obstacles — unless the owner locked them.
+  const isRegenerable = (i: Item) => i.generated === 'concept' && !i.locked;
+  const preservedIds = new Set(baseProject.items.filter(i => !isRegenerable(i) && (i.locked || fixedKinds.has(i.kind) || isAnnotation(i))).map(i => i.id));
   // Keep the objects that a retained measurement or supported item refers to.
   for (const i of baseProject.items) {
     if (preservedIds.has(i.id) && i.measure) {
@@ -556,10 +559,10 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
         const doorCand: Item = {
           id: uid(), kind: 'door', model: 'glass-double-door', name: '临街双开玻璃门',
           w: doorW, d: fw.d, h: doorH, x: 0, y: 0, rotation: fw.rotation,
-          wallId: fw.id, offset: 50, sill: 0, color: '#455961', flipped: true,
+          wallId: fw.id, offset: 50, sill: 0, color: '#455961', flipped: true, generated: 'concept',
         };
         const preferred = Math.round(minOff + (usableSpan - doorW) / 2);
-        const offset = openingSlot(fw, doorCand, preservedItems, preferred);
+        const offset = openingSlot(fw, doorCand, preservedItems, preferred, { min: minOff, maxEnd });
         if (offset !== undefined && offset >= minOff - 0.1 && offset + doorW <= maxEnd + 0.1) {
           const center = wallPoint(fw, offset + doorW / 2);
           const placedDoor: Item = { ...doorCand, offset, x: center.x - doorW / 2, y: center.y - fw.d / 2 };
@@ -571,9 +574,9 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
             const winCand: Item = {
               id: uid(), kind: 'window', model: 'storefront-window', name: '临街落地橱窗',
               w: winW, d: fw.d, h: winH, x: 0, y: 0, rotation: fw.rotation,
-              wallId: fw.id, offset: 50, sill: 150, color: '#455961',
+              wallId: fw.id, offset: 50, sill: 150, color: '#455961', generated: 'concept',
             };
-            const winOff = openingSlot(fw, winCand, [...preservedItems, placedDoor], Math.round(minOff + 120));
+            const winOff = openingSlot(fw, winCand, [...preservedItems, placedDoor], Math.round(minOff + 120), { min: minOff, maxEnd });
             if (winOff !== undefined && winOff >= minOff - 0.1 && winOff + winW <= maxEnd + 0.1) {
               const wc = wallPoint(fw, winOff + winW / 2);
               placedInterior.push({ ...winCand, offset: winOff, x: wc.x - winW / 2, y: wc.y - fw.d / 2 });
@@ -692,6 +695,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
       const partW = Math.min(3200, Math.round((alongMax - alongMin) * 0.44));
       if (partW >= 1000) {
         const partItem = atWall({ kind: 'partition', model: 'partition', name: '明档半高隔断', w: partW, d: 120, h: 1180, color: '#e6dfd3' }, alongMin + 80, depth - 180);
+        partItem.generated = 'concept';
         if (fitsInRegion([partItem], kitchenStrips, 40, 120, 180)) {
           commitPlaced([partItem]);
         }

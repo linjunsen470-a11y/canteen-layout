@@ -12,6 +12,7 @@ import { planningEditable } from './planning';
 import { catalog, resolveStyle } from './model';
 import { buildPerimeterWalls } from './shopTemplates';
 import { decorThemePresets } from './conceptPlanner';
+import { surveyWall } from './interiorSurvey';
 
 export default function PlanSelectionBar({
   onOpenConcept,
@@ -71,7 +72,11 @@ export default function PlanSelectionBar({
           color: spec.color,
           flipped: true,
         };
-        const offset = openingSlot(frontWall, candidate, proj.items, Math.round((frontWall.w - doorW) / 2));
+        // Respect surveyed inner-corner bounds so the door never lands outside the measured interior span.
+        const datum = surveyWall(proj, frontWall);
+        const bounds = datum ? { min: datum.minOffset, maxEnd: datum.maxEnd } : undefined;
+        const spanMin = bounds?.min ?? 50, spanEnd = bounds?.maxEnd ?? frontWall.w - 50;
+        const offset = openingSlot(frontWall, candidate, proj.items, Math.round(spanMin + (spanEnd - spanMin - doorW) / 2), bounds);
         if (offset === undefined) { notify('当前外墙没有足够长度放置大门，请手动选墙添加'); return; }
         const placedDoor = { ...candidate, offset };
         const nextItems = [...proj.items, placedDoor];

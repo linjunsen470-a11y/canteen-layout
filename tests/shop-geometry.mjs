@@ -249,7 +249,22 @@ try {
   // When a door already exists, includeStorefront must NOT add extra doors
   const alreadyHasDoor = estimate(parsedSchematic, { includeStorefront: true });
   assert.equal(alreadyHasDoor.project.items.filter(i => i.kind === 'door').length, parsedSchematic.items.filter(i => i.kind === 'door').length);
-  console.log('PASS 实测墙角放柱/点位、3D 近侧智能透视墙判断及明档隔断/门头快建');
+  // Schematic items are regenerated, not frozen as obstacles: re-running without the options removes them…
+  assert.ok(parsedSchematic.items.filter(i => i.kind === 'partition' || i.kind === 'door').every(i => i.generated === 'concept'), 'schematic items carry generated flag through parseProject');
+  const rerunPlain = estimate(parsedSchematic, {});
+  assert.ok(!rerunPlain.project.items.some(i => i.generated === 'concept'), 're-run without options should drop schematic partition/door/window');
+  // …but once the owner locks them they are kept as real fixed items.
+  const lockedSchematic = { ...parsedSchematic, items: parsedSchematic.items.map(i => i.generated === 'concept' ? { ...i, locked: true } : i) };
+  const rerunLocked = estimate(lockedSchematic, {});
+  assert.equal(rerunLocked.project.items.filter(i => i.generated === 'concept').length, lockedSchematic.items.filter(i => i.generated === 'concept').length, 'locked schematic items survive re-run');
+  // openingSlot must honour surveyed inner-corner bounds
+  const { openingSlot } = await load('structure');
+  const slotWall = { id: 'sw', kind: 'wall', name: '墙', x: 0, y: 0, w: 6200, d: 200, h: 3000, rotation: 0, color: '#fff' };
+  const slotWin = { id: 'sw-win', kind: 'window', name: '窗', x: 0, y: 0, w: 4475, d: 200, h: 2000, rotation: 0, color: '#fff', wallId: 'sw', offset: 1625, sill: 150 };
+  const slotDoor = { id: 'sw-door', kind: 'door', name: '门', x: 0, y: 0, w: 1500, d: 200, h: 2100, rotation: 0, color: '#fff', wallId: 'sw', offset: 50, sill: 0 };
+  const boundedOffset = openingSlot(slotWall, slotDoor, [slotWall, slotWin], 2350, { min: 100, maxEnd: 6100 });
+  assert.ok(boundedOffset === undefined || (boundedOffset >= 100 && boundedOffset + slotDoor.w <= 6100), `bounded door offset ${boundedOffset}`);
+  console.log('PASS 实测墙角放柱/点位、3D 近侧智能透视墙判断及明档隔断/门头快建（示意构件可重排）');
 
   const examplePkg = JSON.parse(fs.readFileSync(new URL('../examples/songjian-noodle-bistro.canteen.json', import.meta.url), 'utf8'));
   assert.equal(examplePkg.format, 'canteen-layout-package');
