@@ -25,6 +25,9 @@ export function checkSketchEdge(corners: Point[], end: Point, closing: boolean) 
 }
 
 export function sketchShell(corners: Point[]) {
+  if (corners.length < 4) throw Error('闭合轮廓至少需要四个墙角');
+  corners.forEach((p, i) => checkSketchEdge(corners.slice(0, i), p, false));
+  checkSketchEdge(corners, corners[0], true);
   const legs: SurveyLeg[] = corners.map((a, i) => {
     const b = corners[(i + 1) % corners.length];
     return { direction: b.x > a.x ? 'right' : b.x < a.x ? 'left' : b.y > a.y ? 'down' : 'up',
@@ -52,7 +55,7 @@ export function placeSketchFixture(project: Project, kind: SketchFixture, point:
     }).sort((a, b) => a.distance - b.distance);
     const { wall, datum, distance } = choices[0];
     if (distance > 500) throw Error('请点靠近入口的外墙');
-    item = { ...item, kind: 'door', name: '入口门', w: 900, d: wall.d, h: 2100, wallId: wall.id,
+    item = { ...item, kind: 'door', name: '入口门', w: 900, d: wall.d, h: 2100, wallId: wall.id, sill: 0,
       flipped: datum.inward.x * -datum.tangent.y + datum.inward.y * datum.tangent.x < 0 };
     const offset = openingSlot(wall, item, project.items, projectOnWall(wall, point).offset - item.w / 2, { min: datum.minOffset, maxEnd: datum.maxEnd });
     if (offset === undefined) throw Error('这段墙没有足够的开口净长');
