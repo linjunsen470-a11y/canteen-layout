@@ -40,6 +40,9 @@ export async function testQuickExport(browser, url) {
     assert.ok(await dialog.getByRole('link',{name:'下载 PNG'}).isVisible());
     await dialog.getByRole('button',{name:'关闭'}).click();
     assert.equal(await button('2D 平面').getAttribute('aria-pressed'),'true');
+    await page.setViewportSize({width:1100,height:800});
+    await page.locator('.footer-check-pill').click();
+    await page.locator('.insights-dialog[open]').waitFor();
     console.log('PASS 空白铺位、预设修改、直出分屏、三视图合图、单图切换、PNG 下载与剪贴板');
   } finally { await context.close(); }
 }
