@@ -19,15 +19,15 @@ import ShopWizardDialog from './ShopWizardDialog';
 import ShopInsightsDialog from './ShopInsightsDialog';
 import ConceptPlannerDialog from './ConceptPlannerDialog';
 import { ComboPreset, comboPresets, placeCombo } from './combos';
-import { seatSummary } from './layoutGroups';
-import { Maximize2, Minimize2, ChevronUp, ChevronDown, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download } from 'lucide-react';
+import { analyzeShop } from './shopAnalytics';
+import { checkSpace } from './spaceChecks';
+import { Maximize2, Minimize2, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download, AlertTriangle, CheckCircle2, Zap } from 'lucide-react';
 import { useStore } from './store';
-import { catalog, Item, resolveStyle } from './model';
+import { catalog, Item } from './model';
 import ProjectLibrary from './ProjectManager';
 import { saveProject, useProjectSession } from './projectSession';
 import { planningArea, sitePlacement } from './site';
 import { isOpening, attachOpening } from './structure';
-import { isAnnotation } from './annotations';
 import PropertiesPanel from './PropertiesPanel';
 import { useWorkspace } from './workspace';
 import { useEditorKeyboard } from './useEditorKeyboard';
@@ -35,7 +35,6 @@ import { toolLabels } from './editorInteraction';
 
 const Scene3D = lazy(() => import('./Scene3D'));
 type CatalogItem = typeof catalog[number];
-const lightingText: Record<string, string> = { 'daylight': '自然光', 'warm-dining': '暖光营业', 'evening': '晚间灯光', 'clay': '白模' };
 
 export default function App() {
   const s = useStore();
@@ -44,7 +43,6 @@ export default function App() {
   const sessionReady = useProjectSession(s => s.ready);
   const sessionBusy = useProjectSession(s => s.busy);
   const { project } = s;
-  const style = resolveStyle(project);
 
   const prefs = useWorkspace(), { focusMode } = prefs;
   const view = focusMode ? (prefs.focusView ?? prefs.view) : prefs.view;
@@ -59,14 +57,37 @@ export default function App() {
   const setPropsOpen = (value: boolean | ((v: boolean) => boolean)) => prefs.set({ focusMode: false, propsOpen: typeof value === 'function' ? value(propsOpen) : value });
   const multi = s.selectedIds;
 
+  const activeStage: 'shell' | 'layout' | 'showcase' = view === '3d' ? 'showcase' : s.mode === 'site' ? 'shell' : 'layout';
+  const enterStage = (stage: 'shell' | 'layout' | 'showcase') => {
+    s.cancelInteraction();
+    if (stage === 'shell') {
+      s.setMode('site');
+      prefs.set({ view: view === '3d' ? '2d' : view, propsOpen: true, focusMode: false });
+    } else if (stage === 'layout') {
+      s.setMode('layout');
+      prefs.set({ view: view === '3d' ? 'split' : view, libraryOpen: true, focusMode: false });
+    } else {
+      prefs.set({ view: '3d', focusMode: false });
+    }
+  };
+
   useEditorKeyboard();
   const [grid, G] = useState(true), [snap, S] = useState(true), [notice, notify] = useState('');
   const plan = useRef<PlanHandle>(null), scene = useRef<SceneHandle>(null);
   const [librarySignal, setLibrarySignal] = useState(0);
   const [conceptSignal, setConceptSignal] = useState(0);
+  const [insightsSignal, setInsightsSignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
-  const seatsInfo = useMemo(() => seatSummary(project), [project.items, project.groups]);
+  const insights = useMemo(() => analyzeShop(project), [project.items, project.groups, project.outline, project.survey, project.width, project.height]);
+  const activeAreaId = usePlanning(state => state.activeId);
+  // During a drag, inspect the committed layout until the gesture finishes.
+  const inspectionProject = s.gesture ?? project;
+  const issues = useMemo(() => checkSpace(inspectionProject, activeAreaId)
+    .sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')),
+    [inspectionProject, activeAreaId]);
+  const criticalCount = issues.filter(issue => issue.type !== '参考净距').length;
+
   const save = () => { void saveProject(); };
   const png = () => plan.current?.exportPNG();
 
@@ -142,17 +163,19 @@ export default function App() {
     <header className="topbar">
       <div className="brand">
         <Store />
-        <div>
-          <h1>铺位规划 Studio</h1>
-          <small>2D 平面 · 3D 实景</small>
-        </div>
+        <h1>铺位规划</h1>
       </div>
       <ShopWizardDialog notify={notify} />
       <ProjectLibrary />
       <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
+      <div className="stage-stepper" role="group" aria-label="开店规划步骤" inert={!sessionReady || sessionBusy}>
+        <button type="button" aria-pressed={activeStage === 'shell'} onClick={() => enterStage('shell')}><span>1</span>铺位</button>
+        <button type="button" aria-pressed={activeStage === 'layout'} onClick={() => enterStage('layout')}><span>2</span>布局</button>
+        <button type="button" aria-pressed={activeStage === 'showcase'} onClick={() => enterStage('showcase')}><span>3</span>效果</button>
+      </div>
       <div className="actions" inert={!sessionReady || sessionBusy}>
         <ConceptPlannerDialog notify={notify} openSignal={conceptSignal} />
-        <ShopInsightsDialog />
+        <ShopInsightsDialog openSignal={insightsSignal} insights={insights} issues={issues} criticalCount={criticalCount} />
         <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
@@ -170,22 +193,25 @@ export default function App() {
       <EquipmentLibrary onAdd={addFrom} onAddCombo={addCombo} savedSignal={librarySignal} />
       {libraryOpen && <SidebarResize side="library" />}
       <section className="editor">
-        <div className="editor-heading">
+        <div className="editor-heading is-unified">
           <div className="workspace-controls">
             <button title={libraryOpen ? '收起素材库' : '展开素材库'} aria-label="切换设备库" aria-pressed={libraryOpen} onClick={() => setLibraryOpen(v => !v)}>{libraryOpen ? <PanelLeftClose /> : <PanelLeftOpen />}</button>
+          </div>
+          {view !== '3d' && !focusMode && (
+            <div id="editor-tools" className="editor-tools-inline" role="region" aria-label="绘图工具">
+              <EditorToolbar grid={grid} snap={snap} onGrid={() => G(v => !v)} onSnap={() => S(v => !v)} />
+            </div>
+          )}
+          <div className="editor-heading-right">
+            <div className="tabs" aria-label="画布视图">
+              {(['2d', 'split', '3d'] as const).map(v => (
+                <button key={v} aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => V(v)}>{v === '2d' ? '2D 平面' : v === '3d' ? '3D 效果图' : '2D + 3D 分屏'}</button>
+              ))}
+            </div>
             <button className="site-settings-button" onClick={() => { s.setMode('site'); setPropsOpen(true); }}>铺位与装修风格</button>
+            <button className="focus-toggle" title="专注画布 · F；Esc 退出" aria-pressed={focusMode} onClick={toggleFocus}>{focusMode ? <Minimize2 /> : <Maximize2 />}{focusMode ? '退出专注' : '专注画布'}</button>
+            <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !s.selectedIds.length) s.setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
           </div>
-          <div className="tabs" aria-label="画布视图">
-            {(['2d', 'split', '3d'] as const).map(v => (
-              <button key={v} aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => V(v)}>{v === '2d' ? '2D 平面' : v === '3d' ? '3D 效果图' : '2D + 3D 分屏'}</button>
-            ))}
-          </div>
-          <button className="tools-toggle" aria-label={prefs.toolsOpen && !focusMode ? '收起工具区' : '展开工具区'} aria-expanded={prefs.toolsOpen && !focusMode} aria-controls="editor-tools" onClick={() => prefs.set({ focusMode: false, toolsOpen: focusMode ? true : !prefs.toolsOpen })}>{prefs.toolsOpen && !focusMode ? <ChevronUp /> : <ChevronDown />}</button>
-          <button className="focus-toggle" title="专注画布 · F；Esc 退出" aria-pressed={focusMode} onClick={toggleFocus}>{focusMode ? <Minimize2 /> : <Maximize2 />}{focusMode ? '退出专注' : '专注画布'}</button>
-          <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !s.selectedIds.length) s.setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
-        </div>
-        <div id="editor-tools" className="editor-tools" hidden={view === '3d' || !prefs.toolsOpen || focusMode} role="region" aria-label="绘图工具">
-          <EditorToolbar grid={grid} snap={snap} onGrid={() => G(v => !v)} onSnap={() => S(v => !v)} />
         </div>
         <PlanningBar />
         <WallPlacementBar />
@@ -214,9 +240,29 @@ export default function App() {
           }
         />
         <footer role="status">
-          <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象 · R 旋转 90°` : '就绪 · 从左侧拖入桌椅设备，或点「智能分区估算」快速起稿')}</span>
+          <span className="status-message">{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象 · R 旋转 90°` : '就绪 · 从左侧拖入组合，点外墙加门窗，或一键智能分区')}</span>
           <span className="project-count">
-            <b>{seatsInfo.seats} 座</b> · {project.survey && '实测净面积 '}{(planningArea(project) / 1e6).toFixed(2)} ㎡ · {project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i)).length} 件 · {lightingText[style.lightingPreset]}
+            <b>{insights.seats} 座</b>
+            <span>·</span>
+            <span>{project.survey && '实测净面积 '}{(planningArea(project) / 1e6).toFixed(2)} ㎡</span>
+            {insights.kitchenRatioPct !== null && insights.diningRatioPct !== null && <>
+              <span>·</span>
+              <span>厨 {insights.kitchenRatioPct}% / 厅 {insights.diningRatioPct}%</span>
+            </>}
+            {insights.estimatedPowerKw > 0 && <>
+              <span>·</span>
+              <span className={insights.estimatedPowerKw >= 10 ? 'kpi-power-high' : ''} title={insights.powerAdvice}>
+                <Zap />{insights.estimatedPowerKw} kW{insights.estimatedPowerKw >= 10 ? ' · 380V' : ''}
+              </span>
+            </>}
+            <button
+              type="button"
+              className={`footer-check-pill ${criticalCount > 0 ? 'is-warn' : 'is-ok'}`}
+              onClick={() => setInsightsSignal(n => n + 1)}
+              title="点击查看完整可行性体检与采购预算"
+            >
+              {criticalCount > 0 ? <><AlertTriangle />{criticalCount} 处冲突</> : <><CheckCircle2 />无冲突</>}
+            </button>
           </span>
         </footer>
       </section>

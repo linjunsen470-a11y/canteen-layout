@@ -513,7 +513,20 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
     };
   }, []);
   useEffect(() => { if (!active) { finish(true); setPicking(false); } }, [active]);
-  useEffect(() => { if (focusRequest) { setFrame(null); setPicking(false); setCloseup(true); setReset(n => n + 1); } }, [focusRequest]);
+  useEffect(() => {
+    if (!focusRequest) return;
+    const state = useStore.getState();
+    const sel = state.project.items.find(i => i.id === state.selected);
+    if (sel?.kind === 'zone') {
+      setPicking(false);
+      setCloseup(false);
+      if (useWorkspace.getState().camera === 'eye-level') prefs.set({ camera: 'oblique' });
+      setFrame(framePoints(zoneCorners(sel), Math.max(2600, ...state.project.items.map(i => i.h)), sel.name));
+      setReset(n => n + 1);
+      return;
+    }
+    setFrame(null); setPicking(false); setCloseup(true); setReset(n => n + 1);
+  }, [focusRequest]);
 
   const handlers = useMemo<DragHandlers>(() => ({
     onPointerDown: (e, i) => {
@@ -616,45 +629,50 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
   const cfg = atmosphereConfig[style.lightingPreset];
   const styleKey = JSON.stringify([style.floorMaterial, style.wallMaterial, style.lightingPreset, style.wallCutaway, style.showCeiling, prefs.camera, frontWallKey]);
 
+  const hideSelectionBox = takingGallery || (prefs.camera === 'eye-level' && eyeIndex === 3);
+
   return <div className="scene-shell" tabIndex={0} onPointerDownCapture={e => { if (e.target instanceof HTMLCanvasElement) e.currentTarget.focus({ preventScroll: true }); }}>
-    <div className="scene-toolbar">
-      <div className="scene-segment" role="group" aria-label="三维视角">
-        <button aria-pressed={prefs.camera === 'oblique' && !focus && !frame} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'oblique' }); setReset(n => n + 1); }}>鸟瞰</button>
-        <button aria-pressed={prefs.camera === 'eye-level' && eyeIndex === 3 && !focus && !frame} title="站在街面/商场通道直视门头招牌、落地橱窗与店门" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setEyeIndex(3); prefs.set({ camera: 'eye-level' }); setReset(n => n + 1); }}>门头外观</button>
-        <button aria-pressed={prefs.camera === 'eye-level' && eyeIndex !== 3 && !focus && !frame} title="1.6m 真实进店人视点，再次点击切换室内机位，可用 WASD 漫步" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setEyeIndex(i => (prefs.camera === 'eye-level' && i !== 3 ? (i + 1) % 3 : 0)); prefs.set({ camera: 'eye-level' }); setReset(n => n + 1); }}>
-          {prefs.camera === 'eye-level' && eyeIndex !== 3 ? `进店 · ${eyeViewNames[eyeIndex]}` : '人视点进店'}
-        </button>
-        <button aria-pressed={prefs.camera === 'top' && !focus && !frame} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'top' }); setReset(n => n + 1); }}>俯视</button>
-      </div>
-      <div className="scene-segment" role="group" aria-label="渲染氛围">
-        {(['daylight', 'warm-dining', 'evening', 'clay'] as LightingPreset[]).map(p => (
-          <button key={p} aria-pressed={style.lightingPreset === p} onClick={() => updateStyle({ lightingPreset: p })}>{presetLabels[p]}</button>
-        ))}
-      </div>
-      <button aria-pressed={autoWallCutaway && !style.wallCutaway} title="鸟瞰旋转时自动降低挡住视线的近侧外墙，后侧墙保持全高" onClick={() => { if (style.wallCutaway) updateStyle({ wallCutaway: false }); setAutoWallCutaway(v => !v); }}>智能透视墙</button>
-      <details className="scene-more"><summary>更多</summary><div className="scene-more-actions">
-        <button aria-pressed={style.wallCutaway} title="将所有墙体降至半高便于俯瞰" onClick={() => updateStyle({ wallCutaway: !style.wallCutaway })}>全部半高墙</button>
-        <button aria-pressed={!style.showZoneTint3D} title="隐藏地面规划色块，呈现干净材质效果图" onClick={() => updateStyle({ showZoneTint3D: !style.showZoneTint3D })}>纯净地面</button>
-        <button onClick={screenshot} title="保存当前高清 3D 效果图 PNG">效果图截图</button>
-        <button onClick={() => { useStore.getState().cancelInteraction(); prefs.set(prefs.focusMode && prefs.focusView === '3d' ? { focusMode: false, focusView: null } : { focusMode: true, focusView: '3d' }); }}>
-          {prefs.focusMode && prefs.focusView === '3d' ? '还原三维' : '最大化三维'}
-        </button>
-        <button disabled={!selectedItems.length} onClick={() => showFrame(frameItems(project, selectedItems))}>聚焦选中</button>
-        <button disabled={!area} onClick={() => { if (area) showFrame(framePoints(area.outline, Math.max(2800, ...project.items.map(i => i.h)), area.name)); }}>聚焦规划范围</button>
-        <button aria-pressed={picking} onClick={() => { if (picking) { setPicking(false); return; } setCloseup(false); setFrame(null); prefs.set({ camera: 'top' }); setReset(n => n + 1); setPicking(true); }}>{picking ? '取消框选' : '框选放大'}</button>
-        <button aria-label="三维放大" onClick={() => navigation.current?.zoom(0.8)}>放大 ＋</button>
-        <button aria-label="三维缩小" onClick={() => navigation.current?.zoom(1.25)}>缩小 －</button>
-        <button className={!focus && !frame ? 'active' : ''} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setReset(n => n + 1); }}>空间全景</button>
-        <button disabled={!item} className={focus ? 'active' : ''} onClick={() => { setFrame(null); setPicking(false); setCloseup(true); setReset(n => n + 1); }}>物体特写</button>
-        <button aria-pressed={style.showCeiling} onClick={() => updateStyle({ showCeiling: !style.showCeiling })}>{style.showCeiling ? '吊顶已开启' : '吊顶已关闭'}</button>
-        <button aria-pressed={moveMode} title="开启后可直接拖动物体；关闭后拖动旋转视角" onClick={() => { useStore.getState().cancelInteraction(); prefs.set({ move3D: !moveMode }); }}>{moveMode ? '移动已开启' : '移动已关闭'}</button>
-        <button aria-pressed={grid} title="三维网格" onClick={() => setGrid(v => !v)}>网格</button>
-        <button title="重置三维视角" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'oblique' }); setReset(n => n + 1); }}>复位</button>
-        <button aria-pressed={detail} onClick={() => setDetail(v => !v)}>{detail ? '精细画质' : '流畅画质'}</button>
-        {captureError && <span role="alert">{captureError}</span>}
-      </div></details>
-    </div>
     <div className={`scene-viewport scene-pan-${panMode}`}>
+      <div className={`scene-toolbar is-floating ${style.lightingPreset === 'evening' ? 'is-dark' : ''}`} role="toolbar" aria-label="三维视图控制">
+        <div className="scene-segment" role="group" aria-label="三维视角">
+          <button aria-pressed={prefs.camera === 'oblique' && !focus && !frame} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'oblique' }); setReset(n => n + 1); }}>鸟瞰</button>
+          <button aria-pressed={prefs.camera === 'eye-level' && eyeIndex === 3 && !focus && !frame} title="站在街面/商场通道直视门头招牌、落地橱窗与店门" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setEyeIndex(3); prefs.set({ camera: 'eye-level' }); setReset(n => n + 1); }}>门头外观</button>
+          <button aria-pressed={prefs.camera === 'eye-level' && eyeIndex !== 3 && !focus && !frame} title="1.6m 真实进店人视点，再次点击切换室内机位，可用 WASD 漫步" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setEyeIndex(i => (prefs.camera === 'eye-level' && i !== 3 ? (i + 1) % 3 : 0)); prefs.set({ camera: 'eye-level' }); setReset(n => n + 1); }}>
+            {prefs.camera === 'eye-level' && eyeIndex !== 3 ? `进店 · ${eyeViewNames[eyeIndex]}` : '人视点进店'}
+          </button>
+          <button aria-pressed={prefs.camera === 'top' && !focus && !frame} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'top' }); setReset(n => n + 1); }}>俯视</button>
+        </div>
+        <details className="scene-atmos-menu">
+          <summary title="切换光照与渲染氛围">{presetLabels[style.lightingPreset]}</summary>
+          <div className="scene-more-actions is-compact-menu" role="group" aria-label="渲染氛围" onClick={e => { const d = e.currentTarget.closest('details'); if (d) d.open = false; }}>
+            {(['daylight', 'warm-dining', 'evening', 'clay'] as LightingPreset[]).map(p => (
+              <button key={p} aria-pressed={style.lightingPreset === p} onClick={() => updateStyle({ lightingPreset: p })}>{presetLabels[p]}</button>
+            ))}
+          </div>
+        </details>
+        <button className="scene-pill-btn" aria-pressed={autoWallCutaway && !style.wallCutaway} title="鸟瞰旋转时自动降低挡住视线的近侧外墙，后侧墙保持全高" onClick={() => { if (style.wallCutaway) updateStyle({ wallCutaway: false }); setAutoWallCutaway(v => !v); }}>智能透视墙</button>
+        <details className="scene-more"><summary>更多</summary><div className="scene-more-actions">
+          <button aria-pressed={style.wallCutaway} title="将所有墙体降至半高便于俯瞰" onClick={() => updateStyle({ wallCutaway: !style.wallCutaway })}>全部半高墙</button>
+          <button aria-pressed={!style.showZoneTint3D} title="隐藏地面规划色块，呈现干净材质效果图" onClick={() => updateStyle({ showZoneTint3D: !style.showZoneTint3D })}>纯净地面</button>
+          <button onClick={screenshot} title="保存当前高清 3D 效果图 PNG">效果图截图</button>
+          <button onClick={() => { useStore.getState().cancelInteraction(); prefs.set(prefs.focusMode && prefs.focusView === '3d' ? { focusMode: false, focusView: null } : { focusMode: true, focusView: '3d' }); }}>
+            {prefs.focusMode && prefs.focusView === '3d' ? '还原三维' : '最大化三维'}
+          </button>
+          <button disabled={!selectedItems.length} onClick={() => showFrame(frameItems(project, selectedItems))}>聚焦选中</button>
+          <button disabled={!area} onClick={() => { if (area) showFrame(framePoints(area.outline, Math.max(2800, ...project.items.map(i => i.h)), area.name)); }}>聚焦规划范围</button>
+          <button aria-pressed={picking} onClick={() => { if (picking) { setPicking(false); return; } setCloseup(false); setFrame(null); prefs.set({ camera: 'top' }); setReset(n => n + 1); setPicking(true); }}>{picking ? '取消框选' : '框选放大'}</button>
+          <button aria-label="三维放大" onClick={() => navigation.current?.zoom(0.8)}>放大 ＋</button>
+          <button aria-label="三维缩小" onClick={() => navigation.current?.zoom(1.25)}>缩小 －</button>
+          <button className={!focus && !frame ? 'active' : ''} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setReset(n => n + 1); }}>空间全景</button>
+          <button disabled={!item} className={focus ? 'active' : ''} onClick={() => { setFrame(null); setPicking(false); setCloseup(true); setReset(n => n + 1); }}>物体特写</button>
+          <button aria-pressed={style.showCeiling} onClick={() => updateStyle({ showCeiling: !style.showCeiling })}>{style.showCeiling ? '吊顶已开启' : '吊顶已关闭'}</button>
+          <button aria-pressed={moveMode} title="开启后可直接拖动物体；关闭后拖动旋转视角" onClick={() => { useStore.getState().cancelInteraction(); prefs.set({ move3D: !moveMode }); }}>{moveMode ? '移动已开启' : '移动已关闭'}</button>
+          <button aria-pressed={grid} title="三维网格" onClick={() => setGrid(v => !v)}>网格</button>
+          <button title="重置三维视角" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'oblique' }); setReset(n => n + 1); }}>复位</button>
+          <button aria-pressed={detail} onClick={() => setDetail(v => !v)}>{detail ? '精细画质' : '流畅画质'}</button>
+          {captureError && <span role="alert">{captureError}</span>}
+        </div></details>
+      </div>
       <Canvas frameloop={active ? 'demand' : 'never'} shadows dpr={detail ? [1, 1.85] : 1} camera={{ position: [14, 12, 16], fov: 40 }} gl={{ localClippingEnabled: true, antialias: true, toneMapping: T.ACESFilmicToneMapping, toneMappingExposure: cfg.exposure }}>
         <SceneCapture capture={capture} />
         <CameraWallCutaway project={project} enabled={smartWallActive} onChange={setFrontWallKey} />
@@ -666,15 +684,15 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
           <meshStandardMaterial color={cfg.ground} roughness={0.94} />
         </mesh>
         {!focus && <><SiteFloor project={project} grid={grid} forceCeiling={prefs.camera === 'eye-level' && eyeIndex !== 3} /><SiteOverlay3D /></>}
-        {!focus && project.items.filter(i => i.kind === 'zone' && ids.includes(i.id) && isVisible(i, project)).map(i => <ZoneHighlight key={i.id} item={i} />)}
+        {!focus && !hideSelectionBox && project.items.filter(i => i.kind === 'zone' && ids.includes(i.id) && isVisible(i, project)).map(i => <ZoneHighlight key={i.id} item={i} />)}
         {[...groups].map(([spec, items]) => items.length >= 3
           ? <InstancedFurniture key={spec} spec={spec} items={items} handlers={handlers} faded={faded(items[0])} renderOptions={renderOptions} />
           : items.map(i => {
             const isFrontCut = smartWallActive && ((i.kind === 'wall' && frontWallIds.has(i.id)) || (!!i.wallId && frontWallIds.has(i.wallId)));
-            return <Furniture key={i.id} profile={profiles.get(i.id)} item={i} selected={ids.includes(i.id)} faded={faded(i)} handlers={handlers} renderOptions={isFrontCut ? cutawayRenderOptions : renderOptions} openings={i.kind === 'wall' ? project.items.filter(o => o.wallId === i.id) : undefined} />;
+            return <Furniture key={i.id} profile={profiles.get(i.id)} item={i} selected={!hideSelectionBox && ids.includes(i.id)} faded={faded(i)} handlers={handlers} renderOptions={isFrontCut ? cutawayRenderOptions : renderOptions} openings={i.kind === 'wall' ? project.items.filter(o => o.wallId === i.id) : undefined} />;
           })
         )}
-        {[...groups.values()].filter(items => items.length >= 3).flat().filter(i => ids.includes(i.id)).map(i => <group key={i.id} position={[(i.x + i.w / 2) / 1000, (i.sill ?? 0) / 1000, (i.y + i.d / 2) / 1000]} rotation={[0, -i.rotation * Math.PI / 180, 0]}><SelectionBox item={i} /></group>)}
+        {!hideSelectionBox && [...groups.values()].filter(items => items.length >= 3).flat().filter(i => ids.includes(i.id)).map(i => <group key={i.id} position={[(i.x + i.w / 2) / 1000, (i.sill ?? 0) / 1000, (i.y + i.d / 2) / 1000]} rotation={[0, -i.rotation * Math.PI / 180, 0]}><SelectionBox item={i} /></group>)}
         {focus && <ContactShadows key={[focus.id, focus.x, focus.y, focus.w, focus.d, focus.h, focus.rotation].join('-')} position={[(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000]} scale={Math.max(focus.w, focus.d) / 1000 * 2.5} far={focus.h / 1000 * 1.5} resolution={256} blur={2.5} opacity={0.4} frames={1} color="#3e453d" />}
         <CameraRig pan={pan} onPanChange={setPanMode} navigation={navigation} frame={frame} active={active} focus={inspectionFocus} reset={reset} dragging={dragging} picking={picking} pose={prefs.camera} eyeIndex={eyeIndex} />
       </Canvas>

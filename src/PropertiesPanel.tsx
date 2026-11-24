@@ -56,17 +56,18 @@ export default function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEdit
     </>}
     {multi.length > 1 ? <BatchProperties /> : item ? (
       <fieldset key={item.id} disabled={!!s.placement || !isEditable(item, project)}>
-        {!isAnnotation(item) && <label>名称<input disabled={!!wallSession} value={item.name} onChange={e => s.update(item.id, { name: e.target.value })} /></label>}
+        {!isAnnotation(item) && <label className="full-field">名称<input disabled={!!wallSession} value={item.name} onChange={e => s.update(item.id, { name: e.target.value })} /></label>}
         {item.kind === 'door' && <DoorControls items={[item]} />}
-        <WallClearanceFields item={item} />
         <fieldset className="object-detail-fields" disabled={!!wallSession}>
           {!item.measure && <RotationFields item={item} />}
           {isAnnotation(item) ? <AnnotationFields item={item} /> : isBuilding(item) ? <StructureFields item={item} /> : <>
-            {item.kind !== 'zone' && <>
-              <label>长度（mm）<NumberField value={item.w} min={1} onCommit={n => s.update(item.id, { w: n })} /></label>
-              <label>宽度（mm）<NumberField value={item.d} min={1} onCommit={n => s.update(item.id, { d: n })} /></label>
-              <label>高度（mm）<NumberField value={item.h} min={0} onCommit={n => s.update(item.id, { h: n })} /></label>
-            </>}
+            {item.kind !== 'zone' && (
+              <div className="full-field dim-triple">
+                <label>长 mm<NumberField value={item.w} min={1} onCommit={n => s.update(item.id, { w: n })} /></label>
+                <label>宽 mm<NumberField value={item.d} min={1} onCommit={n => s.update(item.id, { d: n })} /></label>
+                <label>高 mm<NumberField value={item.h} min={0} onCommit={n => s.update(item.id, { h: n })} /></label>
+              </div>
+            )}
             {supportsElevation && (
               <div className="full-field elevation-field">
                 <label>安装离地高度（mm）
@@ -84,8 +85,6 @@ export default function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEdit
               <label>区域宽度（mm）<NumberField value={item.d} min={1} onCommit={n => s.update(item.id, { d: Math.max(100, n) })} /></label>
               <p>区域面积：{(polygonArea(zoneCorners(item)) / 1e6).toFixed(2)} ㎡</p>
             </>}
-            <label>X 坐标（mm）<NumberField value={item.x} onCommit={n => s.update(item.id, { x: n })} /></label>
-            <label>Y 坐标（mm）<NumberField value={item.y} onCommit={n => s.update(item.id, { y: n })} /></label>
             <div className="full-field">
               <label>颜色与材质色调<input type="color" value={item.color} onChange={e => s.update(item.id, { color: e.target.value })} /></label>
               {item.kind !== 'zone' && (
@@ -96,16 +95,34 @@ export default function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEdit
                 </div>
               )}
             </div>
+            {isSiteObject(item) && <SiteObjectFields item={item} />}
+            {item.kind === 'zone' && <ZoneFields key={item.id} item={item} />}
           </>}
-          <EquipmentSpecification item={item} onSaved={onSavedSpec} />
-          <LayoutItemFields item={item} />
-          {isSiteObject(item) && <SiteObjectFields item={item} />}
-          {!isAnnotation(item) && <>
-            <ZoneFields key={item.id} item={item} />
-            {item.kind !== 'zone' && <p>外包占地：{(item.w * item.d / 1e6).toFixed(2)} ㎡</p>}
+          {(isAnnotation(item) || isBuilding(item) || item.kind === 'zone') && <>
+            <EquipmentSpecification item={item} onSaved={onSavedSpec} />
+            <LayoutItemFields item={item} />
+            {isBuilding(item) && <ZoneFields key={item.id} item={item} />}
           </>}
-          <button className="delete" onClick={() => { s.removeMany(multi.length ? multi : [item.id]); M([]); }}><Trash2 />删除选中对象</button>
         </fieldset>
+        {!isAnnotation(item) && !isBuilding(item) && item.kind !== 'zone' && (
+          <details className="props-advanced full-field" open={wallSession ? true : undefined}>
+            <summary>精确坐标与工程参数</summary>
+            <div className="props-advanced-body">
+              <div className="props-xy-row">
+                <label>X 坐标（mm）<NumberField disabled={!!wallSession} value={item.x} onCommit={n => s.update(item.id, { x: n })} /></label>
+                <label>Y 坐标（mm）<NumberField disabled={!!wallSession} value={item.y} onCommit={n => s.update(item.id, { y: n })} /></label>
+              </div>
+              <WallClearanceFields item={item} />
+              {!wallSession && <>
+                <ZoneFields key={item.id} item={item} />
+                <EquipmentSpecification item={item} onSaved={onSavedSpec} />
+                <LayoutItemFields item={item} />
+                <p className="props-footprint-note">外包占地：{(item.w * item.d / 1e6).toFixed(2)} ㎡</p>
+              </>}
+            </div>
+          </details>
+        )}
+        <button className="delete" disabled={!!wallSession} onClick={() => { s.removeMany(multi.length ? multi : [item.id]); M([]); }}><Trash2 />删除选中对象</button>
       </fieldset>
     ) : <SiteFields onEdit={onEditOutline} />}
   </aside>;
