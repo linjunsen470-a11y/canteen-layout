@@ -81,7 +81,7 @@ export default function App() {
   const png = () => plan.current?.exportPNG();
 
   const [takingGallery, setTakingGallery] = useState(false);
-  const capture = async () => {
+  async function withExportViews<T>(take: (plan: PlanHandle, scene: SceneHandle) => Promise<T>) {
     const current = useWorkspace.getState(), previous = { view: current.view, focusMode: current.focusMode, focusView: current.focusView };
     try {
       setTakingGallery(true);
@@ -91,11 +91,13 @@ export default function App() {
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 140))));
       if (!plan.current || !scene.current?.galleryReady()) throw Error('视图尚未就绪，请稍后重试');
-      const gallery = scene.current.captureGallery();
-      const image2D = await plan.current.capturePNG();
-      return { plan: image2D, scene: gallery.birdseye, gallery };
+      return await take(plan.current, scene.current);
     } finally { setTakingGallery(false); prefs.set(previous); }
-  };
+  }
+  const capture = () => withExportViews(async (flat, scene) => {
+    const gallery = { birdseye: scene.captureShot('birdseye'), interior: scene.captureShot('interior'), storefront: scene.captureShot('storefront') };
+    return { plan: await flat.capturePNG(), scene: gallery.birdseye, gallery };
+  });
 
   const addFrom = useCallback((c: CatalogItem, point?: { x: number; y: number }) => {
     const state = useStore.getState(), proj = state.project, item = proj.items.find(i => i.id === state.selected), p = useWorkspace.getState(), planning = usePlanning.getState(), M = state.selectMany;
@@ -157,18 +159,20 @@ export default function App() {
       <ShopWizardDialog trigger={wizardTrigger} notify={notify} />
       <ProjectLibrary />
       <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
-            <div className="tabs" aria-label="画布视图">
-              {(['2d', 'split', '3d'] as const).map(v => (
-                <button key={v} aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => V(v)}>{v === '2d' ? '2D 平面' : v === '3d' ? '3D 效果图' : '2D + 3D 分屏'}</button>
-              ))}
-            </div>
+      <div className="tabs" aria-label="画布视图">
+        {(['2d', 'split', '3d'] as const).map(v => (
+          <button key={v} aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => V(v)}>{v === '2d' ? '2D 平面' : v === '3d' ? '3D 效果图' : '2D + 3D 分屏'}</button>
+        ))}
+      </div>
       <div className="actions" inert={!sessionReady || sessionBusy}>
         <ConceptPlannerDialog notify={notify} openSignal={conceptSignal} />
         <ShopInsightsDialog openSignal={insightsSignal} insights={insights} issues={issues} criticalCount={criticalCount} />
         <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
-        <ImageExport name={project.name} capture={capture} hasCurrent={view !== '2d'}
+        <ImageExport name={project.name} capture={() => withExportViews(async (flat, scene) => ({
+          plan: await flat.capturePNG(), bird: scene.captureShot('birdseye'), inside: scene.captureShot('interior')
+        }))} hasCurrent={view !== '2d'}
           current={() => { if (!scene.current) throw Error('三维视图尚未就绪'); return scene.current.capturePNG(); }}
           flat={async () => {
             const previous = useWorkspace.getState();

@@ -34,6 +34,10 @@ export async function testQuickExport(browser, url) {
     await button('2D 平面').click();
     await button('导出图片').click();
     await dialog.getByAltText('平面图预览').waitFor();
+    await page.evaluate(() => Object.defineProperty(navigator.clipboard,'write',{value:async () => { throw new DOMException('Denied','NotAllowedError'); }}));
+    await button('复制图片').click();
+    await dialog.getByText('当前浏览器未允许复制图片，可下载 PNG').waitFor();
+    assert.ok(await dialog.getByRole('link',{name:'下载 PNG'}).isVisible());
     await dialog.getByRole('button',{name:'关闭'}).click();
     assert.equal(await button('2D 平面').getAttribute('aria-pressed'),'true');
     console.log('PASS 空白铺位、预设修改、直出分屏、三视图合图、单图切换、PNG 下载与剪贴板');

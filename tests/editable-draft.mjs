@@ -32,6 +32,11 @@ export async function testEditableDraft(browser, url) {
     await point(2400,0);
     await button('柱').click();
     await point(4500,3500);
+    await page.getByTitle('移除入口门',{exact:true}).click();
+    await page.getByTitle('移除柱',{exact:true}).waitFor();
+    assert.equal(await page.getByTitle('移除入口门',{exact:true}).count(),0);
+    await button('退回一步').click();
+    await page.getByTitle('移除入口门',{exact:true}).waitFor();
     await button('生成基础布局').click();
     await page.locator('.basic-draft-bar').waitFor();
     assert.equal(await button('2D + 3D 分屏').getAttribute('aria-pressed'),'true');

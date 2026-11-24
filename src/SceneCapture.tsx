@@ -3,6 +3,7 @@ import { Object3D, PerspectiveCamera, Vector2, Vector3 } from 'three';
 import { useStore } from './store';
 import { useThree } from '@react-three/fiber';
 import { frameDistance, frameShop } from './sceneFraming';
+import { computeFrontFacingWallIds } from './wallVisibility3D';
 import { surveyWall } from './interiorSurvey';
 import { siteOutline, sitePlacement } from './site';
 import { Project } from './model';
@@ -16,7 +17,7 @@ export type SceneGalleryShots = {
 export type SceneCaptureAPI = {
   galleryReady: () => boolean;
   captureCurrent: () => string;
-  captureGallery: (project: Project) => SceneGalleryShots;
+  captureShot: (project: Project, kind: keyof SceneGalleryShots) => string;
 };
 
 // New drafts may have an entrance on any face, including an inside corner.
@@ -128,16 +129,16 @@ export function computeBirdseyeShot(project: Project) {
 export default function SceneCapture({ capture }: { capture: RefObject<SceneCaptureAPI | null> }) {
   const { gl, scene, camera, invalidate } = useThree();
   useEffect(() => {
-    const renderShot = (shot: PerspectiveCamera, targetWidth = 1600, targetHeight = 1000) => {
+    const renderShot = (shot: PerspectiveCamera, targetWidth = 1600, targetHeight = 1000, hiddenNames?: Set<string>) => {
       const u = useStore.getState().project.underlay;
       if (u && !u.hidden && scene.getObjectByName('site-floor') && !scene.getObjectByName(`site-underlay:${u.assetId}`)) {
         throw Error('底图未加载完成或资产缺失，请先恢复底图后截图');
       }
-      const highlights: Object3D[] = [];
+      const hidden: Object3D[] = [];
       scene.updateMatrixWorld(true);
       scene.traverse(o => {
-        if (o.name === 'selection-highlight' && o.visible) {
-          highlights.push(o);
+        if (o.visible && (o.name === 'selection-highlight' || hiddenNames?.has(o.name))) {
+          hidden.push(o);
           o.visible = false;
         }
       });
@@ -153,7 +154,7 @@ export default function SceneCapture({ capture }: { capture: RefObject<SceneCapt
       } finally {
         gl.setPixelRatio(ratio);
         gl.setSize(size.x, size.y, false);
-        highlights.forEach(o => { o.visible = true; });
+        hidden.forEach(o => { o.visible = true; });
         invalidate();
       }
     };
@@ -168,18 +169,20 @@ export default function SceneCapture({ capture }: { capture: RefObject<SceneCapt
         const shot = camera.clone() as PerspectiveCamera;
         return renderShot(shot, width, height);
       },
-      captureGallery: (project: Project) => {
-        const makeCam = (cfg: { pos: Vector3; target: Vector3; fov: number }) => {
-          const cam = new PerspectiveCamera(cfg.fov, 1440 / 900, 0.05, 500);
-          cam.position.copy(cfg.pos);
-          cam.lookAt(cfg.target);
-          return cam;
-        };
-        return {
-          birdseye: renderShot(makeCam(computeBirdseyeShot(project)), 1440, 900),
-          storefront: renderShot(makeCam(computeStorefrontShot(project)), 1440, 900),
-          interior: renderShot(makeCam(computeInteriorShot(project)), 1440, 900),
-        };
+      captureShot: (project, kind) => {
+        const shot = { birdseye: computeBirdseyeShot, storefront: computeStorefrontShot, interior: computeInteriorShot }[kind](project);
+        const cam = new PerspectiveCamera(shot.fov, 1440 / 900, .05, 500);
+        cam.position.copy(shot.pos);
+        cam.lookAt(shot.target);
+        const hidden = new Set<string>();
+        if (kind === 'birdseye') {
+          hidden.add('ceiling-assembly');
+          const near = computeFrontFacingWallIds(project, shot.pos);
+          for (const item of project.items) {
+            if (near.has(item.id) || (item.wallId && near.has(item.wallId))) hidden.add('item:' + item.id);
+          }
+        }
+        return renderShot(cam, 1440, 900, hidden);
       },
     };
     return () => { capture.current = null; };

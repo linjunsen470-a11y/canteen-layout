@@ -75,7 +75,7 @@ export default function SiteFloor({ project, grid, forceCeiling = false }: { pro
     </lineSegments>
     {/* One-sided downward ceiling with subtle architectural wood/plaster ceiling beams in eye-level views */}
     {showCeiling && (
-      <group>
+      <group name="ceiling-assembly">
         <mesh name="site-ceiling" geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, ceilingY, 0]}>
           <meshStandardMaterial
             color={isEvening ? '#332f2b' : '#f4efe7'}

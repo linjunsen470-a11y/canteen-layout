@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
 import { ImageDown } from 'lucide-react';
-import type { PresentationCaptureResult } from './PresentationDialog';
 
 const formats = { sheet: '平面与立体合图', plan: '平面图', bird: '鸟瞰图', inside: '进店视角', current: '当前三维视角' };
 type Format = keyof typeof formats;
@@ -34,7 +33,7 @@ async function makeSheet(plan: string, bird: string, inside: string) {
 
 type Props = {
   name: string;
-  capture: () => Promise<PresentationCaptureResult>;
+  capture: () => Promise<{ plan: string; bird: string; inside: string }>;
   flat: () => Promise<string>;
   current: () => string;
   hasCurrent: boolean;
@@ -57,11 +56,8 @@ export default function ImageExport({ name, capture, flat, current, hasCurrent }
         else if (next === 'current') images.current = current();
         else {
           const result = await capture();
-          if (!result.gallery) throw Error('三维视图尚未就绪');
-          images.plan = result.plan;
-          images.bird = result.gallery.birdseye;
-          images.inside = result.gallery.interior;
-          images.sheet = await makeSheet(result.plan, images.bird, images.inside);
+          Object.assign(images, result);
+          images.sheet = await makeSheet(result.plan, result.bird, result.inside);
         }
       }
       setSrc(images[next]!);
@@ -78,9 +74,6 @@ export default function ImageExport({ name, capture, flat, current, hasCurrent }
   return <>
     <button className="primary" onClick={() => {
       cache.current = {};
-      if (hasCurrent) {
-        try { cache.current.current = current(); } catch { /* Allow retry once the scene is ready. */ }
-      }
       dialog.current!.showModal();
       void select(hasCurrent ? 'sheet' : 'plan');
     }}><ImageDown/>导出图片</button>
