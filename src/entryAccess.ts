@@ -1,18 +1,20 @@
 import type { Item, Project } from './model';
 import { pointInSite } from './site';
-import { bounds } from './spatial';
+import { bounds, footprint, inPolygon } from './spatial';
 
 // Visit adjoining 200 mm cells with space for a 500 mm wide square.
 // Bounding rotated furniture conservatively is appropriate for a first draft.
-export function reachableFromEntry(project: Project) {
+export function reachableFromEntry(project: Project, closedZones: Item[] = []) {
   const entrances = project.items.filter(i => i.pointType === 'entrance' && !i.hidden);
   if (!entrances.length) return;
   const step = 200, halfWidth = 250, cols = Math.ceil(project.width / step), rows = Math.ceil(project.height / step);
   const cells = new Uint8Array(cols * rows);
   const queue: number[] = [];
   const interior = project.survey ? { ...project, outline: project.survey.corners } : project;
+  const excluded = closedZones.map(footprint);
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-    if (!pointInSite(interior, { x: (x + .5) * step, y: (y + .5) * step })) cells[y * cols + x] = 1;
+    const p = { x: (x + .5) * step, y: (y + .5) * step };
+    if (!pointInSite(interior, p) || excluded.some(zone => inPolygon(p, zone))) cells[y * cols + x] = 1;
   }
   const boxes = new Map<string, ReturnType<typeof bounds>>();
   const obstacles = project.items.filter(i => !i.hidden && !['door','window','zone','utility','lighting','dimension','leader','text'].includes(i.kind) && i.model !== 'hood' && (i.elevation ?? 0) < 1900);

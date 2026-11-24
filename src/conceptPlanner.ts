@@ -139,6 +139,7 @@ export type ConceptEstimate = {
 };
 
 export type ConceptPlanResult = {
+  kitchenZoneIds: string[];
   project: Project;
   estimate: ConceptEstimate;
 };
@@ -557,6 +558,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     const kName = options.businessType === 'cafe' ? '水吧操作与备餐区' : '后厨与明档区';
     zoneItems.push(...makeZoneItemsFromRegion(interiorPoly, kitchenStrips, kitchenHp, kName, '#f7ece0'));
   }
+  const kitchenZoneIds = zoneItems.map(i => i.id);
   if (diningStrips.length > 0) {
     zoneItems.push(...makeZoneItemsFromRegion(interiorPoly, diningStrips, diningHp, '前厅就餐区', '#e6f0e6'));
   }
@@ -926,6 +928,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
 
   return {
     project: candidate,
+    kitchenZoneIds,
     estimate: {
       totalAreaSqm,
       kitchenAreaSqm,

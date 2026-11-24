@@ -4,7 +4,7 @@ export async function testBasicLayout(load, loadScene) {
   const { sketchShell, placeSketchFixture } = await load('sketchGeometry');
   const { generateBasicLayout } = await load('basicLayout');
   const { parseProject } = await load('projectIO');
-  const { contains, footprint } = await load('spatial');
+  const { contains, footprint, inPolygon } = await load('spatial');
   const { checkSpace } = await load('spaceChecks');
   const { reachableFromEntry } = await load('entryAccess');
   const shape = points => sketchShell(points.map(([x,y]) => ({ x:x*1000, y:y*1000 })));
@@ -40,6 +40,10 @@ export async function testBasicLayout(load, loadScene) {
   const inside = computeInteriorShot(placed), outside = computeStorefrontShot(placed);
   assert.ok(inside.pos.z < 1 && inside.target.z > inside.pos.z, 'north-side entrance looks inward');
   assert.ok(outside.pos.z < 0 && outside.target.z > outside.pos.z, 'storefront follows the marked entrance');
+  const kitchen = placed.items.filter(i => i.kind === 'zone' && i.name.startsWith('后厨'));
+  const entry = placed.items.find(i => i.pointType === 'entrance');
+  assert.ok(kitchen.every(z => !inPolygon({x:entry.x+entry.w/2,y:entry.y+entry.d/2}, footprint(z))));
+  assert.ok(placed.items.filter(i => i.kind === 'chair').every(reachableFromEntry(placed,kitchen)));
   const reachable = reachableFromEntry(placed);
   assert.ok(placed.items.filter(i => i.kind === 'chair' || i.model === 'cashier').every(reachable));
   let rotated = l;
