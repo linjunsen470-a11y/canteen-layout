@@ -48,27 +48,22 @@ export default memo(function EquipmentLibrary({
   const quickChips = ['全部分类', '成套组合', '餐桌椅', '餐饮服务', '热厨设备', '照明灯具', '软装与门头', '空间构件', '我的物件'];
 
   return <aside className="library" hidden={!libraryOpen}>
-    <div className="panel-heading">
-      <div><h3>{leftTab === 'objects' ? '场景对象' : '开店素材库'}</h3></div>
-      <button title="收起设备库" aria-label="收起设备库" onClick={() => prefs.set({ libraryOpen: false })}><PanelLeftClose /></button>
-    </div>
-    <div className="sidebar-tabs" role="tablist" aria-label="左侧面板">
-      <button role="tab" aria-selected={leftTab === 'catalog'} onClick={() => prefs.set({ leftTab: 'catalog' })}>设备与素材</button>
-      <button role="tab" aria-selected={leftTab === 'objects'} onClick={() => prefs.set({ leftTab: 'objects' })}>对象列表</button>
+    <div className="library-top-row">
+      <div className="sidebar-tabs" role="tablist" aria-label="左侧面板">
+        <button role="tab" aria-selected={leftTab === 'catalog'} onClick={() => prefs.set({ leftTab: 'catalog' })}>设备与素材</button>
+        <button role="tab" aria-selected={leftTab === 'objects'} onClick={() => prefs.set({ leftTab: 'objects' })}>对象列表</button>
+      </div>
+      <button className="icon-close-btn" title="收起设备库" aria-label="收起设备库" onClick={() => prefs.set({ libraryOpen: false })}><PanelLeftClose /></button>
     </div>
     {leftTab === 'objects' ? <ObjectList /> : <>
       <label className="catalog-search">
         <Search />
         <input aria-label="搜索设备" placeholder={`搜索桌椅、厨具、灯具…（共 ${totalCount} 项）`} value={search} onChange={e => setSearch(e.target.value)} />
       </label>
-      <div className="category-chips" role="group" aria-label="快捷分类">
+      <div className="category-chips is-scroll" role="group" aria-label="快捷分类">
         {quickChips.map(chip => (
           <button key={chip} type="button" className={category === chip ? 'is-active' : ''} onClick={() => setCategory(chip)}>{chip === '全部分类' ? '全部' : chip}</button>
         ))}
-      </div>
-      <div className="library-actions is-compact">
-        <CustomItemDialog onSaved={() => { setSearch(''); setCategory('我的物件'); }} />
-        <button aria-pressed={managing} onClick={() => setManaging(v => !v)}>{managing ? '完成管理' : '管理规格'}</button>
       </div>
 
       {matchingCombos.length > 0 && (
@@ -111,6 +106,10 @@ export default memo(function EquipmentLibrary({
       ))}
       {customState.error && <div role="alert"><p>{customState.error}</p><button onClick={reloadCustomCatalog}>重新读取设备库</button></div>}
       {totalCount === 0 && <p className="empty-state">没有匹配的设备或组合</p>}
+      <div className="library-actions is-compact is-footer">
+        <CustomItemDialog onSaved={() => { setSearch(''); setCategory('我的物件'); }} />
+        <button aria-pressed={managing} onClick={() => setManaging(v => !v)}>{managing ? '完成管理' : '管理规格'}</button>
+      </div>
     </>}
   </aside>;
 });

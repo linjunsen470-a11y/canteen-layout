@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, DoorOpen, FlipHorizontal2, RotateCcw, RotateCw, Sparkles, Sun, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Compass, Copy, DoorOpen, FlipHorizontal2, LayoutGrid, RotateCcw, RotateCw, Ruler, Sparkles, Sun, Trash2 } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
 import { useWallPlacement } from './wallPlacementState';
@@ -9,7 +9,7 @@ import { duplicateItems, isAttachedOpening, openingSlot } from './structure';
 import { bounds } from './spatial';
 import { checkSpace } from './spaceChecks';
 import { planningEditable } from './planning';
-import { catalog, resolveStyle } from './model';
+import { catalog, Item, resolveStyle } from './model';
 import { buildPerimeterWalls } from './shopTemplates';
 import { decorThemePresets } from './conceptPlanner';
 import { surveyWall } from './interiorSurvey';
@@ -32,6 +32,42 @@ export default function PlanSelectionBar({
     ['table', 'chair', 'counter', 'stove', 'sink', 'fridge', 'shelf'].includes(i.kind)
   );
 
+  const placeBoundedOpeningOnWall = (proj: typeof project, wall: Item, kind: 'door' | 'window') => {
+    const datum = surveyWall(proj, wall);
+    const slotBounds = datum ? { min: datum.minOffset, maxEnd: datum.maxEnd } : undefined;
+    const spanMin = slotBounds?.min ?? 50;
+    const spanEnd = slotBounds?.maxEnd ?? wall.w - 50;
+    const usable = spanEnd - spanMin;
+    const spec = kind === 'door'
+      ? (catalog.find(c => c.model === 'glass-double-door') ?? catalog.find(c => c.kind === 'door')!)
+      : (catalog.find(c => c.model === 'storefront-window') ?? catalog.find(c => c.kind === 'window')!);
+    const minW = kind === 'door' ? 900 : 800;
+    const w = Math.min(spec.w, Math.max(minW, Math.round(usable * (kind === 'door' ? 0.28 : 0.35))));
+    const h = kind === 'door'
+      ? Math.min(spec.h, Math.max(1900, wall.h - 200))
+      : Math.min(spec.h, Math.max(900, wall.h - 400));
+    const candidate: Item = {
+      id: crypto.randomUUID(),
+      kind,
+      model: spec.model,
+      name: spec.name,
+      w,
+      d: wall.d,
+      h,
+      x: 0,
+      y: 0,
+      rotation: wall.rotation,
+      wallId: wall.id,
+      offset: spanMin,
+      sill: kind === 'door' ? 0 : (spec.model === 'storefront-window' ? 150 : 900),
+      color: spec.color,
+      ...(kind === 'door' ? { flipped: true } : {}),
+    };
+    const offset = openingSlot(wall, candidate, proj.items, Math.round(spanMin + (usable - w) / 2), slotBounds);
+    if (offset === undefined) return null;
+    return { ...candidate, offset };
+  };
+
   // 1. Empty / bare shell fast-build starter pill (auto-disappears once furniture is placed)
   if (!items.length) {
     if (hasFurniture) return null;
@@ -52,33 +88,8 @@ export default function PlanSelectionBar({
           if (Math.abs(by - ay) > 400) return by - ay;
           return b.w - a.w;
         })[0];
-        const spec = catalog.find(c => c.model === 'glass-double-door') ?? catalog.find(c => c.kind === 'door')!;
-        const doorW = Math.min(spec.w, Math.max(900, Math.round(frontWall.w * 0.25)));
-        const doorH = Math.min(spec.h, Math.max(1900, frontWall.h - 200));
-        const candidate = {
-          id: crypto.randomUUID(),
-          kind: 'door' as const,
-          model: spec.model,
-          name: spec.name,
-          w: doorW,
-          d: frontWall.d,
-          h: doorH,
-          x: 0,
-          y: 0,
-          rotation: frontWall.rotation,
-          wallId: frontWall.id,
-          offset: 50,
-          sill: 0,
-          color: spec.color,
-          flipped: true,
-        };
-        // Respect surveyed inner-corner bounds so the door never lands outside the measured interior span.
-        const datum = surveyWall(proj, frontWall);
-        const bounds = datum ? { min: datum.minOffset, maxEnd: datum.maxEnd } : undefined;
-        const spanMin = bounds?.min ?? 50, spanEnd = bounds?.maxEnd ?? frontWall.w - 50;
-        const offset = openingSlot(frontWall, candidate, proj.items, Math.round(spanMin + (spanEnd - spanMin - doorW) / 2), bounds);
-        if (offset === undefined) { notify('当前外墙没有足够长度放置大门，请手动选墙添加'); return; }
-        const placedDoor = { ...candidate, offset };
+        const placedDoor = placeBoundedOpeningOnWall(proj, frontWall, 'door');
+        if (!placedDoor) { notify('当前外墙没有足够长度放置大门，请手动选墙添加'); return; }
         const nextItems = [...proj.items, placedDoor];
         if (useStore.getState().commit({ ...proj, items: nextItems })) {
           useStore.getState().selectMany([placedDoor.id]);
@@ -110,10 +121,59 @@ export default function PlanSelectionBar({
     );
   }
 
-  // 2. Contextual Figma-style selection quick actions
+  // 2. Zone quick bar: 1-click 3D fly-to + edit vertices
+  if (items.length === 1 && items[0].kind === 'zone') {
+    const zone = items[0];
+    const flyToZone = () => {
+      const ws = useWorkspace.getState();
+      if (ws.view === '2d') ws.set({ view: 'split', focusMode: false });
+      s.locate(zone.id);
+    };
+    return (
+      <div className="plan-quick-bar" data-ui="true" role="toolbar" aria-label="功能区快捷操作">
+        <span className="quick-bar-name">{zone.name}</span>
+        <button type="button" className="is-accent" onClick={flyToZone}><Compass />3D 飞入此区</button>
+        {isEditable(zone, project) && (
+          <button type="button" onClick={() => s.setTool('zone-edit')}><LayoutGrid />调整顶点</button>
+        )}
+        {isEditable(zone, project) && (
+          <button type="button" className="is-danger" title="删除分区" onClick={() => { s.removeMany([zone.id]); s.selectMany([]); }}><Trash2 />删除</button>
+        )}
+      </div>
+    );
+  }
+
+  // 3. Single-wall direct quick actions: add door / window / surveyed corner tools right on the canvas
+  if (items.length === 1 && items[0].kind === 'wall' && isEditable(items[0], project)) {
+    const wall = items[0];
+    const datum = surveyWall(project, wall);
+    const spanM = ((datum ? datum.end - datum.start : wall.w) / 1000).toFixed(2);
+    const addOnWall = (kind: 'door' | 'window') => {
+      try {
+        const placed = placeBoundedOpeningOnWall(project, wall, kind);
+        if (!placed) { notify(`「${wall.name}」剩余净长不足以放置${kind === 'door' ? '门' : '窗'}，可在右侧精确量距放置`); return; }
+        if (s.commit({ ...project, items: [...project.items, placed] })) {
+          s.selectMany([placed.id]);
+          notify(`已在「${wall.name}」添加${placed.name}（拖动可沿墙微调）`);
+        }
+      } catch (e) {
+        notify((e as Error).message);
+      }
+    };
+    return (
+      <div className="plan-quick-bar" data-ui="true" role="toolbar" aria-label="墙体快捷操作">
+        <span className="quick-bar-name">{wall.name} · {spanM}m</span>
+        <button type="button" onClick={() => addOnWall('door')}><DoorOpen />加门</button>
+        <button type="button" onClick={() => addOnWall('window')}><LayoutGrid />加窗</button>
+        <button type="button" onClick={() => useWorkspace.getState().set({ propsOpen: true, focusMode: false })}><Ruler />量距放柱/水电</button>
+        <button type="button" className="is-danger" title="删除墙体" onClick={() => { s.removeMany([wall.id]); s.selectMany([]); }}><Trash2 />删除</button>
+      </div>
+    );
+  }
+
+  // 4. Contextual Figma-style selection quick actions for furniture / openings / groups
   if (items.some(i => i.kind === 'zone' || i.measure || !isEditable(i, project))) return null;
-  const isSingleWall = items.length === 1 && (items[0].kind === 'wall' || items[0].kind === 'partition');
-  if (isSingleWall) return null;
+  if (items.length === 1 && items[0].kind === 'partition') return null;
 
   const hasDoor = items.some(i => i.kind === 'door');
   const attachedOnly = items.every(isAttachedOpening);

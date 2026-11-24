@@ -339,7 +339,31 @@ try {
   assert.equal(await smartWallBtn.getAttribute('aria-pressed'), 'false');
   await smartWallBtn.click();
   assert.equal(await smartWallBtn.getAttribute('aria-pressed'), 'true');
-  console.log('PASS 试排应用与另存后刷新、滑杆提交、仅导出显式入口、墙角放柱、2D 快捷条与 3D 智能透视墙');
+
+  // Verify P1 canvas-first studio flows: wall quick-bar add-door, progressive inspector, 3-step switcher, light click-through, footer KPI pill
+  await page.locator('.object-select', { hasText: '外墙 3' }).click();
+  await page.locator('.plan-quick-bar').getByRole('button', { name: '加门', exact: true }).click();
+  assert.match(await page.locator('.props .panel-heading h3').innerText(), /对象属性/);
+  await button('智能分区估算').click();
+  await conceptDialog.waitFor({ state: 'visible' });
+  await conceptDialog.getByRole('button', { name: '应用到当前铺位（可撤销）', exact: true }).click();
+  await conceptDialog.waitFor({ state: 'hidden' });
+  await button('2D 平面').click();
+  const underLight = await page.evaluate(() => {
+    const lights = [...document.querySelectorAll('[data-item-id]')].filter(el => el.querySelector('ellipse[fill="transparent"]'));
+    const r = lights[0]?.getBoundingClientRect();
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+  });
+  assert.ok(underLight, 'concept layout should include overhead table lights');
+  await page.mouse.click(underLight.x, underLight.y);
+  assert.doesNotMatch(await page.locator('.quick-bar-name').innerText(), /吊灯|射灯/, 'clicking center of table under a pendant light must select the table, not the light');
+  await page.locator('.stage-stepper button').nth(2).click();
+  assert.equal(await page.locator('.stage-stepper button').nth(2).getAttribute('aria-pressed'), 'true');
+  assert.equal(await button('3D 效果图').getAttribute('aria-pressed'), 'true');
+  await page.locator('.footer-check-pill').click();
+  await dialog.waitFor({ state: 'visible' });
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  console.log('PASS 试排应用、墙体快捷加门、吊灯点击穿透、三步导航、3D 悬浮胶囊与底部开店指标条');
 
   assert.deepEqual(errors, []);
   console.log('PASS 实测建铺、底图两点校准、智能分区估算与同壳对比、示范案例参考、组合预览与拖放、整组四向复制与图文导出');

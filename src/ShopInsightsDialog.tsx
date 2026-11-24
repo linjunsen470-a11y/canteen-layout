@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Lightbulb } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
@@ -10,7 +10,7 @@ import { download } from './projectIO';
 
 const fmtYuan = (n: number) => n >= 10000 ? `¥${(n / 10000).toFixed(1)}万` : `¥${n.toLocaleString()}`;
 
-export default function ShopInsightsDialog() {
+export default function ShopInsightsDialog({ openSignal }: { openSignal?: number }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const project = useStore(s => s.project);
   const commit = useStore(s => s.commit);
@@ -22,6 +22,10 @@ export default function ShopInsightsDialog() {
     setIssues(checkSpace(project, activeId).sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')));
     dialog.current?.showModal();
   };
+
+  useEffect(() => {
+    if (openSignal && openSignal > 0) open();
+  }, [openSignal]);
 
   const exportCSV = () => {
     const csv = bomCSV(project, insights);

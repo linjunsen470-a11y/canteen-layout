@@ -416,11 +416,22 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     case 'partition':
     case 'glass-partition':
     case 'slat-partition': {
-      for(const x of [-.48,.48])box(x,.5,0,.04,1,1,dark,true);
-      box(0,.98,0,.96,.04,1,dark);box(0,.035,0,.96,.07,1,dark);
-      if(type==='glass-partition')box(0,.51,0,.92,.90,.12,glass);
-      else if(type==='slat-partition'){for(let n=0;n<15;n++)box(-.435+n*.062,.51,0,.035,.90,.65,wood,true)}
-      else box(0,.51,0,.92,.90,.60,paint,true);
+      if (type === 'partition' && item.h <= 1450) {
+        // Hospitality open-kitchen dwarf wall: recessed kickplate, matte body, cantilevered oak ledge, tempered glass guard
+        const oakCap = material('#b98c58', 0, .42); if (!isClay) oakCap.map = woodGrainTexture();
+        box(0, .035, 0, .98, .07, .82, dark);
+        box(0, .385, 0, .99, .63, .92, paint, true);
+        box(0, .725, 0, 1, .05, 1.18, oakCap, true);
+        for (const x of [-.47, 0, .47]) box(x, .86, 0, .018, .26, .16, brass);
+        box(0, .86, 0, .94, .23, .08, glass);
+        box(0, .985, 0, .96, .018, .14, brass);
+        break;
+      }
+      for(const x of [-.485,.485])box(x,.5,0,.03,1,1,dark,true);
+      box(0,.985,0,.96,.03,1,dark);box(0,.03,0,.96,.06,1,dark);
+      if(type==='glass-partition')box(0,.51,0,.93,.91,.12,glass);
+      else if(type==='slat-partition'){for(let n=0;n<15;n++)box(-.435+n*.062,.51,0,.035,.91,.65,wood,true)}
+      else box(0,.51,0,.93,.91,.66,paint,true);
       break;
     }
     case 'bar-table': feet(.94,.43,.045,dark);box(0,.97,0,1,.06,1,wood,true);box(0,.3,0,.88,.035,.045,brass);break;
