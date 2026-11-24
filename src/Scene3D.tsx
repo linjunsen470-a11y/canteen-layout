@@ -60,6 +60,7 @@ const Furniture = memo(function Furniture({
   const host = useRef<T.Group>(null);
   const invalidate = useThree(s => s.invalidate);
   const variant = modelOf(item);
+  const signName = variant === 'shop-sign' ? item.name : '';
   const openingKey = JSON.stringify(openings.map(o => [o.offset, o.sill, o.w, o.h]));
   useEffect(() => {
     const model = createFurniture(item, openings, profile, renderOptions);
@@ -68,7 +69,7 @@ const Furniture = memo(function Furniture({
     group.add(model);
     invalidate();
     return () => { group.remove(model); disposeFurniture(model); };
-  }, [variant, item.w, item.d, item.h, item.color, item.flipped, item.hingeRight, item.pointType, item.verification, openingKey, faded, JSON.stringify(profile), renderOptions.wallMaterial, renderOptions.cutaway, renderOptions.lightingPreset]);
+  }, [variant, signName, item.w, item.d, item.h, item.color, item.flipped, item.hingeRight, item.pointType, item.verification, openingKey, faded, JSON.stringify(profile), renderOptions.wallMaterial, renderOptions.cutaway, renderOptions.lightingPreset]);
   return <group name={`item:${item.id}`} position={[(item.x + item.w / 2) / 1000, (item.sill ?? 0) / 1000, (item.y + item.d / 2) / 1000]} rotation={[0, -item.rotation * Math.PI / 180, 0]} ref={host} onDoubleClick={e => handlers.onDoubleClick(e, item)} onPointerDown={e => handlers.onPointerDown(e, item)} onPointerMove={handlers.onPointerMove} onPointerUp={handlers.onPointerUp}>{selected && <SelectionBox item={item} />}</group>;
 });
 
@@ -147,10 +148,10 @@ function InteriorLights({ project, preset }: { project: Project; preset: Lightin
   const lights = useMemo(() => {
     if (preset === 'clay') return [];
     const fixtures = project.items.filter(i => i.kind === 'lighting' && isVisible(i, project));
-    const maxLights = 10;
+    const maxLights = 4;
     const step = Math.max(1, Math.ceil(fixtures.length / maxLights));
     const sampled = fixtures.filter((_, idx) => idx % step === 0).slice(0, maxLights);
-    const boost = preset === 'evening' ? 4.4 : preset === 'warm-dining' ? 2.1 : 0.7;
+    const boost = preset === 'evening' ? 5.0 : preset === 'warm-dining' ? 2.4 : 0.75;
     if (sampled.length) {
       return sampled.map(i => {
         const m = modelOf(i);
@@ -162,7 +163,7 @@ function InteriorLights({ project, preset }: { project: Project; preset: Lightin
           pos: [(i.x + i.w / 2) / 1000, y, (i.y + i.d / 2) / 1000] as [number, number, number],
           color: cool ? '#e8f5ff' : '#ffcb88',
           intensity,
-          distance: m === 'chandelier' ? 9.5 : 6.8,
+          distance: m === 'chandelier' ? 11 : 8.5,
         };
       });
     }
@@ -391,7 +392,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
   const prefs = useWorkspace(), moveMode = prefs.move3D, planning = usePlanning();
   const faded = (i: Item) => planning.dim && !insidePlanning(i, project);
   const navigation = useRef<SceneNavigation | null>(null);
-  const [frame, setFrame] = useState<SceneFrame | null>(null), [picking, setPicking] = useState(false), [detail, setDetail] = useState(true);
+  const [frame, setFrame] = useState<SceneFrame | null>(null), [picking, setPicking] = useState(false), [detail, setDetail] = useState(false);
   const [closeup, setCloseup] = useState(false), [grid, setGrid] = useState(false), [reset, setReset] = useState(0);
   const [eyeIndex, setEyeIndex] = useState(0);
   const [dragging, setDragging] = useState(false), [captureError, setCaptureError] = useState('');
@@ -569,7 +570,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
       </div></details>
     </div>
     <div className={`scene-viewport scene-pan-${panMode}`}>
-      <Canvas frameloop={active ? 'demand' : 'never'} shadows dpr={detail ? [1, 1.85] : 1} camera={{ position: [14, 12, 16], fov: 40 }} gl={{ localClippingEnabled: true, antialias: true, preserveDrawingBuffer: true, toneMapping: T.ACESFilmicToneMapping, toneMappingExposure: cfg.exposure }}>
+      <Canvas frameloop={active ? 'demand' : 'never'} shadows dpr={detail ? [1, 1.85] : 1} camera={{ position: [14, 12, 16], fov: 40 }} gl={{ localClippingEnabled: true, antialias: true, toneMapping: T.ACESFilmicToneMapping, toneMappingExposure: cfg.exposure }}>
         <SceneCapture capture={capture} />
         <ShadowUpdates items={project.items} focus={focus?.id} detail={detail} styleKey={styleKey} />
         <Environment detail={detail} preset={style.lightingPreset} center={focus ? [(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000] : [project.width / 2000, 0, project.height / 2000]} extent={focus ? Math.max(focus.w, focus.d, focus.h) / 1000 * 1.5 : Math.max(project.width, project.height) / 1000} />

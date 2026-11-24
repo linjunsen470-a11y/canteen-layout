@@ -177,12 +177,13 @@ export function createFurniture(item:FurnitureSpec,openings:Item[]=[],profile?:P
     }
     case 'shop-sign': {
       // Mall storefront fascia signboard with brushed brass trim & glowing brand face
-      const signTex=shopSignTexture(item.name||'品牌餐饮');
+      const signTex=isClay?null:shopSignTexture(item.name||'品牌餐饮');
+      if(signTex)root.userData.ownedTextures=[...(root.userData.ownedTextures??[]),signTex];
       const faceMat=new T.MeshStandardMaterial({
         color:'#ffffff',
-        map:isClay?null:signTex,
+        map:signTex,
         emissive:'#ffe2b0',
-        emissiveMap:isClay?null:signTex,
+        emissiveMap:signTex,
         emissiveIntensity:glowBoost*.55,
         roughness:.3,
       });

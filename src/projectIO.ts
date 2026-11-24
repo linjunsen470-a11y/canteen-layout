@@ -26,11 +26,13 @@ export function parseProject(value: unknown): Project {
     if (!value || typeof value !== 'object')
         throw new Error('项目格式不正确');
     const p = value as Project;
+    // Schema v7 adds optional style, elevation, and lighting/decor item kinds; v1-v6 upgrade cleanly.
     const version=(value as {schemaVersion?:unknown}).schemaVersion;
-    if (version !== undefined && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6)
+    const supportedVersions = new Set<unknown>([1, 2, 3, 4, 5, 6, 7]);
+    if (version !== undefined && !supportedVersions.has(version))
         throw new Error('不支持此项目文件版本，请使用对应版本的软件打开；当前项目未更改');
     const identity = projectIdentity();
-    if (version === 1 || version === 2 || version === 3 || version === 4 || version === 5 || version === 6) {
+    if (supportedVersions.has(version)) {
         if (typeof p.id !== 'string' || !p.id || ![p.createdAt,p.updatedAt].every(v=>typeof v==='string'&&Number.isFinite(Date.parse(v))) || !p.metadata || !['customer','site','purpose','notes'].every(k=>typeof p.metadata[k as keyof typeof p.metadata]==='string') || !['propertyId','inquiryId'].every(k=>p.metadata[k as keyof typeof p.metadata]===undefined||typeof p.metadata[k as keyof typeof p.metadata]==='string'))
             throw new Error('项目身份或资料无效');
         Object.assign(identity,{id:p.id,createdAt:p.createdAt,updatedAt:p.updatedAt,metadata:{customer:p.metadata.customer,site:p.metadata.site,purpose:p.metadata.purpose,notes:p.metadata.notes,propertyId:p.metadata.propertyId,inquiryId:p.metadata.inquiryId}});

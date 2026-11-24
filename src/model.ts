@@ -10,10 +10,10 @@ export type Point={x:number;y:number};
 export type Underlay={assetId:string;name:string;pixelWidth:number;pixelHeight:number;x:number;y:number;mmPerPixel:number;rotation:number;opacity:number;hidden:boolean;locked:boolean;calibration?:{points:[Point,Point];distance:number}};
 export type PlanningArea={id:string;name:string;color:string;outline:Point[]};
 export type LayoutGroup={id:string;name:string;members:string[];seats?:number};
-export type Project={id:string;schemaVersion:6;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number;style?:ProjectStyle};
+export type Project={id:string;schemaVersion:7;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number;style?:ProjectStyle};
 export const defaultProjectStyle:Required<Omit<ProjectStyle,'shopType'>>={floorMaterial:'terrazzo',wallMaterial:'warm-cream',ceilingHeight:3200,lightingPreset:'warm-dining',showCeiling:false,wallCutaway:false,showZoneTint3D:true,showLightsIn2D:true};
 export function resolveStyle(project:Pick<Project,'style'>){return {...defaultProjectStyle,...(project.style??{})};}
-export function projectIdentity() { const now=new Date().toISOString(); return {id:crypto.randomUUID(),schemaVersion:6 as const,createdAt:now,updatedAt:now,metadata:{customer:'',site:'',purpose:'',notes:''}}; }
+export function projectIdentity() { const now=new Date().toISOString(); return {id:crypto.randomUUID(),schemaVersion:7 as const,createdAt:now,updatedAt:now,metadata:{customer:'',site:'',purpose:'',notes:''}}; }
 export function blankProject(name='未命名方案'):Project { return {...projectIdentity(),name,width:12000,height:9000,style:{...defaultProjectStyle},items:[]}; }
 export type CatalogEntry={id?:string;model?:ModelVariant;kind:Kind;name:string;w:number;d:number;h:number;color:string;group:string;seats?:number;elevation?:number;operationFace?:Item['operationFace'];specification?:string;notes?:string};
 // IDs are literal, frozen catalog identities. Do not renumber when reordering entries.

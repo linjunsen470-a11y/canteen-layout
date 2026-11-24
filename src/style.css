@@ -736,4 +736,13 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
   font-size: 11px;
   color: #79857b;
 }
+.scene-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b766d;
+  font-size: 13px;
+  background: #f4f1ea;
+}
 

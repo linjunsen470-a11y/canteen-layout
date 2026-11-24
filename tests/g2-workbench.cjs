@@ -51,9 +51,9 @@ async function dragItem(id,dx,dy,cancel=false){
     ok(item(s,'t1').x!==item(before,'t1').x&&item(s,'t1').x-item(before,'t1').x===item(s,'t2').x-item(before,'t2').x,`${width}: 实际组拖动保持相对位置`);
     await page.getByRole('button',{name:'撤销',exact:true}).click();s=await state();
     ok(item(s,'t1').x===item(before,'t1').x&&item(s,'t2').x===item(before,'t2').x,`${width}: 一次撤销整组移动`);
-    await page.getByRole('button',{name:'3D 预览',exact:true}).click();await page.getByRole('button',{name:'俯视',exact:true}).click();
-    await page.getByRole('button',{name:'2D 编辑',exact:true}).click();await page.getByRole('button',{name:'分屏',exact:true}).click();
-    await page.getByRole('button',{name:'斜视',exact:true}).click();
+    await page.getByRole('button',{name:'3D 效果图',exact:true}).click();await page.getByRole('button',{name:'俯视',exact:true}).click();
+    await page.getByRole('button',{name:'2D 平面',exact:true}).click();await page.getByRole('button',{name:'2D + 3D 分屏',exact:true}).click();
+    await page.getByRole('button',{name:'鸟瞰',exact:true}).click();
     await row('t1').click();await row('t2').click({modifiers:['Shift']});await settle();
     const offscreen=await page.locator('.topbar button,.mode-tabs button,.tabs button').evaluateAll(nodes=>nodes.filter(n=>{const r=n.getBoundingClientRect();return r.width>0&&(r.x<0||r.right>innerWidth||r.y<0||r.bottom>innerHeight)}).map(n=>n.textContent));
     ok(!offscreen.length,`${width}: 关键按钮可见，分屏切换可用`);
@@ -72,12 +72,12 @@ async function dragItem(id,dx,dy,cancel=false){
   await page.getByLabel('解锁 四人餐桌',{exact:true}).click();await page.getByLabel('定位 四人餐桌',{exact:true}).click();
   ok((await state()).selected==='t3','列表定位选中对象');await page.getByLabel('搜索对象').fill('');
   // 3D close-up centers the selected overlapping object; native mouse click and drag.
-  await page.getByRole('button',{name:'3D 预览',exact:true}).click();await page.getByRole('button',{name:'移动已关闭',exact:true}).click();await page.getByRole('button',{name:'俯视',exact:true}).click();await settle();
+  await page.getByRole('button',{name:'3D 效果图',exact:true}).click();await page.getByRole('button',{name:'移动已关闭',exact:true}).click();await page.getByRole('button',{name:'俯视',exact:true}).click();await settle();
   const canvas=await page.locator('.scene-shell canvas').boundingBox();const cx=canvas.x+canvas.width/2,cy=canvas.y+canvas.height/2;
   await page.mouse.click(cx,cy);ok((await state()).selected==='t3','3D 实际点击共用主选对象');
   before=await state();await page.mouse.move(cx,cy);await page.mouse.down();await page.mouse.move(cx+50,cy+20,{steps:8});assert.ok((await state()).gesture,'3D 实际命中物件开始拖动');assert.notEqual(item(await state(),'t3').x,item(before,'t3').x,'3D 实际移动后再取消');await page.keyboard.press('Escape');await page.mouse.up();
   ok(!(await state()).gesture&&item(await state(),'t3').x===item(before,'t3').x,'3D 拖动 Esc 恢复');
-  await page.getByRole('button',{name:'复位',exact:true}).click();await page.getByRole('button',{name:'分屏',exact:true}).click();
+  await page.getByRole('button',{name:'复位',exact:true}).click();await page.getByRole('button',{name:'2D + 3D 分屏',exact:true}).click();
   await page.getByTitle('适应整个场地',{exact:true}).click();
   // Temporary tools: cancellation never falls through into Delete / stale pointer movement.
   await page.getByRole('button',{name:'场地轮廓',exact:true}).click();await page.getByRole('button',{name:'绘制轮廓',exact:true}).click();
@@ -95,7 +95,7 @@ async function dragItem(id,dx,dy,cancel=false){
   ok((await state()).project.items.length===before.project.items.length+1&&(await state()).tool==='select','画区域松开完成并退出工具');
   await page.getByRole('button',{name:'撤销',exact:true}).click();
   // Replaces the old prompt flow.
-  await page.getByRole('tab',{name:'设备库'}).click();await page.getByRole('button',{name:'创建自定义物件',exact:true}).click();
+  await page.getByRole('tab',{name:'设备与素材'}).click();await page.getByRole('button',{name:'创建自定义物件',exact:true}).click();
   await page.getByLabel('物件名称',{exact:true}).fill('G2 验收工作台');await page.getByRole('button',{name:'加入我的物件',exact:true}).click();
   await page.getByLabel('搜索设备').fill('G2 验收工作台');ok(await page.locator('.catalog-entry>button').count()===1,'自定义表单创建且可复用');
   // Preference and data roundtrip, followed by G1 persistence regression in a separate context.

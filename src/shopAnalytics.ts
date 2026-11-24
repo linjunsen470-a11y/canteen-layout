@@ -198,7 +198,11 @@ export function analyzeShop(project: Project): ShopInsights {
 }
 
 export function bomCSV(project: Project, insights: ShopInsights): string {
-  const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const esc = (v: string | number) => {
+    const raw = String(v);
+    const safe = typeof v === 'string' && /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
   const lines = [
     ['分类', '名称', '规格尺寸', '数量', '参考单价低(元)', '参考单价高(元)', '参考小计低(元)', '参考小计高(元)'].map(esc).join(','),
     ...insights.bom.map(r => [r.category, r.name, r.spec, r.count, r.unitPriceMin, r.unitPriceMax, r.unitPriceMin * r.count, r.unitPriceMax * r.count].map(esc).join(',')),

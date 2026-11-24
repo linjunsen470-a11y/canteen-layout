@@ -5,11 +5,11 @@ import { useCustomCatalog, catalogItemDefaults } from './customCatalog';
 import WallPlacementBar from './WallPlacementBar';
 import { useWallPlacement } from './wallPlacementState';
 import { useEditorClipboard } from './editorClipboard';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ProjectFiles from './ProjectFiles';
 import { PlanningBar } from './PlanningFields';
 import { usePlanning } from './planning';
-import Scene3D, { SceneHandle } from './Scene3D';
+import type { SceneHandle } from './Scene3D';
 import SceneBoundary from './SceneBoundary';
 import PresentationDialog from './PresentationDialog';
 import PlanEditor, { PlanHandle } from './PlanEditor';
@@ -32,6 +32,7 @@ import { useWorkspace } from './workspace';
 import { useEditorKeyboard } from './useEditorKeyboard';
 import { toolLabels } from './editorInteraction';
 
+const Scene3D = lazy(() => import('./Scene3D'));
 type CatalogItem = typeof catalog[number];
 const m = (n: number) => (n / 1000).toFixed(2) + ' m';
 const lightingText: Record<string, string> = { 'daylight': '自然光', 'warm-dining': '暖光营业', 'evening': '晚间灯光', 'clay': '白模' };
@@ -74,9 +75,12 @@ export default function App() {
       const visibleView = current.focusMode ? (current.focusView ?? current.view) : current.view;
       const existingScene = visibleView !== '2d' ? scene.current?.capturePNG() : undefined;
       prefs.set({ focusMode: false, view: 'split' });
+      for (let attempt = 0; attempt < 30 && (!plan.current || (!existingScene && !scene.current)); attempt++) {
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
+      }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 140))));
-      if (!plan.current || !scene.current) throw Error('视图尚未就绪，请稍后重试');
-      const image3D = existingScene ?? scene.current.capturePNG();
+      if (!plan.current || (!existingScene && !scene.current)) throw Error('视图尚未就绪，请稍后重试');
+      const image3D = existingScene ?? scene.current!.capturePNG();
       const image2D = await plan.current.capturePNG();
       return { plan: image2D, scene: image3D };
     } finally { prefs.set(previous); }
@@ -199,7 +203,13 @@ export default function App() {
           second={
             <div className="three">
               <div className="viewtitle"><b>3D</b><span>实时效果图</span><small>{lightingText[style.lightingPreset]} · 支持进店人视点与灯光切换</small></div>
-              <SceneBoundary>{sceneMounted && <Scene3D ref={scene} snap={snap} active={view !== '2d'} />}</SceneBoundary>
+              <SceneBoundary>
+                {sceneMounted && (
+                  <Suspense fallback={<div className="scene-loading">正在加载三维渲染引擎…</div>}>
+                    <Scene3D ref={scene} snap={snap} active={view !== '2d'} />
+                  </Suspense>
+                )}
+              </SceneBoundary>
             </div>
           }
         />

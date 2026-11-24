@@ -3,9 +3,7 @@ import { FloorMaterial, WallMaterial } from './model';
 
 const cache = new Map<string, T.CanvasTexture>();
 
-function cached(key: string, width: number, height: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, repeatX = 1, repeatY = 1) {
-  const existing = cache.get(key);
-  if (existing) return existing;
+function createCanvasTexture(width: number, height: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, repeatX = 1, repeatY = 1) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -16,6 +14,13 @@ function cached(key: string, width: number, height: number, draw: (ctx: CanvasRe
   texture.wrapS = texture.wrapT = T.RepeatWrapping;
   texture.repeat.set(repeatX, repeatY);
   texture.anisotropy = 8;
+  return texture;
+}
+
+function cached(key: string, width: number, height: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, repeatX = 1, repeatY = 1) {
+  const existing = cache.get(key);
+  if (existing) return existing;
+  const texture = createCanvasTexture(width, height, draw, repeatX, repeatY);
   cache.set(key, texture);
   return texture;
 }
@@ -367,7 +372,7 @@ export function menuBoardTexture() {
 }
 
 export function shopSignTexture(title = 'BISTRO · 品牌餐饮空间') {
-  return cached(`shop-sign:${title}`, 512, 160, (ctx, w, h) => {
+  return createCanvasTexture(512, 160, (ctx, w, h) => {
     const grad = ctx.createLinearGradient(0, 0, w, h);
     grad.addColorStop(0, '#1e382f');
     grad.addColorStop(1, '#2a4a3f');

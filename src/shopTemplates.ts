@@ -125,7 +125,7 @@ export function createBistroNoodleTemplate(customName?: string): Project {
 
   // Storefront fascia signboard & interior branding (all inside site bounds)
   b.add({ kind: 'decor', model: 'shop-sign', name: '禾风面馆 · 轻食明档', x: 4300, y: H - 120, w: 3400, d: 180, h: 660, rotation: 0, elevation: 2450, color: '#244237' });
-  b.add({ kind: 'decor', model: 'menu-board', name: '发光菜单灯箱', x: 8600, y: 220, w: 2400, d: 120, h: 720, rotation: 0, elevation: 1950, color: '#262e32' });
+  b.add({ kind: 'decor', model: 'menu-board', name: '发光菜单灯箱', x: 8600, y: 220, w: 2400, d: 120, h: 720, rotation: 0, elevation: 2050, color: '#262e32' });
   b.add({ kind: 'decor', model: 'tv-screen', name: '叫号宣传屏', x: 4700, y: 3160, w: 1200, d: 80, h: 680, rotation: 0, elevation: 2150, color: '#1f252a' });
   // Wood feature wall flush against left wall (center x=245, y=6150, facing right into room via rotation -90)
   b.add({ kind: 'decor', model: 'wood-feature-wall', name: '木饰面造型墙', x: 245 - 1700, y: 6150 - 40, w: 3400, d: 80, h: 2900, rotation: -90, color: '#b78d5e' });
@@ -151,7 +151,7 @@ export function createBistroNoodleTemplate(customName?: string): Project {
   b.add({ kind: 'fridge', model: 'glass-fridge', name: '玻璃门饮料柜', x: 10550, y: 280, w: 1100, d: 680, h: 2000, rotation: 0, color: '#516973' });
   b.add({ kind: 'sink', model: 'single-sink', name: '吧台水槽', x: 8050, y: 280, w: 800, d: 620, h: 850, rotation: 0, color: '#a5b7c0' });
   b.add({ kind: 'fridge', model: 'ice-maker', name: '商用制冰机', x: 9000, y: 280, w: 700, d: 680, h: 1180, rotation: 0, color: '#b0c1c6' });
-  b.add({ kind: 'counter', model: 'return-counter', name: '餐具回收台', x: 6450, y: 3260, w: 1150, d: 620, h: 900, rotation: 0, color: '#9cadab' });
+  b.add({ kind: 'counter', model: 'return-counter', name: '餐具回收台', x: 4750, y: 3240, w: 1150, d: 620, h: 900, rotation: 0, color: '#9cadab' });
 
   // Dining hall: Left column 2x Four-Seat Booths (8 seats)
   addFourBooth(b, 1300, 4950, '#49685c', '#be8f5e', '卡座 1 号');
@@ -172,7 +172,7 @@ export function createBistroNoodleTemplate(customName?: string): Project {
   b.add({ kind: 'decor', model: 'podium', name: '迎宾点餐台', x: 6950, y: 8250, w: 620, d: 480, h: 1150, rotation: 0, color: '#56473b' });
   b.add({ kind: 'partition', model: 'slat-partition', name: '木格栅隔断', x: 2620 - 1100, y: 6900 - 60, w: 2200, d: 120, h: 1950, rotation: 90, color: '#b38b59' });
   b.add({ kind: 'decor', model: 'planter-divider', name: '绿植花槽隔断', x: 6050, y: 6150, w: 1450, d: 380, h: 1120, rotation: 0, color: '#8a6b4d' });
-  b.add({ kind: 'decor', model: 'potted-plant', name: '大型绿植盆栽', x: 350, y: 3320, w: 620, d: 620, h: 1700, rotation: 0, color: '#4c7a52' });
+  b.add({ kind: 'decor', model: 'potted-plant', name: '大型绿植盆栽', x: 320, y: 3220, w: 560, d: 560, h: 1700, rotation: 0, color: '#4c7a52' });
   b.add({ kind: 'decor', model: 'potted-plant', name: '大型绿植盆栽', x: 11100, y: 3350, w: 620, d: 620, h: 1700, rotation: 0, color: '#4c7a52' });
   b.add({ kind: 'decor', model: 'potted-plant', name: '大型绿植盆栽', x: 3600, y: 8250, w: 580, d: 580, h: 1550, rotation: 0, color: '#4c7a52' });
 
@@ -573,10 +573,7 @@ export function createCustomShopShell(spec: CustomShopSpec): Project {
   if (spec.addWalls) {
     const pts = outline ?? [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H }];
     const inset = 100;
-    const clamped = pts.map(p => ({
-      x: p.x === 0 ? inset : p.x === W ? W - inset : p.x,
-      y: p.y === 0 ? inset : p.y === H ? H - inset : p.y,
-    }));
+    const clamped = insetPolygon(pts, inset);
     let frontWallId = '';
     let frontLen = 0;
     let frontMidX = W / 2;
@@ -636,16 +633,50 @@ export function createCustomShopShell(spec: CustomShopSpec): Project {
   });
 }
 
-// One-click helper to wrap perimeter walls along the current project's site outline.
+// Offset a simple closed polygon inward by `inset` mm so 200mm perimeter walls stay flush inside the site outline.
+function insetPolygon(pts: Point[], inset: number): Point[] {
+  if (pts.length < 3) return pts;
+  let area2 = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    area2 += a.x * b.y - b.x * a.y;
+  }
+  const orient = area2 >= 0 ? 1 : -1;
+  const edgeDir = (a: Point, b: Point) => {
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const tx = (b.x - a.x) / len, ty = (b.y - a.y) / len;
+    return { tx, ty, nx: -orient * ty, ny: orient * tx };
+  };
+  return pts.map((curr, i) => {
+    const prev = pts[(i - 1 + pts.length) % pts.length];
+    const next = pts[(i + 1) % pts.length];
+    const e1 = edgeDir(prev, curr), e2 = edgeDir(curr, next);
+    const p1 = { x: curr.x + e1.nx * inset, y: curr.y + e1.ny * inset };
+    const p2 = { x: curr.x + e2.nx * inset, y: curr.y + e2.ny * inset };
+    const det = e1.tx * e2.ty - e1.ty * e2.tx;
+    if (Math.abs(det) < 1e-4) return { x: Math.round(p2.x), y: Math.round(p2.y) };
+    const s = ((p2.x - p1.x) * e2.ty - (p2.y - p1.y) * e2.tx) / det;
+    const mx = p1.x + s * e1.tx, my = p1.y + s * e1.ty;
+    if (Math.hypot(mx - curr.x, my - curr.y) > inset * 4) {
+      const bx = e1.nx + e2.nx, by = e1.ny + e2.ny;
+      const bl = Math.hypot(bx, by) || 1;
+      return { x: Math.round(curr.x + (bx / bl) * inset), y: Math.round(curr.y + (by / bl) * inset) };
+    }
+    return { x: Math.round(mx), y: Math.round(my) };
+  });
+}
+
+// One-click helper to wrap perimeter walls cleanly inside the current project's site outline.
 export function buildPerimeterWalls(project: Project): Item[] {
-  const pts = siteOutline(project);
+  const thickness = 200;
+  const pts = insetPolygon(siteOutline(project), thickness / 2);
   const wallH = project.style?.ceilingHeight ?? 3100;
   const walls: Item[] = [];
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i], b = pts[(i + 1) % pts.length];
     if (Math.hypot(b.x - a.x, b.y - a.y) < 250) continue;
-    const pose = segmentPose(a, b, 200);
-    walls.push({ id: uid(), kind: 'wall', model: 'wall', name: `外围墙 ${i + 1}`, ...pose, d: 200, h: wallH, color: '#efe9df' });
+    const pose = segmentPose(a, b, thickness);
+    walls.push({ id: uid(), kind: 'wall', model: 'wall', name: `外围墙 ${i + 1}`, ...pose, d: thickness, h: wallH, color: '#efe9df' });
   }
   return walls;
 }
