@@ -222,7 +222,7 @@ export function analyzeShop(project: Project): ShopInsights {
 
   const actionTips: string[] = [];
   if (sqmPerSeat !== null && sqmPerSeat > 2.6 && seats > 0) {
-    actionTips.push(`当前客座较宽松（${sqmPerSeat.toFixed(1)} ㎡/座），若追求更高翻台坪效，可点击「换一种摆法」对比高坪效散台方案。`);
+    actionTips.push(`当前客座较宽松（${sqmPerSeat.toFixed(1)} ㎡/座），若追求更高翻台坪效，可在空余客区试放一组桌椅，再检查通道净距。`);
   }
   if (sqmPerSeat !== null && sqmPerSeat < 1.25) {
     actionTips.push(`当前客座偏紧凑（${sqmPerSeat.toFixed(1)} ㎡/座），高峰期拉椅可能较局促，建议适当减少一组餐桌以留宽主通道。`);

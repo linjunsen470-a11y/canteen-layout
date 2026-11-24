@@ -11,7 +11,6 @@ export type ComboPreset = {
   name: string;
   category: '餐桌椅组合' | '明档与厨具组合';
   badge: string;
-  sizeLabel: string;
   seats?: number;
   build: (cx: number, cy: number) => Item[];
 };
@@ -22,7 +21,6 @@ export const comboPresets: ComboPreset[] = [
     name: '双人咖啡圆桌组',
     category: '餐桌椅组合',
     badge: '2 座',
-    sizeLabel: '1.9m × 0.9m',
     seats: 2,
     build: (cx, cy) => [
       { id: uid(), kind: 'table', model: 'marble-round-table', name: '大理石圆桌', x: cx - 425, y: cy - 425, w: 850, d: 850, h: 750, rotation: 0, color: '#e6e1d7', seats: 0 },
@@ -35,7 +33,6 @@ export const comboPresets: ComboPreset[] = [
     name: '四人双面卡座组',
     category: '餐桌椅组合',
     badge: '4 座',
-    sizeLabel: '1.2m × 2.1m',
     seats: 4,
     build: (cx, cy) => [
       { id: uid(), kind: 'table', model: 'booth-table', name: '四人卡座餐桌', x: cx - 600, y: cy - 375, w: 1200, d: 750, h: 750, rotation: 0, color: '#bc8d5d', seats: 0 },
@@ -48,7 +45,6 @@ export const comboPresets: ComboPreset[] = [
     name: '四人标准餐桌组',
     category: '餐桌椅组合',
     badge: '4 座',
-    sizeLabel: '1.2m × 1.8m',
     seats: 4,
     build: (cx, cy) => [
       { id: uid(), kind: 'table', model: 'rect-table', name: '四人餐桌', x: cx - 600, y: cy - 400, w: 1200, d: 800, h: 750, rotation: 0, color: '#d4b082', seats: 0 },
@@ -63,7 +59,6 @@ export const comboPresets: ComboPreset[] = [
     name: '四人火锅电磁桌组',
     category: '餐桌椅组合',
     badge: '4 座',
-    sizeLabel: '1.3m × 1.9m',
     seats: 4,
     build: (cx, cy) => [
       { id: uid(), kind: 'table', model: 'hotpot-table', name: '四人电磁炉桌', x: cx - 650, y: cy - 440, w: 1300, d: 880, h: 750, rotation: 0, color: '#9b724d', seats: 0 },
@@ -78,7 +73,6 @@ export const comboPresets: ComboPreset[] = [
     name: '六人食堂长桌长凳',
     category: '餐桌椅组合',
     badge: '6 座',
-    sizeLabel: '1.8m × 1.7m',
     seats: 6,
     build: (cx, cy) => [
       { id: uid(), kind: 'table', model: 'rect-table', name: '六人长桌', x: cx - 900, y: cy - 400, w: 1800, d: 800, h: 750, rotation: 0, color: '#d4b284', seats: 0 },
@@ -91,7 +85,6 @@ export const comboPresets: ComboPreset[] = [
     name: '八人圆桌雅座组',
     category: '餐桌椅组合',
     badge: '8 座',
-    sizeLabel: '2.9m × 2.9m',
     seats: 8,
     build: (cx, cy) => {
       const items: Item[] = [
@@ -113,7 +106,6 @@ export const comboPresets: ComboPreset[] = [
     name: '靠窗吧台三座组',
     category: '餐桌椅组合',
     badge: '3 座',
-    sizeLabel: '2.1m × 1.0m',
     seats: 3,
     build: (cx, cy) => [
       { id: uid(), kind: 'table', model: 'bar-table', name: '靠窗吧台桌', x: cx - 1050, y: cy - 225, w: 2100, d: 450, h: 1050, rotation: 0, color: '#b88c5c', seats: 0 },
@@ -127,7 +119,6 @@ export const comboPresets: ComboPreset[] = [
     name: '热厨炒煮排烟组',
     category: '明档与厨具组合',
     badge: '后厨核心',
-    sizeLabel: '3.2m × 1.1m',
     build: (cx, cy) => [
       { id: uid(), kind: 'stove', model: 'noodle-cooker', name: '六孔煮面炉', x: cx - 1550, y: cy - 375, w: 950, d: 750, h: 900, rotation: 0, color: '#adbac0' },
       { id: uid(), kind: 'stove', model: 'stove', name: '双头炉灶', x: cx - 500, y: cy - 425, w: 1250, d: 850, h: 850, rotation: 0, color: '#93a0a8' },
@@ -140,7 +131,6 @@ export const comboPresets: ComboPreset[] = [
     name: '水吧咖啡收银组',
     category: '明档与厨具组合',
     badge: '前厅吧台',
-    sizeLabel: '3.8m × 0.8m',
     build: (cx, cy) => [
       { id: uid(), kind: 'counter', model: 'tea-bar', name: '饮品水吧台', x: cx - 1900, y: cy - 375, w: 2400, d: 750, h: 960, rotation: 0, color: '#546b62' },
       { id: uid(), kind: 'counter', model: 'coffee-machine', name: '商用咖啡机', x: cx - 1450, y: cy - 270, w: 700, d: 540, h: 600, rotation: 0, color: '#3b4a4e' },
@@ -152,7 +142,6 @@ export const comboPresets: ComboPreset[] = [
     name: '洗消回收动线组',
     category: '明档与厨具组合',
     badge: '洗消标准',
-    sizeLabel: '3.6m × 0.8m',
     build: (cx, cy) => [
       { id: uid(), kind: 'sink', model: 'triple-sink', name: '三槽洗涤池', x: cx - 1800, y: cy - 350, w: 1800, d: 700, h: 850, rotation: 0, color: '#a5b7c0' },
       { id: uid(), kind: 'sink', model: 'dishwasher', name: '揭盖式洗碗机', x: cx + 100, y: cy - 400, w: 750, d: 800, h: 1450, rotation: 0, color: '#a2b4bd' },
@@ -174,7 +163,7 @@ export function fitCombo(project: Project, combo: ComboPreset, point: Point, sea
     top: Math.min(...poly.map(p => p.y)), bottom: Math.max(...poly.map(p => p.y)),
   }));
   const center = search ? sitePlacement(area ? { ...project, outline: area } : project, point) : point;
-  const x0 = Math.round(center.x / 100) * 100, y0 = Math.round(center.y / 100) * 100;
+  const x0 = search ? Math.round(center.x / 100) * 100 : center.x, y0 = search ? Math.round(center.y / 100) * 100 : center.y;
   const gap = project.clearance ?? 900;
   const stepX = Math.ceil((box.w + gap) / 100) * 100, stepY = Math.ceil((box.h + gap) / 100) * 100;
   const candidates: Point[] = [{ x: x0, y: y0 }];

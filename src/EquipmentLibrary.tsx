@@ -6,6 +6,7 @@ import { useWorkspace } from './workspace';
 import { ordinaryEquipment } from './equipmentFacing';
 import { ComboPreset, comboPresets } from './combos';
 import ObjectList from './ObjectList';
+import ComboCard from './ComboCard';
 import CatalogThumbnail from './CatalogThumbnail';
 import CustomItemDialog from './CustomItemDialog';
 import CustomCatalogActions from './CustomCatalogActions';
@@ -78,23 +79,10 @@ export default memo(function EquipmentLibrary({
 
       {matchingCombos.length > 0 && (
         <section className="combo-section">
-          <h4><Sparkles />成套快速组合（一键成组）</h4>
+          <h4><Sparkles />快速组合</h4>
           <div className="combo-grid">
             {matchingCombos.map(combo => (
-              <button
-                key={combo.id}
-                type="button"
-                className="combo-card"
-                draggable
-                onDragStart={e => {
-                  e.dataTransfer.setData('application/canteen-combo', combo.id);
-                  e.dataTransfer.effectAllowed = 'copy';
-                }}
-                onClick={() => onAddCombo?.(combo)}
-              >
-                <span className="combo-top"><b>{combo.name}</b><em>{combo.badge}</em></span>
-                <small>{combo.category} · 约 {combo.sizeLabel}</small>
-              </button>
+              <ComboCard key={combo.id} combo={combo} onAdd={onAddCombo} />
             ))}
           </div>
         </section>

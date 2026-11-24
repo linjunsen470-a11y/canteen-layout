@@ -43,7 +43,7 @@ export default function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEdit
 
   return <aside className="props" hidden={!prefs.propsOpen || prefs.focusMode || (!multi.length && s.mode !== 'site')}>
     <div className="panel-heading">
-      <div><h3>{multi.length > 1 ? `批量属性 · ${multi.length} 项` : item ? '对象属性' : '铺位与风格设置'}</h3><p>{item ? '尺寸单位：mm' : '材质 · 氛围 · 场地轮廓'}</p></div>
+      <div><h3>{multi.length > 1 ? `组合与多选 · ${multi.length} 项` : item ? '对象属性' : '铺位与风格设置'}</h3><p>{multi.length > 0 ? '尺寸单位：mm' : '材质 · 氛围 · 场地轮廓'}</p></div>
       <button aria-label="收起属性面板" onClick={() => prefs.set({ propsOpen: false })}><PanelRightClose /></button>
     </div>
     {s.error && <p className="property-error" role="alert">{s.error}</p>}

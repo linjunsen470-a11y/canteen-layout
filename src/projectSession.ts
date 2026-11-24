@@ -36,7 +36,7 @@ export function startProjectSession(){
       const rows=useProjectSession.getState().rows.filter(r=>!r.deletedAt);
       const row=rows.find(r=>r.id===last)??rows[0];
       if(row)activate(parseProject(row.project),row.revision);
-      else activate(createBistroNoodleTemplate(),0);
+      else activate(blankProject('我的铺位'),0);
       useProjectSession.setState({ready:true,message:warning});
       if(!row)await saveProject();
       if(warning)useProjectSession.setState({message:warning});
