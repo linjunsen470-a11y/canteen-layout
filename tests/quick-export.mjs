@@ -26,7 +26,7 @@ export async function testQuickExport(browser, url) {
     await button('复制图片').click();
     await dialog.getByText('已复制图片，可以粘贴到聊天中').waitFor();
     assert.ok(await page.evaluate(async () => (await navigator.clipboard.read()).some(item => item.types.includes('image/png'))));
-    for (const label of ['进店视角','鸟瞰图','平面图','当前三维视角']) {
+    for (const label of ['室内视角','鸟瞰图','平面图','当前三维视角']) {
       await button(label).click();
       await dialog.getByAltText(label + '预览').waitFor();
     }

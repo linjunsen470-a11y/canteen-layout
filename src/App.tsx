@@ -170,7 +170,7 @@ export default function App() {
         <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
-        <ImageExport name={project.name} capture={() => withExportViews(async (flat, scene) => ({
+        <ImageExport project={project} capture={() => withExportViews(async (flat, scene) => ({
           plan: await flat.capturePNG(), bird: scene.captureShot('birdseye'), inside: scene.captureShot('interior')
         }))} hasCurrent={view !== '2d'}
           current={() => { if (!scene.current) throw Error('三维视图尚未就绪'); return scene.current.capturePNG(); }}
