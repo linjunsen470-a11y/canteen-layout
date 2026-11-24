@@ -13,6 +13,11 @@ try {
   const { parseProject } = await load('projectIO');
   const { checkSpace, inspectSpace } = await load('spaceChecks');
   const { fitCombo, comboPresets } = await load('combos');
+  const { checkSketchEdge } = await load('sketchGeometry');
+  for (const lastX of [-2000, 2000]) {
+    const path = [[0, 0], [4000, 0], [4000, 3000], [lastX, 3000], [lastX, 0]].map(([x, y]) => ({ x, y }));
+    assert.throws(() => checkSketchEdge(path, path[0], true), /末段墙与首段墙共线/);
+  }
   const expectedSeats = [27, 16, 48, 31];
   for (const [index, template] of shopTemplates.entries()) {
     const project = parseProject(JSON.parse(JSON.stringify(template.build())));
