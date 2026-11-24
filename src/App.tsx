@@ -171,7 +171,6 @@ export default function App() {
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
         <ImageExport project={project} capture={() => withExportViews(async (flat, scene) => ({
-          plan: await flat.capturePNG(),
           planBare: await flat.capturePNG({ header: false }),
           bird: scene.captureShot('birdseye'),
           inside: scene.captureShot('interior'),
