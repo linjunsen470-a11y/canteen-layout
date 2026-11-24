@@ -1,3 +1,4 @@
+import { bounds } from './spatial';
 import { useWallPlacement, pickWallAt } from './wallPlacement';
 import { facingModels } from './equipmentFacing';
 import EquipmentSymbol from './EquipmentSymbol';
@@ -12,6 +13,7 @@ import { forwardRef, memo, useMemo, useEffect, useLayoutEffect, useImperativeHan
 import { Hand, MousePointer2, Plus, Minus, Scan, Focus, Lightbulb, Route } from 'lucide-react';
 import SurveyDimension from './SurveyDimension';
 import PlanArchitecturalOverlay from './PlanArchitecturalOverlay';
+import PlanSelectionBar from './PlanSelectionBar';
 import { isEditable, isVisible, isTextInput } from './editorInteraction';
 import { useWorkspace } from './workspace';
 import { Item, modelOf, resolveStyle } from './model';
@@ -32,9 +34,9 @@ type Point={x:number;y:number};
 type Camera={x:number;y:number;zoom:number};
 type Gesture={type:'pan'|'move'|'resize'|'box'|'build'|'endpoint';buildKind?:'wall'|'partition'|'zone'|'text'|'dimension'|'leader';endpoint?:'start'|'end';start:Point;camera:Camera;origins:Item[];id?:string;additive?:boolean};
 export type PlanHandle={capturePNG:()=>Promise<string>;exportPNG:()=>void;center:()=>Point};
-type Props={active?:boolean;grid:boolean;snap:boolean;onDropItem:(name:string,kind:string,point:Point,id?:string)=>void;onDropCombo?:(comboId:string,point:Point)=>void;notify:(text:string)=>void};
+type Props={active?:boolean;grid:boolean;snap:boolean;onDropItem:(name:string,kind:string,point:Point,id?:string)=>void;onDropCombo?:(comboId:string,point:Point)=>void;onOpenConcept?:()=>void;notify:(text:string)=>void};
 function itemBounds(i:Item){const angle=i.rotation*Math.PI/180,c=Math.abs(Math.cos(angle)),s=Math.abs(Math.sin(angle));const w=i.w*c+i.d*s,d=i.w*s+i.d*c;return{x:i.x+i.w/2-w/2,y:i.y+i.d/2-d/2,w,d}}
-const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,grid,snap,onDropItem,onDropCombo,notify},ref){
+const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,grid,snap,onDropItem,onDropCombo,onOpenConcept,notify},ref){
   const last=useRef(useStore.getState());const project=useStore(s=>active?s.project:last.current.project),selected=useStore(s=>active?s.selected:last.current.selected),ids=useStore(s=>active?s.selectedIds:last.current.selectedIds),onSelect=useStore(s=>s.selectMany),tool=useStore(s=>active?s.tool:last.current.tool),setTool=useStore(s=>s.setTool),focusRequest=useStore(s=>active?s.focusRequest:last.current.focusRequest);if(active)last.current=useStore.getState();
   const style=resolveStyle(project);
   const wallSession=useWallPlacement(s=>s.session);
@@ -114,6 +116,11 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
     ...visibleItems.filter(i=>i.kind==='lighting'),
     ...visibleItems.filter(isAnnotation),
   ];
+  // Ceiling lights are drawn on top for readability, but must not steal clicks from the tables/furniture
+  // beneath them. A light is click-through whenever its centre sits over a floor object (unless selected);
+  // lights hanging over open floor stay directly clickable, and any light can still be picked via box-select or the object list.
+  const floorBoxes=visibleItems.filter(i=>i.kind!=='lighting'&&i.kind!=='zone'&&i.kind!=='wall'&&i.kind!=='partition'&&!isOpening(i)&&!isAnnotation(i)).map(i=>bounds([i]));
+  const passThroughLights=new Set(visibleItems.filter(i=>i.kind==='lighting'&&!ids.includes(i.id)&&floorBoxes.some(b=>{const cx=i.x+i.w/2,cy=i.y+i.d/2;return cx>=b.x&&cx<=b.x+b.w&&cy>=b.y&&cy<=b.y+b.h})).map(i=>i.id));
   return <div className="plan-viewport" ref={host}>
     <svg ref={svg} tabIndex={0} aria-label="二维布局画布" viewBox={`0 0 ${size.w} ${size.h}`} className={tool==='wall'||tool==='partition'||tool==='zone'||tool==='text'||tool==='dimension'||tool==='leader'?'is-drawing':space||tool==='pan'?(dragging?'is-grabbing':'is-pan'):dragging?'is-moving':''}
       onPointerDown={e=>begin(e)} onPointerMove={move} onPointerUp={end} onPointerCancel={()=>finish(true)} onLostPointerCapture={()=>finish(true)}
@@ -128,7 +135,7 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
         </g>)}
         {grid&&<rect data-ui="true" width={project.width} height={project.height} fill="url(#plan-grid)" pointerEvents="none" clipPath="url(#site-clip)"/>}
         <g data-ui="true"><PlanArchitecturalOverlay project={project} scale={scale} showFlow={showFlow}/></g>
-        {orderedItems.map(i=>{const m=modelOf(i);const isRound=m==='round-table'||m==='marble-round-table';const isLight=i.kind==='lighting';const isPlant=m==='potted-plant';const isHood=m==='hood';const isQuiet=quietLabels.has(m);const normRot=((i.rotation%360)+360)%360;const flipText=normRot>90&&normRot<270;const labelY=i.model&&facingModels.has(i.model)?i.d/2+12/scale:0;const wallLabelY=-i.d/2-12/scale;return <g key={i.id} data-item-id={i.id} onDoubleClick={e=>{e.stopPropagation();if(useWallPlacement.getState().session)return;onSelect(e.shiftKey?[...new Set([...useStore.getState().selectedIds,i.id])]:[i.id])}} opacity={planning.dim&&!insidePlanning(i,project)?0.3:isLight?0.82:1} transform={`translate(${i.x+i.w/2},${i.y+i.d/2}) rotate(${i.rotation})`} onPointerDown={e=>begin(e,i)} style={{cursor:wallSession?(wallSession.picking&&i.kind==='wall'?'crosshair':'default'):i.locked?'not-allowed':'move'}}>
+        {orderedItems.map(i=>{const m=modelOf(i);const isRound=m==='round-table'||m==='marble-round-table';const isLight=i.kind==='lighting';const isPlant=m==='potted-plant';const isHood=m==='hood';const isQuiet=quietLabels.has(m);const normRot=((i.rotation%360)+360)%360;const flipText=normRot>90&&normRot<270;const labelY=i.model&&facingModels.has(i.model)?i.d/2+12/scale:0;const wallLabelY=-i.d/2-12/scale;return <g key={i.id} data-item-id={i.id} onDoubleClick={e=>{e.stopPropagation();if(useWallPlacement.getState().session)return;onSelect(e.shiftKey?[...new Set([...useStore.getState().selectedIds,i.id])]:[i.id])}} opacity={planning.dim&&!insidePlanning(i,project)?0.3:isLight?0.82:1} transform={`translate(${i.x+i.w/2},${i.y+i.d/2}) rotate(${i.rotation})`} pointerEvents={passThroughLights.has(i.id)?'none':undefined} onPointerDown={e=>begin(e,i)} style={{cursor:wallSession?(wallSession.picking&&i.kind==='wall'?'crosshair':'default'):i.locked?'not-allowed':'move'}}>
           <title>{i.name} · {i.w} × {i.d} × {i.h} mm</title>
           {isAnnotation(i)?<AnnotationSymbol item={i} selected={ids.includes(i.id)} scale={scale}/>:isBuilding(i)?<BuildingSymbol profile={profiles.get(i.id)} item={i} selected={ids.includes(i.id)} scale={scale}/>:isHood?<g><rect x={-i.w/2} y={-i.d/2} width={i.w} height={i.d} rx={Math.min(40,2/scale)} fill="#7f95a0" fillOpacity={0.14} stroke={ids.includes(i.id)?'#b67523':'#556c78'} strokeWidth={(ids.includes(i.id)?2.5:1.3)/scale} strokeDasharray={`${7/scale} ${4/scale}`}/><line x1={-i.w/2} y1={-i.d/2} x2={i.w/2} y2={i.d/2} stroke="#556c78" strokeOpacity={0.28} strokeWidth={0.9/scale} pointerEvents="none"/><line x1={-i.w/2} y1={i.d/2} x2={i.w/2} y2={-i.d/2} stroke="#556c78" strokeOpacity={0.28} strokeWidth={0.9/scale} pointerEvents="none"/></g>:isLight||isPlant?<ellipse rx={i.w/2} ry={i.d/2} fill="transparent" stroke={ids.includes(i.id)?'#b67523':'none'} strokeWidth={ids.includes(i.id)?2.5/scale:0}/>:isRound?<ellipse rx={i.w/2} ry={i.d/2} fill={i.color} stroke={ids.includes(i.id)?'#b67523':'#5e7166'} strokeWidth={(ids.includes(i.id)?2.5:1)/scale}/>:<rect x={-i.w/2} y={-i.d/2} width={i.w} height={i.d} rx={Math.min(50,3/scale)} fill={i.color} stroke={ids.includes(i.id)?'#b67523':'#5e7166'} strokeWidth={(ids.includes(i.id)?2.5:1)/scale}/>}
           {!isBuilding(i)&&!isHood&&<EquipmentSymbol item={i} scale={scale}/>}
@@ -149,6 +156,7 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
       {box&&<rect data-ui="true" x={Math.min(box.a.x,box.b.x)*scale+offset.x} y={Math.min(box.a.y,box.b.y)*scale+offset.y} width={Math.abs(box.a.x-box.b.x)*scale} height={Math.abs(box.a.y-box.b.y)*scale} fill="#47796418" stroke="#477964" strokeDasharray="4 3" pointerEvents="none"/>}
     </svg>
     {outlineMode&&<div className="outline-toolbar"><span>{outlineMode==='draw'?'逐点点击 · 点起点或 Enter 闭合':'拖动顶点 · 点击 + 加点'}</span><button onClick={()=>outlineEditor.current?.finish()}>{outlineMode==='draw'?'闭合轮廓':'完成编辑'}</button><button onClick={()=>{useStore.getState().cancelMove();setOutlineMode(null)}}>取消 / 退出</button></div>}
+    {!outlineMode&&<PlanSelectionBar onOpenConcept={onOpenConcept} notify={notify}/>}
     <div className="plan-tools"><div className="tool-segment"><button aria-label="选择工具" title="选择 / 框选" aria-pressed={tool==='select'} onClick={()=>{setTool('select')}}><MousePointer2/></button><button disabled={!!wallSession} aria-label="平移工具" title="平移（或按住空格 / 中键拖动）" aria-pressed={tool==='pan'} onClick={()=>{setTool('pan')}}><Hand/></button></div><div className="tool-segment"><button aria-label="缩小" onClick={()=>zoomAt(1/1.25)}><Minus/></button><button title="适应整个场地" onClick={()=>setCamera(null)}>{Math.round(cam.zoom*100)}% <Scan/></button><button aria-label="放大" onClick={()=>zoomAt(1.25)}><Plus/></button></div><button title="定位选中物件" disabled={!ids.length} onClick={focus}><Focus/>定位</button><button title="在 2D 平面中显示通道净距与碰撞位置" aria-pressed={showFlow} onClick={()=>setShowFlow(v=>!v)}><Route/>动线净距</button><button title="在 2D 平面中显示或隐藏吊灯/射灯点位" aria-pressed={style.showLightsIn2D} onClick={toggleLights2D}><Lightbulb/>灯具</button></div>
     <div hidden={tool==='select'||tool==='pan'} className={tool==='wall'||tool==='partition'||tool==='zone'||tool==='text'||tool==='dimension'||tool==='leader'?'canvas-hint drawing-hint':'canvas-hint'}>{wallSession?'离墙定位中 · 空格/中键平移 · Esc 取消':tool==='place-copy'?'移动指针预览复制位置 · 点击落位 · Esc 取消':outlineMode?'轮廓编辑 · Alt 关闭吸附 · Esc 退出':tool==='wall'||tool==='partition'||tool==='zone'||tool==='text'||tool==='dimension'||tool==='leader'?tool==='text'?'点击放置文字 · 在属性中修改内容 · Esc 取消':tool==='zone'?'拖动矩形 · 松开完成 · Esc 取消':'拖动画线 · 松开完成 · Shift 水平/垂直 · Esc 取消':'拖动物体移动 · 拖动 ↻ 自由旋转 · 空格平移'}</div>
   </div>;

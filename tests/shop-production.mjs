@@ -99,7 +99,8 @@ try {
   await page.locator('.scene-more summary').click();
   await button('物体特写').click();
   const closeupCaption = await page.locator('.scene-caption b').innerText();
-  await button('发给合伙人').click();
+  await button('导出与汇报').click();
+  await button('客户成果').click();
   const framed = page.frameLocator('iframe[title="客户方案预览"]');
   const image = framed.locator('.gallery-hero img');
   await image.waitFor();
@@ -319,7 +320,26 @@ try {
   await importFixture(fixture);
   await button('2D 平面').click();
   assert.ok((await exportSvgText()).includes('入口'));
-  console.log('PASS 试排应用与另存后刷新、滑杆提交及仅导出显式入口');
+
+  // Verify surveyed wall-corner column placement, 2D floating quick-bar, and 3D smart cutaway toggle
+  await button('新建铺位').click();
+  await page.getByLabel('铺位名称').fill('快建交互验证');
+  await button('创建铺位').click();
+  await page.locator('.shop-wizard-dialog').waitFor({ state: 'hidden' });
+  await page.locator('.plan-quick-bar.is-starter').waitFor({ state: 'visible' });
+  await page.getByRole('tab', { name: '对象列表' }).click();
+  await page.getByRole('checkbox', { name: '选择 外墙 1', exact: true }).check();
+  await page.getByText('按内墙角量距添加柱子 / 水电入口', { exact: true }).click();
+  await button('按量距放置构件').click();
+  await page.locator('.plan-quick-bar').getByRole('button', { name: '右转', exact: true }).click();
+  await button('2D + 3D 分屏').click();
+  const smartWallBtn = button('智能透视墙');
+  assert.equal(await smartWallBtn.getAttribute('aria-pressed'), 'true');
+  await smartWallBtn.click();
+  assert.equal(await smartWallBtn.getAttribute('aria-pressed'), 'false');
+  await smartWallBtn.click();
+  assert.equal(await smartWallBtn.getAttribute('aria-pressed'), 'true');
+  console.log('PASS 试排应用与另存后刷新、滑杆提交、仅导出显式入口、墙角放柱、2D 快捷条与 3D 智能透视墙');
 
   assert.deepEqual(errors, []);
   console.log('PASS 实测建铺、底图两点校准、智能分区估算与同壳对比、示范案例参考、组合预览与拖放、整组四向复制与图文导出');

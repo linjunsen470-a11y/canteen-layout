@@ -7,6 +7,7 @@ import { contains, doorSwings, footprint, polygonDistance } from './spatial';
 import { parseProject } from './projectIO';
 import { isAnnotation } from './annotations';
 import { surveyWall } from './interiorSurvey';
+import { openingSlot, wallPoint } from './structure';
 import { analyzeShop } from './shopAnalytics';
 import { checkSpace } from './spaceChecks';
 import { polygonPatch } from './zones';
@@ -24,6 +25,8 @@ export type ConceptPlannerOptions = {
   aisleMm: number; // e.g., 800 | 950 | 1100
   includeKitchenEquip: boolean;
   includeLights: boolean;
+  includePartition?: boolean;
+  includeStorefront?: boolean;
   themeId: ConceptThemeId;
 };
 
@@ -465,7 +468,10 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
 
   if (!isOrthogonalPolygon(outline)) throw Error('试排仅支持直角铺位，当前外轮廓含斜边');
   const fixedKinds = new Set<Item['kind']>(['wall', 'partition', 'door', 'window', 'column', 'stairs', 'fixture', 'utility']);
-  const preservedIds = new Set(baseProject.items.filter(i => i.locked || fixedKinds.has(i.kind) || isAnnotation(i)).map(i => i.id));
+  // Schematic items the planner itself generated (storefront door/window, open-kitchen partition) are
+  // regenerated on every run instead of becoming permanent obstacles — unless the owner locked them.
+  const isRegenerable = (i: Item) => i.generated === 'concept' && !i.locked;
+  const preservedIds = new Set(baseProject.items.filter(i => !isRegenerable(i) && (i.locked || fixedKinds.has(i.kind) || isAnnotation(i))).map(i => i.id));
   // Keep the objects that a retained measurement or supported item refers to.
   for (const i of baseProject.items) {
     if (preservedIds.has(i.id) && i.measure) {
@@ -524,20 +530,71 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
   }
 
   // 3. Collision & obstacle engine respecting EVERY preserved wall, door swing, column, fixture, utility
-  const hardObstacles = preservedItems.filter(i => !isAnnotation(i) && i.kind !== 'zone' && i.kind !== 'door' && i.kind !== 'window' && i.kind !== 'lighting');
-  const hardPolys = hardObstacles.map(i => ({ shape: bounded(footprint(i)), seating: isSeatFurniture(i) }));
-  const existingDoors = preservedItems.filter(i => i.kind === 'door');
-  const swingPolys = existingDoors.flatMap(doorSwings).map(bounded);
-  if (!existingDoors.length) warnings.push('尚未放置门，试排未预留门扇开启空间');
-  if (!preservedItems.some(i => i.kind === 'utility' && i.pointType === 'entrance' && !i.hidden)) {
-    warnings.push('尚未标明顾客入口，可添加入口点位后复核进店路线');
-  }
-
   const placedInterior: Item[] = [];
   const placedPolys: BoundedFootprint[] = [];
   const newGroups: LayoutGroup[] = [];
   const tableCenters: { x: number; y: number; linear: boolean }[] = [];
   const seatMix = new Map<string, { count: number; seats: number }>();
+
+  // Optional: when the shell has zero doors yet, place a schematic storefront door & window on the front-most wall
+  // before seating placement so door swings are strictly respected.
+  const existingDoorsInit = preservedItems.filter(i => i.kind === 'door');
+  if (options.includeStorefront && existingDoorsInit.length === 0) {
+    const frontWalls = preservedItems
+      .filter(i => i.kind === 'wall' && !i.locked && !i.hidden && i.w >= 1600)
+      .sort((a, b) => {
+        const ay = a.y + a.d / 2, by = b.y + b.d / 2;
+        if (Math.abs(by - ay) > 400) return by - ay;
+        return b.w - a.w;
+      });
+    const fw = frontWalls[0];
+    if (fw) {
+      const datum = surveyWall(baseProject, fw);
+      const minOff = datum ? datum.minOffset : 50;
+      const maxEnd = datum ? datum.maxEnd : fw.w - 50;
+      const usableSpan = maxEnd - minOff;
+      const doorW = Math.min(1800, Math.max(1000, Math.round(usableSpan * 0.22)));
+      const doorH = Math.min(2300, Math.max(1900, fw.h - 220));
+      if (usableSpan >= doorW + 100 && doorH >= 1800) {
+        const doorCand: Item = {
+          id: uid(), kind: 'door', model: 'glass-double-door', name: '临街双开玻璃门',
+          w: doorW, d: fw.d, h: doorH, x: 0, y: 0, rotation: fw.rotation,
+          wallId: fw.id, offset: 50, sill: 0, color: '#455961', flipped: true, generated: 'concept',
+        };
+        const preferred = Math.round(minOff + (usableSpan - doorW) / 2);
+        const offset = openingSlot(fw, doorCand, preservedItems, preferred, { min: minOff, maxEnd });
+        if (offset !== undefined && offset >= minOff - 0.1 && offset + doorW <= maxEnd + 0.1) {
+          const center = wallPoint(fw, offset + doorW / 2);
+          const placedDoor: Item = { ...doorCand, offset, x: center.x - doorW / 2, y: center.y - fw.d / 2 };
+          placedInterior.push(placedDoor);
+          // Add flanking storefront window if plenty of front facade remains
+          const winW = Math.min(2600, Math.round((offset - minOff) - 240));
+          const winH = Math.min(2200, fw.h - 360);
+          if (winW >= 1000 && winH >= 900) {
+            const winCand: Item = {
+              id: uid(), kind: 'window', model: 'storefront-window', name: '临街落地橱窗',
+              w: winW, d: fw.d, h: winH, x: 0, y: 0, rotation: fw.rotation,
+              wallId: fw.id, offset: 50, sill: 150, color: '#455961', generated: 'concept',
+            };
+            const winOff = openingSlot(fw, winCand, [...preservedItems, placedDoor], Math.round(minOff + 120), { min: minOff, maxEnd });
+            if (winOff !== undefined && winOff >= minOff - 0.1 && winOff + winW <= maxEnd + 0.1) {
+              const wc = wallPoint(fw, winOff + winW / 2);
+              placedInterior.push({ ...winCand, offset: winOff, x: wc.x - winW / 2, y: wc.y - fw.d / 2 });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const hardObstacles = preservedItems.filter(i => !isAnnotation(i) && i.kind !== 'zone' && i.kind !== 'door' && i.kind !== 'window' && i.kind !== 'lighting');
+  const hardPolys = hardObstacles.map(i => ({ shape: bounded(footprint(i)), seating: isSeatFurniture(i) }));
+  const existingDoors = [...existingDoorsInit, ...placedInterior.filter(i => i.kind === 'door')];
+  const swingPolys = existingDoors.flatMap(doorSwings).map(bounded);
+  if (!existingDoors.length) warnings.push('尚未放置门，试排未预留门扇开启空间');
+  if (!preservedItems.some(i => i.kind === 'utility' && i.pointType === 'entrance' && !i.hidden)) {
+    warnings.push('尚未标明顾客入口，可添加入口点位后复核进店路线');
+  }
 
   const fitsInRegion = (
     cand: Item[],
@@ -632,8 +689,20 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     }
     const barW = Math.min(1800, Math.max(1100, Math.round((alongMax - alongMin) * 0.28)));
     placeAlongWall({ kind: 'counter', model: 'cashier', name: '收银出餐台', w: barW, d: 660, h: 1080, color: preset.barColor }, depth - 760, true);
-    if (missing.length) warnings.push('未摆入的厨具设备：' + missing.join('、'));
 
+    // Optional open-kitchen low partition along the remaining seam leaving wide pass-through circulation
+    if (options.includePartition && !preservedItems.some(i => i.kind === 'partition') && depth >= 1600) {
+      const partW = Math.min(3200, Math.round((alongMax - alongMin) * 0.44));
+      if (partW >= 1000) {
+        const partItem = atWall({ kind: 'partition', model: 'partition', name: '明档半高隔断', w: partW, d: 120, h: 1180, color: '#e6dfd3' }, alongMin + 80, depth - 180);
+        partItem.generated = 'concept';
+        if (fitsInRegion([partItem], kitchenStrips, 40, 120, 180)) {
+          commitPlaced([partItem]);
+        }
+      }
+    }
+
+    if (missing.length) warnings.push('未摆入的厨具设备：' + missing.join('、'));
   }
 
   // 5. Smart Collision-Free Dining Seating Packing inside diningStrips

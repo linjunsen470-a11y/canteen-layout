@@ -23,6 +23,7 @@ import { isAnnotation } from './annotations';
 import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeInteriorShot, computeStorefrontShot } from './SceneCapture';
 import InstancedFurniture from './InstancedFurniture';
 import { dragOpening, isAttachedOpening } from './structure';
+import { computeFrontFacingWallIds } from './wallVisibility3D';
 
 function SelectionBox({ item }: { item: Item }) {
   const geometry = useMemo(() => {
@@ -411,6 +412,25 @@ export type SceneHandle = {
   captureGallery: () => SceneGalleryShots;
 };
 
+function CameraWallCutaway({ project, enabled, onChange }: { project: Project; enabled: boolean; onChange: (key: string) => void }) {
+  const { camera } = useThree();
+  const lastKey = useRef('');
+  useEffect(() => {
+    if (!enabled) {
+      if (lastKey.current !== '') { lastKey.current = ''; onChange(''); }
+      return;
+    }
+    const next = [...computeFrontFacingWallIds(project, { x: camera.position.x, z: camera.position.z })].sort().join(',');
+    if (next !== lastKey.current) { lastKey.current = next; onChange(next); }
+  }, [enabled, project, camera, onChange]);
+  useFrame(() => {
+    if (!enabled) return;
+    const next = [...computeFrontFacingWallIds(project, { x: camera.position.x, z: camera.position.z })].sort().join(',');
+    if (next !== lastKey.current) { lastKey.current = next; onChange(next); }
+  });
+  return null;
+}
+
 export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; takingGallery?: boolean }>(function Scene3D({ active = true, snap = true, takingGallery = false }, ref) {
   const live = useStore(s => active ? s.project : null), lastProject = useRef(useStore.getState().project);
   if (live) lastProject.current = live;
@@ -429,6 +449,8 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
   const [frame, setFrame] = useState<SceneFrame | null>(null), [picking, setPicking] = useState(false), [detail, setDetail] = useState(false);
   const [closeup, setCloseup] = useState(false), [grid, setGrid] = useState(false), [reset, setReset] = useState(0);
   const [eyeIndex, setEyeIndex] = useState(0);
+  const [autoWallCutaway, setAutoWallCutaway] = useState(true);
+  const [frontWallKey, setFrontWallKey] = useState('');
   const [dragging, setDragging] = useState(false), [captureError, setCaptureError] = useState('');
   const pan = useRef(false), [panMode, setPanMode] = useState<ScenePanMode>('off');
   const capture = useRef<SceneCaptureAPI | null>(null);
@@ -549,14 +571,34 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
     lightingPreset: style.lightingPreset,
   }), [style.wallMaterial, style.wallCutaway, style.lightingPreset, prefs.camera]);
 
+  const frontWallIds = useMemo(() => new Set(frontWallKey ? frontWallKey.split(',') : []), [frontWallKey]);
+  const cutawayRenderOptions: BuildingRenderOptions = useMemo(() => ({ ...renderOptions, cutaway: true }), [renderOptions]);
+  const smartWallActive = autoWallCutaway && prefs.camera === 'oblique' && !focus && !style.wallCutaway && !takingGallery;
+
   const groups = useMemo(() => {
     const visible = focus ? [focus, ...project.items.filter(i => i.wallId === focus.id)] : project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i));
     const cutawayHidden = new Set(['shop-sign', 'menu-board', 'tv-screen', 'wall-art']);
-    const shown = visible.filter(i => isVisible(i, project) && !(renderOptions.cutaway && !focus && cutawayHidden.has(modelOf(i))));
+    const cutWalls = frontWallIds.size ? project.items.filter(w => w.kind === 'wall' && frontWallIds.has(w.id)) : [];
+    const nearCutWall = (item: Item) => {
+      if (!cutWalls.length) return false;
+      const cx = item.x + item.w / 2, cy = item.y + item.d / 2;
+      return cutWalls.some(w => {
+        const rad = -w.rotation * Math.PI / 180;
+        const dx = cx - (w.x + w.w / 2), dy = cy - (w.y + w.d / 2);
+        const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
+        const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
+        return Math.abs(lx) <= w.w / 2 + 250 && Math.abs(ly) <= w.d / 2 + 320;
+      });
+    };
+    const shown = visible.filter(i => {
+      if (!isVisible(i, project)) return false;
+      if (!focus && cutawayHidden.has(modelOf(i)) && (renderOptions.cutaway || nearCutWall(i))) return false;
+      return true;
+    });
     const groups = new Map<string, Item[]>();
     for (const original of shown) {
       const m = modelOf(original);
-      const h = renderOptions.cutaway && !focus && m === 'wood-feature-wall' ? Math.min(original.h, 1180) : original.h;
+      const h = (renderOptions.cutaway || nearCutWall(original)) && !focus && m === 'wood-feature-wall' ? Math.min(original.h, 1180) : original.h;
       const i = { ...original, h, sill: baseHeight(project, original) };
       const key = ['wall', 'door', 'window'].includes(i.kind)
         ? i.id
@@ -566,13 +608,13 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
       else groups.set(key, [i]);
     }
     return groups;
-  }, [project.items, focus?.id, project.planningAreas, planning.activeId, planning.dim, renderOptions.cutaway]);
+  }, [project.items, focus?.id, project.planningAreas, planning.activeId, planning.dim, renderOptions.cutaway, frontWallIds]);
 
   const selectedItems = project.items.filter(i => ids.includes(i.id) && isVisible(i, project) && !isAnnotation(i));
   const area = project.planningAreas?.find(a => a.id === planning.activeId);
   const showFrame = (next: SceneFrame) => { setFrame(next); setCloseup(false); setPicking(false); setReset(n => n + 1); };
   const cfg = atmosphereConfig[style.lightingPreset];
-  const styleKey = JSON.stringify([style.floorMaterial, style.wallMaterial, style.lightingPreset, style.wallCutaway, style.showCeiling, prefs.camera]);
+  const styleKey = JSON.stringify([style.floorMaterial, style.wallMaterial, style.lightingPreset, style.wallCutaway, style.showCeiling, prefs.camera, frontWallKey]);
 
   return <div className="scene-shell" tabIndex={0} onPointerDownCapture={e => { if (e.target instanceof HTMLCanvasElement) e.currentTarget.focus({ preventScroll: true }); }}>
     <div className="scene-toolbar">
@@ -589,13 +631,14 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
           <button key={p} aria-pressed={style.lightingPreset === p} onClick={() => updateStyle({ lightingPreset: p })}>{presetLabels[p]}</button>
         ))}
       </div>
-      <button aria-pressed={style.wallCutaway} title="将墙体降至半高便于俯瞰室内布置" onClick={() => updateStyle({ wallCutaway: !style.wallCutaway })}>半高墙</button>
-      <button aria-pressed={!style.showZoneTint3D} title="隐藏地面规划色块，呈现干净材质效果图" onClick={() => updateStyle({ showZoneTint3D: !style.showZoneTint3D })}>纯净地面</button>
-      <button onClick={screenshot} title="保存当前高清 3D 效果图 PNG">效果图截图</button>
-      <button onClick={() => { useStore.getState().cancelInteraction(); prefs.set(prefs.focusMode && prefs.focusView === '3d' ? { focusMode: false, focusView: null } : { focusMode: true, focusView: '3d' }); }}>
-        {prefs.focusMode && prefs.focusView === '3d' ? '还原三维' : '最大化三维'}
-      </button>
+      <button aria-pressed={autoWallCutaway && !style.wallCutaway} title="鸟瞰旋转时自动降低挡住视线的近侧外墙，后侧墙保持全高" onClick={() => { if (style.wallCutaway) updateStyle({ wallCutaway: false }); setAutoWallCutaway(v => !v); }}>智能透视墙</button>
       <details className="scene-more"><summary>更多</summary><div className="scene-more-actions">
+        <button aria-pressed={style.wallCutaway} title="将所有墙体降至半高便于俯瞰" onClick={() => updateStyle({ wallCutaway: !style.wallCutaway })}>全部半高墙</button>
+        <button aria-pressed={!style.showZoneTint3D} title="隐藏地面规划色块，呈现干净材质效果图" onClick={() => updateStyle({ showZoneTint3D: !style.showZoneTint3D })}>纯净地面</button>
+        <button onClick={screenshot} title="保存当前高清 3D 效果图 PNG">效果图截图</button>
+        <button onClick={() => { useStore.getState().cancelInteraction(); prefs.set(prefs.focusMode && prefs.focusView === '3d' ? { focusMode: false, focusView: null } : { focusMode: true, focusView: '3d' }); }}>
+          {prefs.focusMode && prefs.focusView === '3d' ? '还原三维' : '最大化三维'}
+        </button>
         <button disabled={!selectedItems.length} onClick={() => showFrame(frameItems(project, selectedItems))}>聚焦选中</button>
         <button disabled={!area} onClick={() => { if (area) showFrame(framePoints(area.outline, Math.max(2800, ...project.items.map(i => i.h)), area.name)); }}>聚焦规划范围</button>
         <button aria-pressed={picking} onClick={() => { if (picking) { setPicking(false); return; } setCloseup(false); setFrame(null); prefs.set({ camera: 'top' }); setReset(n => n + 1); setPicking(true); }}>{picking ? '取消框选' : '框选放大'}</button>
@@ -608,13 +651,13 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
         <button aria-pressed={grid} title="三维网格" onClick={() => setGrid(v => !v)}>网格</button>
         <button title="重置三维视角" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'oblique' }); setReset(n => n + 1); }}>复位</button>
         <button aria-pressed={detail} onClick={() => setDetail(v => !v)}>{detail ? '精细画质' : '流畅画质'}</button>
-        <button onClick={screenshot}>三维截图</button>
         {captureError && <span role="alert">{captureError}</span>}
       </div></details>
     </div>
     <div className={`scene-viewport scene-pan-${panMode}`}>
       <Canvas frameloop={active ? 'demand' : 'never'} shadows dpr={detail ? [1, 1.85] : 1} camera={{ position: [14, 12, 16], fov: 40 }} gl={{ localClippingEnabled: true, antialias: true, toneMapping: T.ACESFilmicToneMapping, toneMappingExposure: cfg.exposure }}>
         <SceneCapture capture={capture} />
+        <CameraWallCutaway project={project} enabled={smartWallActive} onChange={setFrontWallKey} />
         <ShadowUpdates items={project.items} focus={focus?.id} detail={detail} styleKey={styleKey} />
         <Environment detail={detail} preset={style.lightingPreset} center={focus ? [(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000] : [project.width / 2000, 0, project.height / 2000]} extent={focus ? Math.max(focus.w, focus.d, focus.h) / 1000 * 1.5 : Math.max(project.width, project.height) / 1000} />
         {!focus && <InteriorLights project={project} preset={style.lightingPreset} />}
@@ -626,7 +669,10 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
         {!focus && project.items.filter(i => i.kind === 'zone' && ids.includes(i.id) && isVisible(i, project)).map(i => <ZoneHighlight key={i.id} item={i} />)}
         {[...groups].map(([spec, items]) => items.length >= 3
           ? <InstancedFurniture key={spec} spec={spec} items={items} handlers={handlers} faded={faded(items[0])} renderOptions={renderOptions} />
-          : items.map(i => <Furniture key={i.id} profile={profiles.get(i.id)} item={i} selected={ids.includes(i.id)} faded={faded(i)} handlers={handlers} renderOptions={renderOptions} openings={i.kind === 'wall' ? project.items.filter(o => o.wallId === i.id) : undefined} />)
+          : items.map(i => {
+            const isFrontCut = smartWallActive && ((i.kind === 'wall' && frontWallIds.has(i.id)) || (!!i.wallId && frontWallIds.has(i.wallId)));
+            return <Furniture key={i.id} profile={profiles.get(i.id)} item={i} selected={ids.includes(i.id)} faded={faded(i)} handlers={handlers} renderOptions={isFrontCut ? cutawayRenderOptions : renderOptions} openings={i.kind === 'wall' ? project.items.filter(o => o.wallId === i.id) : undefined} />;
+          })
         )}
         {[...groups.values()].filter(items => items.length >= 3).flat().filter(i => ids.includes(i.id)).map(i => <group key={i.id} position={[(i.x + i.w / 2) / 1000, (i.sill ?? 0) / 1000, (i.y + i.d / 2) / 1000]} rotation={[0, -i.rotation * Math.PI / 180, 0]}><SelectionBox item={i} /></group>)}
         {focus && <ContactShadows key={[focus.id, focus.x, focus.y, focus.w, focus.d, focus.h, focus.rotation].join('-')} position={[(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000]} scale={Math.max(focus.w, focus.d) / 1000 * 2.5} far={focus.h / 1000 * 1.5} resolution={256} blur={2.5} opacity={0.4} frames={1} color="#3e453d" />}

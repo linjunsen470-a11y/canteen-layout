@@ -1,6 +1,6 @@
 import { useWallPlacement, cancelWallPlacement } from './wallPlacement';
 import { copySelection, pasteSelection } from './editorClipboard';
-import { layoutAction, groupSelected, ungroupSelected } from './layoutCommands';
+import { layoutAction, groupSelected, ungroupSelected, rotateSelected } from './layoutCommands';
 import { isEditable } from './editorInteraction';
 import { useWorkspace } from './workspace';
 import { useEffect } from 'react';
@@ -36,6 +36,7 @@ export function useEditorKeyboard(){
         e.preventDefault();const step=e.altKey?1:e.shiftKey?100:10,dx=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0,dy=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;
         try{s.updateMany(movableSelection(s.project,s.selectedIds).filter(i=>!i.measure).map(i=>({id:i.id,patch:{x:i.x+dx,y:i.y+dy}})))}catch(error){useStore.setState({error:(error as Error).message})}return;
       }
+      if(e.key.toLowerCase()==='r'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&s.tool==='select'&&!s.gesture&&s.selectedIds.length>0){e.preventDefault();layoutAction(()=>rotateSelected(e.shiftKey?-90:90));return}
       if(e.key.toLowerCase()==='f'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!s.gesture){e.preventDefault();s.cancelInteraction();const p=useWorkspace.getState();p.set({focusMode:!p.focusMode,focusView:null});return}
       if(e.key==='Escape'&&!s.gesture&&s.tool==='select'&&useWorkspace.getState().focusMode){e.preventDefault();useWorkspace.getState().set({focusMode:false});return}
       if(e.key==='Escape'){e.preventDefault();const active=!!s.gesture||s.tool!=='select';s.cancelInteraction();if(!active)s.selectMany([]);return}

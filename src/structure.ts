@@ -65,9 +65,12 @@ export function syncStructure(project: Project): Project {
     });
     return syncMeasurements({ ...project, items });
 }
-export function openingSlot(wall: Item, opening: Item, items: Item[], preferred: number) {
-    const candidates = [preferred, 50, wall.w-opening.w-50, ...items.filter(i => i.wallId === wall.id && i.id!==opening.id).flatMap(i => [(i.offset ?? 0) + i.w, (i.offset ?? 0)-opening.w])];
-    return candidates.map(n => Math.max(50, Math.min(wall.w - opening.w - 50, n))).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred)).find(offset => !openingError(wall, { ...opening, wallId: wall.id, offset }, items));
+/** Finds a free offset for an opening on a wall. `bounds` narrows the usable span (e.g. surveyed inner corners). */
+export function openingSlot(wall: Item, opening: Item, items: Item[], preferred: number, bounds?: { min: number; maxEnd: number }) {
+    const lo = Math.max(50, bounds?.min ?? 50), hi = Math.min(wall.w - 50, bounds?.maxEnd ?? wall.w - 50) - opening.w;
+    if (hi < lo - 1e-6) return undefined;
+    const candidates = [preferred, lo, hi, ...items.filter(i => i.wallId === wall.id && i.id!==opening.id).flatMap(i => [(i.offset ?? 0) + i.w, (i.offset ?? 0)-opening.w])];
+    return candidates.map(n => Math.max(lo, Math.min(hi, n))).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred)).find(offset => !openingError(wall, { ...opening, wallId: wall.id, offset }, items));
 }
 export function attachOpening(project: Project, opening: Item, point: {
     x: number;

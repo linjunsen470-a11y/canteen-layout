@@ -132,7 +132,16 @@ export function surveyWall(project: Project, wall: Item) {
     const next = centers[(j + 1) % count], start = wallPoint(w, 0), end = wallPoint(w, w.w);
     if (Math.hypot(start.x - centers[j].x, start.y - centers[j].y) > 0.01 || Math.hypot(end.x - next.x, end.y - next.y) > 0.01) return;
   }
+  const area2 = s.corners.reduce((area, p, idx) => {
+    const next = s.corners[(idx + 1) % count];
+    return area + p.x * next.y - p.y * next.x;
+  }, 0);
   const a = s.corners[i], b = s.corners[(i + 1) % count];
+  const edgeLen = Math.hypot(b.x - a.x, b.y - a.y);
+  const tx = edgeLen > 0 ? (b.x - a.x) / edgeLen : 1;
+  const ty = edgeLen > 0 ? (b.y - a.y) / edgeLen : 0;
+  const sign = Math.sign(area2) || 1;
+  const inward = { x: -sign * ty, y: sign * tx };
   const start = Math.round(projectOnWall(wall, a).offset * 1000) / 1000;
   const end = Math.round(projectOnWall(wall, b).offset * 1000) / 1000;
   // Reconcile inner-face span with structural openingError() 50mm centerline bounds
@@ -141,7 +150,7 @@ export function surveyWall(project: Project, wall: Item) {
   const maxEnd = Math.min(end, wall.w - 50);
   const minStartGap = Math.max(0, Math.ceil(minOffset - start));
   const minEndGap = Math.max(0, Math.ceil(end - maxEnd));
-  return { a, b, start, end, minOffset, maxEnd, minStartGap, minEndGap, index: i };
+  return { a, b, start, end, minOffset, maxEnd, minStartGap, minEndGap, index: i, tangent: { x: tx, y: ty }, inward };
 }
 
 type WallDatum = NonNullable<ReturnType<typeof surveyWall>>;
@@ -161,4 +170,33 @@ export function openingOffset(datum: WallDatum, distance: number, width: number,
     throw Error(`受墙角结构限制，距末角至少需留 ${need} mm（避免切入相邻墙体）`);
   }
   return offset;
+}
+
+export function surveyWallInwardPoint(
+  datum: WallDatum,
+  alongDistance: number,
+  insetDistance: number,
+  w: number,
+  d: number,
+  fromEnd: boolean,
+): Point {
+  if (!Number.isFinite(alongDistance) || !Number.isFinite(insetDistance) || alongDistance < 0 || insetDistance < 0) {
+    throw Error('沿墙距离与离墙净距须为非负有效数值');
+  }
+  if (!Number.isFinite(w) || !Number.isFinite(d) || w <= 0 || d <= 0) {
+    throw Error('构件尺寸须大于 0 mm');
+  }
+  const edgeLen = datum.end - datum.start;
+  const horizontal = Math.abs(datum.tangent.x) > 0.5;
+  const spanAlong = horizontal ? w : d;
+  const spanInward = horizontal ? d : w;
+  if (alongDistance + spanAlong > edgeLen + 0.01) {
+    throw Error(`构件沿墙位置超出本段内净长（${Math.round(edgeLen)} mm）`);
+  }
+  const alongStart = fromEnd ? edgeLen - alongDistance - spanAlong : alongDistance;
+  const alongCenter = alongStart + spanAlong / 2;
+  const inwardCenter = insetDistance + spanInward / 2;
+  const cx = datum.a.x + datum.tangent.x * alongCenter + datum.inward.x * inwardCenter;
+  const cy = datum.a.y + datum.tangent.y * alongCenter + datum.inward.y * inwardCenter;
+  return { x: Math.round(cx - w / 2), y: Math.round(cy - d / 2) };
 }

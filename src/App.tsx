@@ -11,7 +11,7 @@ import { PlanningBar } from './PlanningFields';
 import { usePlanning } from './planning';
 import type { SceneHandle } from './Scene3D';
 import SceneBoundary from './SceneBoundary';
-import PresentationDialog, { PresentationDialogHandle } from './PresentationDialog';
+import PresentationDialog from './PresentationDialog';
 import PlanEditor, { PlanHandle } from './PlanEditor';
 import SplitView from './SplitView';
 import SidebarResize from './SidebarResize';
@@ -20,7 +20,7 @@ import ShopInsightsDialog from './ShopInsightsDialog';
 import ConceptPlannerDialog from './ConceptPlannerDialog';
 import { ComboPreset, comboPresets, placeCombo } from './combos';
 import { seatSummary } from './layoutGroups';
-import { Maximize2, Minimize2, ChevronUp, ChevronDown, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download, Share2 } from 'lucide-react';
+import { Maximize2, Minimize2, ChevronUp, ChevronDown, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download } from 'lucide-react';
 import { useStore } from './store';
 import { catalog, Item, resolveStyle } from './model';
 import ProjectLibrary from './ProjectManager';
@@ -35,7 +35,6 @@ import { toolLabels } from './editorInteraction';
 
 const Scene3D = lazy(() => import('./Scene3D'));
 type CatalogItem = typeof catalog[number];
-const m = (n: number) => (n / 1000).toFixed(2) + ' m';
 const lightingText: Record<string, string> = { 'daylight': '自然光', 'warm-dining': '暖光营业', 'evening': '晚间灯光', 'clay': '白模' };
 
 export default function App() {
@@ -63,8 +62,8 @@ export default function App() {
   useEditorKeyboard();
   const [grid, G] = useState(true), [snap, S] = useState(true), [notice, notify] = useState('');
   const plan = useRef<PlanHandle>(null), scene = useRef<SceneHandle>(null);
-  const presentationRef = useRef<PresentationDialogHandle>(null);
   const [librarySignal, setLibrarySignal] = useState(0);
+  const [conceptSignal, setConceptSignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
   const seatsInfo = useMemo(() => seatSummary(project), [project.items, project.groups]);
@@ -123,7 +122,7 @@ export default function App() {
   const addCombo = useCallback((combo: ComboPreset, point?: { x: number; y: number }) => {
     try {
       placeCombo(combo, point, point === undefined);
-      notify(`已放置「${combo.name}」（整组可一起拖动与旋转，双击可单件微调）`);
+      notify(`已放置「${combo.name}」（整组可一起拖动，按 R 旋转 90°，双击单件微调）`);
     } catch (e) {
       notify((e as Error).message);
     }
@@ -145,18 +144,15 @@ export default function App() {
         <Store />
         <div>
           <h1>铺位规划 Studio</h1>
-          <small>餐饮开店 · 2D 平面与 3D 效果图</small>
+          <small>2D 平面 · 3D 实景</small>
         </div>
       </div>
       <ShopWizardDialog notify={notify} />
       <ProjectLibrary />
       <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
       <div className="actions" inert={!sessionReady || sessionBusy}>
-        <ConceptPlannerDialog notify={notify} />
+        <ConceptPlannerDialog notify={notify} openSignal={conceptSignal} />
         <ShopInsightsDialog />
-        <button className="share-partner-btn" title="一键拍摄 2D 平面 + 3 视角 3D 效果图，生成可发给合伙人讨论的精美方案书" onClick={() => presentationRef.current?.open()}>
-          <Share2 />发给合伙人
-        </button>
         <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
         <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
@@ -164,7 +160,7 @@ export default function App() {
           <div className="menu-action-list">
             <ProjectFiles notify={notify} />
             <button className="primary" disabled={view === '3d'} onClick={png}><Download />导出 2D 平面图 PNG</button>
-            <PresentationDialog ref={presentationRef} capture={capture} />
+            <PresentationDialog capture={capture} />
           </div>
         </ToolMenu>
       </div>
@@ -202,13 +198,11 @@ export default function App() {
           view={view}
           first={
             <div className="plan">
-              <div className="viewtitle"><b>2D</b><span>平面布局</span><small>{m(project.width)} × {m(project.height)} · 拖放素材或组合</small></div>
-              <PlanEditor active={view !== '3d'} ref={plan} grid={grid} snap={snap} notify={notify} onDropItem={dropItem} onDropCombo={dropCombo} />
+              <PlanEditor active={view !== '3d'} ref={plan} grid={grid} snap={snap} notify={notify} onDropItem={dropItem} onDropCombo={dropCombo} onOpenConcept={() => setConceptSignal(n => n + 1)} />
             </div>
           }
           second={
             <div className="three">
-              <div className="viewtitle"><b>3D</b><span>实时效果图</span><small>{lightingText[style.lightingPreset]} · 门头外观 / 进店漫游 / 灯光切换</small></div>
               <SceneBoundary>
                 {sceneMounted && (
                   <Suspense fallback={<div className="scene-loading">正在加载三维渲染引擎…</div>}>
@@ -220,7 +214,7 @@ export default function App() {
           }
         />
         <footer role="status">
-          <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象` : '就绪 · 可从素材库拖入桌椅和设备')}</span>
+          <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象 · R 旋转 90°` : '就绪 · 从左侧拖入桌椅设备，或点「智能分区估算」快速起稿')}</span>
           <span className="project-count">
             <b>{seatsInfo.seats} 座</b> · {project.survey && '实测净面积 '}{(planningArea(project) / 1e6).toFixed(2)} ㎡ · {project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i)).length} 件 · {lightingText[style.lightingPreset]}
           </span>
