@@ -2,6 +2,7 @@ import { ordinaryEquipment } from './equipmentFacing';
 import { Project, Item, modelOf, catalog, projectIdentity } from './model';
 import { isAnnotation } from './annotations';
 import { syncStructure, isAttachedOpening } from './structure';
+import { validateSurvey } from './interiorSurvey';
 const kinds = new Set(['table', 'chair', 'counter', 'sink', 'fridge', 'stove', 'shelf', 'partition', 'wall','door','window','stairs','text','dimension','leader','zone','column','fixture','utility','lighting','decor']);
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const floorMaterials = new Set(['oak-wood','terrazzo','warm-tile','concrete','checker']);
@@ -39,6 +40,7 @@ export function parseProject(value: unknown): Project {
     }
     if (typeof p.name !== 'string' || !finite(p.width) || p.width <= 0 || !finite(p.height) || p.height <= 0 || !Array.isArray(p.items))
         throw new Error('场地名称或尺寸无效');
+    if (p.survey !== undefined) validateSurvey(p.survey);
     const ids = new Set<string>();
     const items = p.items.map((i: Item) => {
         if (!i || typeof i.id !== 'string' || !i.id || ids.has(i.id) || !kinds.has(i.kind) || typeof i.name !== 'string' || typeof i.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(i.color) || ![i.x, i.y, i.w, i.d, i.h, i.rotation].every(finite) || i.w <= 0 || i.d <= 0 || i.h < 0 || (i.locked !== undefined && typeof i.locked !== 'boolean') || (i.hidden !== undefined && typeof i.hidden !== 'boolean'))
@@ -52,7 +54,7 @@ export function parseProject(value: unknown): Project {
         ids.add(i.id);
         return { catalogId:i.catalogId,specification:i.specification,operationFace:ordinaryEquipment(i)?(i.operationFace??'none'):i.operationFace, model: isAnnotation(i)?undefined:modelOf(i), id: i.id, kind: i.kind, name: i.name, color: i.color, x: i.x, y: i.y, w: i.w, d: i.d, h: i.h, rotation: i.rotation, elevation: i.elevation, locked: i.locked,hidden:i.hidden,fontSize:i.fontSize,zoneId:i.zoneId,wallId:i.wallId,offset:i.offset,sill:i.sill,flipped:i.flipped,hingeRight:i.hingeRight,freeStanding:i.freeStanding,polygon:i.polygon,pointType:i.pointType,verification:i.verification,notes:i.notes,seats:i.seats,supportId:i.supportId,measure:i.measure };
     });
-    return syncStructure({ ...identity, name: p.name, width: p.width, height: p.height, outline:p.outline, underlay:p.underlay, planningAreas:p.planningAreas,groups:p.groups,clearance:p.clearance, style: sanitizeStyle(p.style), items });
+    return syncStructure({ ...identity, name: p.name, width: p.width, height: p.height, outline:p.outline, survey:p.survey, underlay:p.underlay, planningAreas:p.planningAreas,groups:p.groups,clearance:p.clearance, style: sanitizeStyle(p.style), items });
 }
 export function download(data: Blob, filename: string) {
     const url = URL.createObjectURL(data);

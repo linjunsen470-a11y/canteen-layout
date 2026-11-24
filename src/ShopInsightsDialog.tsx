@@ -3,6 +3,7 @@ import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Lig
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
 import { usePlanning } from './planning';
+import { planningAreaLabel, siteArea } from './site';
 import { analyzeShop, bomCSV } from './shopAnalytics';
 import { checkSpace, SpaceIssue } from './spaceChecks';
 import { download } from './projectIO';
@@ -58,9 +59,9 @@ export default function ShopInsightsDialog() {
 
       <div className="kpi-grid kpi-grid-5">
         <div className="kpi-card">
-          <small>实用规划面积</small>
-          <strong>{insights.areaSqm.toFixed(1)} ㎡</strong>
-          <span>{(project.width / 1000).toFixed(1)}m × {(project.height / 1000).toFixed(1)}m</span>
+          <small>{planningAreaLabel(project)}</small>
+          <strong>{insights.areaSqm.toFixed(2)} ㎡</strong>
+          <span>{project.survey && <>外轮廓面积 {(siteArea(project)/1e6).toFixed(2)} ㎡ · </>}{(project.width / 1000).toFixed(1)}m × {(project.height / 1000).toFixed(1)}m</span>
         </div>
         <div className="kpi-card">
           <small>明确客座总数</small>

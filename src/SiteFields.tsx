@@ -3,7 +3,7 @@ import UnderlayFields from './UnderlayFields';
 import PlanningFields from './PlanningFields';
 import { useStore } from './store';
 import { NumberField } from './NumberField';
-import { siteArea, siteOutline, SitePoint } from './site';
+import { planningArea, siteArea, siteOutline, SitePoint } from './site';
 import { FloorMaterial, LightingPreset, ProjectStyle, WallMaterial, resolveStyle } from './model';
 import { buildPerimeterWalls } from './shopTemplates';
 
@@ -60,7 +60,13 @@ export default function SiteFields({ onEdit }: { onEdit: (draw?: boolean) => voi
     <div className="site-actions"><button onClick={() => { preset(); onEdit(); }}>L 形起步</button><button onClick={() => onEdit(true)}>自由绘制</button></div>
     <label>场地范围长度（mm）<NumberField value={p.width} min={1} onCommit={n => resize(n, p.height)} /></label>
     <label>场地范围宽度（mm）<NumberField value={p.height} min={1} onCommit={n => resize(p.width, n)} /></label>
-    <p className="site-area">实际面积 <b>{(siteArea(p) / 1e6).toFixed(2)} ㎡</b></p>
+    <p className="site-area">{p.survey ? '外轮廓面积' : '场地轮廓面积'} <b>{(siteArea(p) / 1e6).toFixed(2)} ㎡</b></p>
+    {p.survey && <details className="site-data"><summary>现场记录净面积 {(planningArea(p)/1e6).toFixed(2)} ㎡</summary>
+      <p>建铺时记录的内墙净长 · 墙厚 {p.survey.thickness} mm</p>
+      <ol>{p.survey.corners.map((v,i,points) => {
+        const b = points[(i+1)%points.length], dx = b.x-v.x, dy = b.y-v.y;
+        return <li key={i}>{dx ? (dx > 0 ? '右' : '左') : (dy > 0 ? '下' : '上')} · {Math.hypot(dx,dy)} mm</li>;
+      })}</ol></details>}
     <button className="site-edit" onClick={encloseWalls} title="沿当前场地轮廓自动生成四周外围墙体">沿场地轮廓一键围合外墙</button>
     {p.outline && <>
       <button className="site-edit" onClick={() => onEdit()}>在画布编辑轮廓</button>

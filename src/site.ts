@@ -1,10 +1,11 @@
 import { Project } from './model';
 
 export type SitePoint = { x: number; y: number };
-export const floorColors = ['#e7e8e0', '#dbe0d6'];
 export const siteOutline = (p: Project): SitePoint[] => p.outline ?? [{ x: 0, y: 0 }, { x: p.width, y: 0 }, { x: p.width, y: p.height }, { x: 0, y: p.height }];
 export const polygonArea = (points: SitePoint[]) => Math.abs(points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]; return sum + p.x * q.y - q.x * p.y; }, 0)) / 2;
 export const siteArea = (p: Project) => polygonArea(siteOutline(p));
+export const planningArea = (p: Project) => p.survey ? polygonArea(p.survey.corners) : siteArea(p);
+export const planningAreaLabel = (p: Project) => p.survey ? '现场记录净面积' : '场地轮廓面积';
 const cross = (a: SitePoint, b: SitePoint, c: SitePoint) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 export function pointInSite(p: Project, point: SitePoint) {
   const points=siteOutline(p);let inside=false;
@@ -27,7 +28,7 @@ function intersects(a: SitePoint, b: SitePoint, c: SitePoint, d: SitePoint) {
   if (Math.max(a.x, b.x) < Math.min(c.x, d.x) || Math.max(c.x, d.x) < Math.min(a.x, b.x) || Math.max(a.y, b.y) < Math.min(c.y, d.y) || Math.max(c.y, d.y) < Math.min(a.y, b.y)) return false;
   return cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0;
 }
-export function validateSite(p: Project) {
+export function validateSite(p: Pick<Project, 'outline' | 'width' | 'height'>) {
   if (p.outline === undefined) return;
   const points = p.outline;
   if (!Array.isArray(points) || points.length < 3 || points.length > 64) throw Error('场地轮廓需要 3–64 个顶点');

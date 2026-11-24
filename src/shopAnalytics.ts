@@ -1,7 +1,7 @@
 import { Item, Project, modelOf } from './model';
 import { isAnnotation } from './annotations';
 import { isVisible } from './editorInteraction';
-import { siteArea } from './site';
+import { siteArea, planningArea, planningAreaLabel } from './site';
 import { zoneArea } from './zones';
 import { seatSummary } from './layoutGroups';
 import { isBuilding } from './structure';
@@ -136,7 +136,7 @@ function bomCategory(item: Item): string {
 }
 
 export function analyzeShop(project: Project): ShopInsights {
-  const areaSqm = siteArea(project) / 1e6;
+  const areaSqm = planningArea(project) / 1e6;
   const visible = project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i) && isVisible(i, project));
   const zones = project.items.filter(i => i.kind === 'zone' && !i.hidden);
   const { seats, unknown: unknownSeats } = seatSummary(project);
@@ -273,7 +273,7 @@ export function bomCSV(project: Project, insights: ShopInsights): string {
   const lines = [
     ['分类', '名称', '规格尺寸', '数量', '参考单价低(元)', '参考单价高(元)', '参考小计低(元)', '参考小计高(元)'].map(esc).join(','),
     ...insights.bom.map(r => [r.category, r.name, r.spec, r.count, r.unitPriceMin, r.unitPriceMax, r.unitPriceMin * r.count, r.unitPriceMax * r.count].map(esc).join(',')),
-    ['汇总', project.name, `实用面积 ${insights.areaSqm.toFixed(2)}㎡ / ${insights.seats}座`, insights.bom.reduce((s, r) => s + r.count, 0), '', '', insights.budgetMin, insights.budgetMax].map(esc).join(','),
+    ['汇总', project.name, `${planningAreaLabel(project)} ${insights.areaSqm.toFixed(2)}㎡${project.survey ? ' / 外轮廓面积 ' + (siteArea(project)/1e6).toFixed(2) + '㎡' : ''} / ${insights.seats}座`, insights.bom.reduce((s, r) => s + r.count, 0), '', '', insights.budgetMin, insights.budgetMax].map(esc).join(','),
   ];
   return '\ufeff' + lines.join('\n');
 }

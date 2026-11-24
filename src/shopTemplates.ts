@@ -676,7 +676,7 @@ function insetPolygon(pts: Point[], inset: number): Point[] {
 
 // One-click helper to wrap perimeter walls cleanly inside the current project's site outline.
 export function buildPerimeterWalls(project: Project): Item[] {
-  const thickness = 200;
+  const thickness = project.survey?.thickness ?? 200;
   const pts = insetPolygon(siteOutline(project), thickness / 2);
   const wallH = project.style?.ceilingHeight ?? 3100;
   const walls: Item[] = [];

@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 
-type Preferences={focusMode:boolean;focusView:'2d'|'3d'|null;toolsOpen:boolean;libraryWidth:number;propsWidth:number;objectSnap:boolean;view:'2d'|'split'|'3d';libraryOpen:boolean;propsOpen:boolean;leftTab:'catalog'|'objects';ratio:number;axis:'auto'|'columns'|'rows';camera:'oblique'|'top'|'eye-level';move3D:boolean;gridSize:number;snapSize:number};
-const defaults:Preferences={focusMode:false,focusView:null,toolsOpen:true,libraryWidth:272,propsWidth:286,objectSnap:true,view:'split',libraryOpen:true,propsOpen:true,leftTab:'catalog',ratio:52,axis:'auto',camera:'oblique',move3D:false,gridSize:1000,snapSize:100};
+type Preferences={surveyFromEnd:boolean;focusMode:boolean;focusView:'2d'|'3d'|null;toolsOpen:boolean;libraryWidth:number;propsWidth:number;objectSnap:boolean;view:'2d'|'split'|'3d';libraryOpen:boolean;propsOpen:boolean;leftTab:'catalog'|'objects';ratio:number;axis:'auto'|'columns'|'rows';camera:'oblique'|'top'|'eye-level';move3D:boolean;gridSize:number;snapSize:number};
+const defaults:Preferences={surveyFromEnd:false,focusMode:false,focusView:null,toolsOpen:true,libraryWidth:272,propsWidth:286,objectSnap:true,view:'split',libraryOpen:true,propsOpen:true,leftTab:'catalog',ratio:52,axis:'auto',camera:'oblique',move3D:false,gridSize:1000,snapSize:100};
 function read():Preferences{
   try{const p=JSON.parse(localStorage.getItem('canteen-workspace-v1')||'{}');return {
-    focusMode:false,focusView:null,toolsOpen:p.toolsOpen!==false,
+    surveyFromEnd:p.surveyFromEnd===true,focusMode:false,focusView:null,toolsOpen:p.toolsOpen!==false,
     libraryWidth:Number.isFinite(p.libraryWidth)?Math.max(200,Math.min(400,p.libraryWidth)):defaults.libraryWidth,
     propsWidth:Number.isFinite(p.propsWidth)?Math.max(220,Math.min(420,p.propsWidth)):defaults.propsWidth,
     objectSnap:p.objectSnap!==false,

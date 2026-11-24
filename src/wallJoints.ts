@@ -1,4 +1,5 @@
 import { Item, Point, Project } from './model';
+import { surveyWall } from './interiorSurvey';
 import { wallPoint } from './structure';
 export function nearestWallEnd(project:Project,p:Point,tolerance:number,exclude?:string){
  let result:Point|undefined,distance=tolerance;
@@ -21,7 +22,16 @@ export function wallProfiles(project:Project){
    const t=((q.x-p.x)*b.dir.y-(q.y-p.y)*b.dir.x)/den;return{x:p.x+a.dir.x*t,y:p.y+a.dir.y*t};
   });
   if(corners.some(p=>Math.hypot(p.x-a.p.x,p.y-a.p.y)>Math.max(a.w.d,b.w.d)*4))continue;
-  const safe=(e:typeof a)=>{const openings=project.items.filter(o=>o.wallId===e.w.id),clear=Math.min(e.w.w*.45,...openings.map(o=>e.end?e.w.w-o.offset!-o.w:o.offset!));return corners.every(p=>{const v=local(e.w,p);return (e.end?e.w.w/2-v.x:v.x+e.w.w/2)<clear-.1})};
+  const safe = (e: typeof a) => {
+    // Surveyed orthogonal miters already have a validated, non-crossing outer perimeter.
+    const surveyed = project.survey && surveyWall(project,e.w);
+    const openings = project.items.filter(o=>o.wallId===e.w.id);
+    const limit = Math.min(surveyed ? Infinity : e.w.w*.45, ...openings.map(o=>e.end ? e.w.w-o.offset!-o.w : o.offset!));
+    return corners.every(p=>{
+      const v=local(e.w,p), along=e.end ? e.w.w/2-v.x : v.x+e.w.w/2;
+      return surveyed ? along <= limit + .001 : along < limit - .1;
+    });
+  };
   if(!safe(a)||!safe(b))continue;
   for(const e of [a,b]){const points=corners.map(p=>local(e.w,p)).sort((x,y)=>x.y-y.y),profile=profiles.get(e.w.id)!;if(e.end){profile[3]=points[0];profile[2]=points[1]}else{profile[0]=points[0];profile[1]=points[1]}}
  }

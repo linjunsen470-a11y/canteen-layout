@@ -24,7 +24,7 @@ import { useStore } from './store';
 import { catalog, Item, resolveStyle } from './model';
 import ProjectLibrary from './ProjectManager';
 import { saveProject, useProjectSession } from './projectSession';
-import { siteArea, sitePlacement } from './site';
+import { planningArea, sitePlacement } from './site';
 import { isOpening, attachOpening } from './structure';
 import { isAnnotation } from './annotations';
 import PropertiesPanel from './PropertiesPanel';
@@ -220,7 +220,7 @@ export default function App() {
         <footer role="status">
           <span>{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象` : '就绪 · 可从素材库拖入桌椅和设备')}</span>
           <span className="project-count">
-            <b>{seatsInfo.seats} 座</b> · {(siteArea(project) / 1e6).toFixed(1)} ㎡ · {project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i)).length} 件 · {lightingText[style.lightingPreset]}
+            <b>{seatsInfo.seats} 座</b> · {project.survey && '实测净面积 '}{(planningArea(project) / 1e6).toFixed(2)} ㎡ · {project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i)).length} 件 · {lightingText[style.lightingPreset]}
           </span>
         </footer>
       </section>
