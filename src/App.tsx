@@ -244,7 +244,7 @@ export default function App() {
           <span className="project-count">
             <b>{insights.seats} 座</b>
             <span>·</span>
-            <span>{project.survey && '实测净面积 '}{(planningArea(project) / 1e6).toFixed(2)} ㎡</span>
+            <span>{project.survey && (project.survey.source === 'estimated' ? '估算净面积 ' : '实测净面积 ')}{(planningArea(project) / 1e6).toFixed(2)} ㎡</span>
             {insights.kitchenRatioPct !== null && insights.diningRatioPct !== null && <>
               <span>·</span>
               <span>厨 {insights.kitchenRatioPct}% / 厅 {insights.diningRatioPct}%</span>

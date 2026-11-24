@@ -5,7 +5,7 @@ export const siteOutline = (p: Project): SitePoint[] => p.outline ?? [{ x: 0, y:
 export const polygonArea = (points: SitePoint[]) => Math.abs(points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]; return sum + p.x * q.y - q.x * p.y; }, 0)) / 2;
 export const siteArea = (p: Project) => polygonArea(siteOutline(p));
 export const planningArea = (p: Project) => p.survey ? polygonArea(p.survey.corners) : siteArea(p);
-export const planningAreaLabel = (p: Project) => p.survey ? '现场记录净面积' : '场地轮廓面积';
+export const planningAreaLabel = (p: Project) => p.survey?.source === 'estimated' ? '估算净面积' : p.survey ? '现场记录净面积' : '场地轮廓面积';
 const cross = (a: SitePoint, b: SitePoint, c: SitePoint) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 export function pointInSite(p: Project, point: SitePoint) {
   const points=siteOutline(p);let inside=false;
@@ -24,7 +24,7 @@ export function sitePlacement(p: Project, preferred: SitePoint): SitePoint {
   let start=xs[0],end=xs[1];for(let i=2;i+1<xs.length;i+=2)if(xs[i+1]-xs[i]>end-start){start=xs[i];end=xs[i+1]}
   return {x:(start+end)/2,y};
 }
-function intersects(a: SitePoint, b: SitePoint, c: SitePoint, d: SitePoint) {
+export function intersects(a: SitePoint, b: SitePoint, c: SitePoint, d: SitePoint) {
   if (Math.max(a.x, b.x) < Math.min(c.x, d.x) || Math.max(c.x, d.x) < Math.min(a.x, b.x) || Math.max(a.y, b.y) < Math.min(c.y, d.y) || Math.max(c.y, d.y) < Math.min(a.y, b.y)) return false;
   return cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0;
 }

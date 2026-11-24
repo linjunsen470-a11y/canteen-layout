@@ -23,6 +23,7 @@ try {
   await button('已保存').waitFor();
   assert.match(await page.locator('.project-count').innerText(), /0 座/);
   await button('新建铺位').click();
+  await button('按内墙净尺寸').click();
   await page.getByLabel('铺位名称').fill('经营测试店');
   await button('创建铺位').click();
   await page.locator('.shop-wizard-dialog').waitFor({ state: 'hidden' });
@@ -323,6 +324,7 @@ try {
 
   // Verify surveyed wall-corner column placement, 2D floating quick-bar, and 3D smart cutaway toggle
   await button('新建铺位').click();
+  await button('按内墙净尺寸').click();
   await page.getByLabel('铺位名称').fill('快建交互验证');
   await button('创建铺位').click();
   await page.locator('.shop-wizard-dialog').waitFor({ state: 'hidden' });

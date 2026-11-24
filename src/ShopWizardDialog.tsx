@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { ImageUp, LayoutGrid, Ruler } from 'lucide-react';
 import { blankProject } from './model';
+import SketchWizard from './SketchWizard';
 import SurveyFields, { draftLegs, initialSurvey } from './SurveyFields';
 import { createSurveyShop } from './interiorSurvey';
 import { createCustomShopShell, shopTemplates } from './shopTemplates';
@@ -13,7 +14,8 @@ import PlanMiniPreview from './PlanMiniPreview';
 
 export default function ShopWizardDialog({ notify }: { notify: (message: string) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [mode, setMode] = useState<'survey' | 'outer' | 'image' | 'templates'>('survey');
+  const [mode, setMode] = useState<'sketch' | 'survey' | 'outer' | 'image' | 'templates'>('sketch');
+  const [sketchNumber, setSketchNumber] = useState(0);
   const [survey, setSurvey] = useState(initialSurvey);
   const fromImage = mode === 'image';
   const [shape, setShape] = useState<'rectangle' | 'l-shape'>('rectangle');
@@ -85,17 +87,28 @@ export default function ShopWizardDialog({ notify }: { notify: (message: string)
 
   return <>
     <button className="wizard-trigger" disabled={!session.ready || session.busy}
-      onClick={() => { setError(''); dialog.current?.showModal(); }}><Ruler />新建铺位</button>
+      onClick={() => { setMode('sketch'); setError(''); dialog.current?.showModal(); }}><Ruler />新建铺位</button>
     <dialog ref={dialog} className="shop-wizard-dialog" aria-labelledby="new-shop-heading" onCancel={e => { if (saving) e.preventDefault(); }}>
       <header className="wizard-header"><h2 id="new-shop-heading">新建铺位</h2>
         <button disabled={saving} onClick={() => dialog.current?.close()}>关闭</button></header>
       <div className="wizard-tabs" role="group" aria-label="建铺方式">
+        <button disabled={saving} aria-pressed={mode === 'sketch'} onClick={() => { setMode('sketch'); setError(''); }}>格网点角</button>
         <button disabled={saving} aria-pressed={mode === 'survey'} onClick={() => { setMode('survey'); setError(''); }}><Ruler />按内墙净尺寸</button>
         <button disabled={saving} aria-pressed={mode === 'outer'} onClick={() => { setMode('outer'); setError(''); }}>按外轮廓尺寸</button>
         <button disabled={saving} aria-pressed={fromImage} onClick={() => { setMode('image'); setError(''); }}><ImageUp />从户型图描绘</button>
         <button disabled={saving} aria-pressed={mode === 'templates'} onClick={() => { setMode('templates'); setError(''); }}><LayoutGrid />示范案例参考</button>
       </div>
-      {mode === 'templates' ? (
+      {mode === 'sketch' ? <SketchWizard key={sketchNumber} busy={saving || session.busy} onSave={async (project, warnings) => {
+        setSaving(true);
+        try {
+          if (!await copyProject(project.name, project)) throw Error(useProjectSession.getState().message || '保存草稿失败');
+          dialog.current?.close();
+          useWorkspace.getState().set({ view: 'split', focusMode: false, camera: 'oblique', move3D: false, propsOpen: false, libraryOpen: true });
+          useStore.getState().setTool('select');
+          setSketchNumber(n => n + 1);
+          notify(['已生成基础布局', ...warnings].join(' · '));
+        } finally { setSaving(false); }
+      }} /> : mode === 'templates' ? (
         <div className="template-gallery">
           <p className="template-gallery-note">
             以下示范案例供快速预览 2D/3D 效果参考；若要按您租下的真实铺位尺寸规划，请先用「按内墙净尺寸」建铺，再点击顶部 <b>「智能分区估算」</b>。
