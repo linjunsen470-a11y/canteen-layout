@@ -167,6 +167,56 @@ try {
   }
   console.log('PASS 任意直角实测铺位（矩形/深窄/L形）智能分区估算与原壳体零破坏');
 
+  const { footprint, polygonDistance } = await load('spatial');
+  const makeShop = (width, depth) => createSurveyShop('试排验收', rectangleLegs(width, depth), 200, 3200);
+  const estimate = (p, options = {}) => generateConceptLayout(p, { ...defaultConceptOptions(), ...options });
+  const shell = makeShop(6200, 5000);
+  const originalZone = { ...furniture('旧分区', 'zone', 200, 200, 4200, 3200), h: 0 };
+  const pillar = { ...furniture('挡住厨具起点的柱子', 'column', 350, 360, 450, 450), zoneId: originalZone.id };
+  const innerWall = furniture('内墙', 'wall', 900, 3200, 3300, 200);
+  const partition = furniture('隔断', 'partition', 1000, 4200, 2200, 100);
+  const source = parseProject({ ...shell, items: [...shell.items, originalZone, pillar, innerWall, partition] });
+  const before = JSON.stringify(source);
+  const planned = estimate(source);
+  assert.equal(JSON.stringify(source), before, '预览不得修改原项目');
+  const reopened = parseProject(JSON.parse(JSON.stringify(planned.project)));
+  assert.equal(reopened.items.find(i => i.id === pillar.id).zoneId, undefined);
+  for (const id of [innerWall.id, partition.id]) {
+    assert.deepEqual(reopened.items.find(i => i.id === id), source.items.find(i => i.id === id));
+  }
+  assert.deepEqual(planned.estimate.replacementNames, [originalZone.name]);
+  assert.equal(planned.estimate.criticalConflicts, 0);
+  for (const kind of ['sink', 'fridge', 'stove']) {
+    assert.ok(reopened.items.some(i => i.kind === kind && i.model !== 'hood'), kind);
+  }
+  const tight = estimate(makeShop(2400, 3000), { kitchenRatioPct: 20 });
+  assert.ok(tight.estimate.warnings.some(w => w.includes('未摆入') && w.includes('炉')));
+
+  for (const side of ['left', 'right']) {
+    const r = estimate(makeShop(4000, 7000), { kitchenRatioPct: 20, kitchenSide: side });
+    assert.equal(r.estimate.kitchenPct, 20);
+    assert.equal(r.estimate.kitchenAreaSqm, 5.6);
+  }
+  const slanted = parseProject({ ...shell, survey: undefined, items: [], outline: [
+    { x: 0, y: 0 }, { x: 6000, y: 0 }, { x: 4000, y: 5000 }, { x: 0, y: 5000 },
+  ] });
+  assert.throws(() => estimate(slanted), /斜边/);
+
+  for (const [aisleMm, seatingStyle] of [[800, 'balanced'], [950, 'canteen-bench'], [1100, 'compact']]) {
+    const { project, estimate: facts } = estimate(makeShop(10000, 8000), { aisleMm, seatingStyle, kitchenSide: 'none' });
+    const groups = project.groups.map(g => g.members.map(id => footprint(project.items.find(i => i.id === id))));
+    assert.ok(groups.length >= 2);
+    let measured = Infinity;
+    for (let i = 0; i < groups.length; i++) {
+      for (const other of groups.slice(0, i)) {
+        for (const a of groups[i]) for (const b of other) measured = Math.min(measured, polygonDistance(a, b).distance);
+      }
+    }
+    assert.ok(measured >= aisleMm - 1e-6);
+    assert.ok(Math.abs(facts.nearestTables.distance - measured) < 1e-6);
+  }
+  console.log('PASS 分区引用往返、固定隔断、带柱排厨与缺件、左右分区对称、斜边拦截及桌组实测净距');
+
   const examplePkg = JSON.parse(fs.readFileSync(new URL('../examples/songjian-noodle-bistro.canteen.json', import.meta.url), 'utf8'));
   assert.equal(examplePkg.format, 'canteen-layout-package');
   assert.equal(examplePkg.version, 1);

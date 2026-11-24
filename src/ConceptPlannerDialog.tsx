@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Columns2, CopyPlus, Sparkles, CheckCircle2, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useStore } from './store';
 import { copyProject, useProjectSession } from './projectSession';
@@ -17,8 +17,6 @@ import {
 } from './conceptPlanner';
 import PlanMiniPreview from './PlanMiniPreview';
 
-export type ConceptPlannerHandle = { open: () => void };
-
 const fmtYuan = (n: number) => (n >= 10000 ? `¥${(n / 10000).toFixed(1)}万` : `¥${n.toLocaleString()}`);
 
 const kitchenSideLabels: Record<ConceptKitchenSide, string> = {
@@ -35,7 +33,7 @@ const seatingStyleLabels: Record<ConceptSeatingStyle, string> = {
   'canteen-bench': '食堂六人长桌',
 };
 
-const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: string) => void }>(function ConceptPlannerDialog({ notify }, ref) {
+export default function ConceptPlannerDialog({ notify }: { notify: (msg: string) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const project = useStore(s => s.project);
   const commit = useStore(s => s.commit);
@@ -43,6 +41,7 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
 
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<ConceptPlannerOptions>(() => defaultConceptOptions('bistro'));
+  const [draftRatio, setDraftRatio] = useState<number | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -50,20 +49,24 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
     setOpen(true);
     dialog.current?.showModal();
   };
-  useImperativeHandle(ref, () => ({ open: openModal }));
+  const commitRatio = (value: number) => {
+    setDraftRatio(null);
+    setOptions(prev => prev.kitchenRatioPct === value ? prev : { ...prev, kitchenRatioPct: value });
+  };
 
   const currentInsights = useMemo(() => (open ? analyzeShop(project) : null), [open, project]);
 
-  const result = useMemo(() => {
-    if (!open) return null;
+  const { result, error } = useMemo(() => {
+    if (!open) return { result: null, error: '' };
     try {
-      return generateConceptLayout(project, options);
-    } catch {
-      return null;
+      return { result: generateConceptLayout(project, options), error: '' };
+    } catch (e) {
+      return { result: null, error: (e as Error).message };
     }
   }, [open, project, options]);
 
   const switchBusiness = (bt: ConceptBusinessType) => {
+    setDraftRatio(null);
     const def = businessTypeDefaults[bt];
     setOptions(prev => ({
       ...prev,
@@ -120,13 +123,13 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
         ref={dialog}
         className="concept-dialog"
         aria-labelledby="concept-dialog-title"
-        onClose={() => setOpen(false)}
+        onClose={() => { setOpen(false); setDraftRatio(null); }}
       >
         <header className="concept-header">
           <div>
             <h2 id="concept-dialog-title">智能分区与摆桌估算</h2>
             <p>
-              严格保留当前铺位的真实外墙、门窗、柱子与实测记录，仅试算内部功能分区与桌椅排布，让你 10 秒看清“后厨占多大、前厅摆几桌”。
+              按当前铺位的墙、隔断和柱子试排。可比较餐厨面积与可摆座数，满意后再应用或另存。
             </p>
           </div>
           <div className="concept-header-actions">
@@ -181,15 +184,19 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
                 <label className="concept-slider">
                   <div>
                     <span>后厨目标占比</span>
-                    <strong>{options.kitchenRatioPct}% {est ? `（约 ${est.kitchenAreaSqm.toFixed(1)} ㎡）` : ''}</strong>
+                    <strong>{draftRatio ?? options.kitchenRatioPct}% {draftRatio === null && est ? `（约 ${est.kitchenAreaSqm.toFixed(1)} ㎡）` : ''}</strong>
                   </div>
                   <input
                     type="range"
                     min={20}
                     max={50}
-                    step={2}
-                    value={options.kitchenRatioPct}
-                    onChange={e => setOptions(o => ({ ...o, kitchenRatioPct: Number(e.target.value) }))}
+                    step={1}
+                    value={draftRatio ?? options.kitchenRatioPct}
+                    onChange={e => setDraftRatio(e.currentTarget.valueAsNumber)}
+                    onPointerUp={e => commitRatio(e.currentTarget.valueAsNumber)}
+                    onKeyUp={e => commitRatio(e.currentTarget.valueAsNumber)}
+                    onBlur={e => commitRatio(e.currentTarget.valueAsNumber)}
+                    onPointerCancel={() => setDraftRatio(null)}
                   />
                   <div className="concept-slider-ticks">
                     <span>20% 轻食水吧</span>
@@ -288,9 +295,9 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
                     <span>{est.tableGroups} 组桌椅{est.sqmPerSeat ? ` · ${est.sqmPerSeat.toFixed(1)}㎡/座` : ''}</span>
                   </div>
                   <div className="concept-kpi">
-                    <small>预估配电 / 采购</small>
+                    <small>配电估算（含场地基础负荷）</small>
                     <strong>{est.estimatedPowerKw} kW</strong>
-                    <span>{fmtYuan(est.budgetMin)}–{fmtYuan(est.budgetMax)}</span>
+                    <span>已摆物件采购 {fmtYuan(est.budgetMin)}–{fmtYuan(est.budgetMax)}</span>
                   </div>
                 </div>
 
@@ -309,23 +316,28 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
                       <b>估算预览（实时贴合你的实测外墙）</b>
                       <span>
                         {est.criticalConflicts === 0
-                          ? <><CheckCircle2 size={14} /> 零碰撞 · 保留外墙与门窗 {est.preservedShellCount} 项</>
+                          ? <><CheckCircle2 size={14} /> 未发现物件碰撞</>
                           : <><AlertTriangle size={14} /> {est.criticalConflicts} 处待微调</>}
                       </span>
                     </header>
-                    <PlanMiniPreview project={result.project} />
+                    <PlanMiniPreview project={result.project} nearestTables={est.nearestTables} />
                   </div>
                 </div>
 
                 <div className="concept-breakdown">
                   <div><b>桌型明细：</b>{est.seatBreakdown}（{est.comfortLabel}）</div>
+                  {est.nearestTables && <div>桌组间最窄处（含椅背） {Math.floor(est.nearestTables.distance + 1e-6)} mm</div>}
+                  {est.replacementNames.length > 0 && <details>
+                    <summary>应用将替换 {est.replacementNames.length} 件原有物件或分区</summary>
+                    <p>{est.replacementNames.join('、')}</p>
+                  </details>}
                   {est.warnings.map((w, idx) => (
                     <div key={idx} className="concept-warning"><AlertTriangle size={14} /> {w}</div>
                   ))}
                 </div>
               </>
             ) : (
-              <p className="property-error">当前铺位轮廓暂不支持自动估算，请先确认外轮廓已闭合且尺寸有效。</p>
+              <p className="property-error" role="alert">{error}</p>
             )}
           </section>
         </div>
@@ -333,7 +345,7 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
         <footer className="concept-footer">
           <button
             type="button"
-            onClick={() => setOptions(defaultConceptOptions(options.businessType))}
+            onClick={() => { setDraftRatio(null); setOptions(defaultConceptOptions(options.businessType)); }}
           >
             <RotateCcw />恢复默认比例
           </button>
@@ -358,6 +370,4 @@ const ConceptPlannerDialog = forwardRef<ConceptPlannerHandle, { notify: (msg: st
       </dialog>
     </>
   );
-});
-
-export default ConceptPlannerDialog;
+}

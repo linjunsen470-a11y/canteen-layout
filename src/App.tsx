@@ -17,7 +17,7 @@ import SplitView from './SplitView';
 import SidebarResize from './SidebarResize';
 import ShopWizardDialog from './ShopWizardDialog';
 import ShopInsightsDialog from './ShopInsightsDialog';
-import ConceptPlannerDialog, { ConceptPlannerHandle } from './ConceptPlannerDialog';
+import ConceptPlannerDialog from './ConceptPlannerDialog';
 import { ComboPreset, comboPresets, placeCombo } from './combos';
 import { seatSummary } from './layoutGroups';
 import { Maximize2, Minimize2, ChevronUp, ChevronDown, Store, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Undo2, Redo2, Save, Download, Share2 } from 'lucide-react';
@@ -64,7 +64,6 @@ export default function App() {
   const [grid, G] = useState(true), [snap, S] = useState(true), [notice, notify] = useState('');
   const plan = useRef<PlanHandle>(null), scene = useRef<SceneHandle>(null);
   const presentationRef = useRef<PresentationDialogHandle>(null);
-  const conceptRef = useRef<ConceptPlannerHandle>(null);
   const [librarySignal, setLibrarySignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
@@ -153,7 +152,7 @@ export default function App() {
       <ProjectLibrary />
       <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
       <div className="actions" inert={!sessionReady || sessionBusy}>
-        <ConceptPlannerDialog ref={conceptRef} notify={notify} />
+        <ConceptPlannerDialog notify={notify} />
         <ShopInsightsDialog />
         <button className="share-partner-btn" title="一键拍摄 2D 平面 + 3 视角 3D 效果图，生成可发给合伙人讨论的精美方案书" onClick={() => presentationRef.current?.open()}>
           <Share2 />发给合伙人

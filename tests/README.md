@@ -1,6 +1,8 @@
 # 定向验收脚本
 
-从仓库根目录运行 `pnpm typecheck` 和 `pnpm build`，再按改动选择下方的浏览器流程。浏览器脚本复用已有 Playwright 与本机 Chrome，命令中的路径指向 Playwright 包。性能脚本适用于涉及渲染或交互性能的改动。
+日常回归使用 `pnpm build && pnpm test`。几何套件覆盖分区占比、固定设施、设备缺失、椅背净距与项目读写。生产版浏览器套件覆盖试排、应用、另存、刷新和 PNG 入口标记。
+
+历史专项从仓库根目录运行 `pnpm typecheck` 和 `pnpm build`，再按改动选择下方的浏览器流程。浏览器脚本复用已有 Playwright 与本机 Chrome，命令中的路径指向 Playwright 包。性能脚本适用于涉及渲染或交互性能的改动。
 
 ```text
 node tests/g4-workflow.cjs <已有 Playwright 包路径>

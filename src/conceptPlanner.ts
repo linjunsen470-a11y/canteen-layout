@@ -2,9 +2,11 @@ import {
   FloorMaterial, Item, LayoutGroup, LightingPreset, Point, Project, WallMaterial,
   resolveStyle, uid,
 } from './model';
-import { planningArea, polygonArea, siteOutline, validateSite } from './site';
+import { polygonArea, siteOutline, validateSite } from './site';
 import { contains, doorSwings, footprint, polygonDistance } from './spatial';
-import { isAttachedOpening, syncStructure } from './structure';
+import { parseProject } from './projectIO';
+import { isAnnotation } from './annotations';
+import { surveyWall } from './interiorSurvey';
 import { analyzeShop } from './shopAnalytics';
 import { checkSpace } from './spaceChecks';
 import { polygonPatch } from './zones';
@@ -128,7 +130,8 @@ export type ConceptEstimate = {
   budgetMax: number;
   comfortLabel: string;
   criticalConflicts: number;
-  preservedShellCount: number;
+  replacementNames: string[];
+  nearestTables: ReturnType<typeof polygonDistance> | null;
   warnings: string[];
 };
 
@@ -143,7 +146,7 @@ function isOrthogonalPolygon(pts: Point[]): boolean {
   if (pts.length < 4) return false;
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i], b = pts[(i + 1) % pts.length];
-    if (Math.abs(a.x - b.x) > 1 && Math.abs(a.y - b.y) > 1) return false;
+    if (Math.abs(a.x - b.x) > 1e-6 && Math.abs(a.y - b.y) > 1e-6) return false;
   }
   return true;
 }
@@ -267,9 +270,9 @@ function makeZoneItemsFromRegion(
       };
       // Verify it passes validateSite cleanly (catches disconnected/pinched U-shapes)
       validateSite({ width: item.w, height: item.d, outline: item.polygon!.map(p => ({ x: p.x * item.w, y: p.y * item.d })) });
-      if (Math.abs(polygonArea(candidate) - rectsArea(rects)) < 250000) {
+      if (Math.abs(polygonArea(candidate) - rectsArea(rects)) < 1) {
         // Simplify pure rectangle zones to no polygon property
-        if (candidate.length === 4 && Math.abs(polygonArea(candidate) - item.w * item.d) < 5000) {
+        if (candidate.length === 4 && Math.abs(polygonArea(candidate) - item.w * item.d) < 1) {
           return [{ id: item.id, kind: 'zone', name, color, x: item.x, y: item.y, w: item.w, d: item.d, h: 0, rotation: 0 }];
         }
         return [item];
@@ -289,12 +292,10 @@ function makeZoneItemsFromRegion(
       merged.push({ ...r });
     }
   }
-  return merged
-    .filter(r => r.x1 - r.x0 >= 200 && r.y1 - r.y0 >= 200)
-    .map((r, idx) => ({
-      id: uid(), kind: 'zone' as const, name: merged.length > 1 ? `${name} ${idx + 1}` : name,
-      color, x: Math.round(r.x0), y: Math.round(r.y0), w: Math.round(r.x1 - r.x0), d: Math.round(r.y1 - r.y0), h: 0, rotation: 0,
-    }));
+  return merged.map((r, idx) => ({
+    id: uid(), kind: 'zone' as const, name: merged.length > 1 ? `${name} ${idx + 1}` : name,
+    color, x: Math.round(r.x0), y: Math.round(r.y0), w: Math.round(r.x1 - r.x0), d: Math.round(r.y1 - r.y0), h: 0, rotation: 0,
+  }));
 }
 
 function pointInRects(pt: Point, rects: StripRect[]): boolean {
@@ -320,9 +321,7 @@ function pointToSegmentDist(p: Point, a: Point, b: Point): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
-function isPerimeterWall(wall: Item, project: Project, outline: Point[]): boolean {
-  if (project.survey?.wallIds.includes(wall.id)) return true;
-  if (project.items.some(o => isAttachedOpening(o) && o.wallId === wall.id)) return true;
+function isPerimeterWall(wall: Item, outline: Point[]): boolean {
   const center = { x: wall.x + wall.w / 2, y: wall.y + wall.d / 2 };
   const tol = Math.max(wall.d, 260);
   for (let i = 0; i < outline.length; i++) {
@@ -332,11 +331,18 @@ function isPerimeterWall(wall: Item, project: Project, outline: Point[]): boolea
   return false;
 }
 
-function extractInteriorPolygon(project: Project, preservedWalls: Item[]): Point[] {
-  if (project.survey) return project.survey.corners.map(p => ({ ...p }));
+function extractInteriorPolygon(project: Project): Point[] {
+  if (project.survey) {
+    const walls = project.items.filter(i => project.survey!.wallIds.includes(i.id));
+    if (walls.length !== project.survey.wallIds.length || walls.some(w => !surveyWall(project, w))) {
+      throw Error('实测外墙已调整，请先复核墙段后再试排');
+    }
+    return project.survey.corners;
+  }
   const outline = siteOutline(project);
-  if (preservedWalls.length > 0 && isOrthogonalPolygon(outline)) {
-    const thickness = Math.round(Math.max(...preservedWalls.map(w => w.d), 200));
+  const perimeter = project.items.filter(i => i.kind === 'wall' && isPerimeterWall(i, outline));
+  if (perimeter.length) {
+    const thickness = Math.max(...perimeter.map(w => w.d));
     const inset = offsetOrthogonalInward(outline, thickness);
     try {
       validateSite({ width: project.width, height: project.height, outline: inset });
@@ -360,7 +366,7 @@ function makeBooth4(cx: number, cy: number, boothColor: string, tableColor: stri
 
 function makeDining4(cx: number, cy: number, chairColor: string, tableColor: string, compact = false): Item[] {
   const tw = compact ? 1100 : 1200, td = compact ? 750 : 800;
-  const cw = compact ? 440 : 480, cd = compact ? 440 : 480, ch = compact ? 800 : 800;
+  const cw = compact ? 440 : 480, cd = cw;
   const m = compact ? 'chair' as const : 'dining-armchair' as const;
   const label = compact ? '餐椅' : '软包扶手餐椅';
   const items: Item[] = [
@@ -372,7 +378,7 @@ function makeDining4(cx: number, cy: number, chairColor: string, tableColor: str
         id: uid(), kind: 'chair', model: m, name: label,
         x: Math.round(cx + sx * (tw * 0.24) - cw / 2),
         y: Math.round(cy + (sy < 0 ? -td / 2 - cd - 55 : td / 2 + 55)),
-        w: cw, d: cd, h: ch, rotation: sy < 0 ? 0 : 180, color: chairColor, seats: 1,
+        w: cw, d: cd, h: 800, rotation: sy < 0 ? 0 : 180, color: chairColor, seats: 1,
       });
     }
   }
@@ -414,77 +420,94 @@ function makeRound6(cx: number, cy: number, chairColor: string, tableColor: stri
   return items;
 }
 
+function isSeatFurniture(i: Item) { return i.kind === 'table' || i.kind === 'chair'; }
+
+function bounded(points: Point[]) {
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  return { points, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+type BoundedFootprint = ReturnType<typeof bounded>;
+
+// A gap between bounding boxes is a lower bound on the exact polygon distance.
+function boxGap(a: StripRect, b: StripRect) {
+  return Math.max(0, a.x0 - b.x1, b.x0 - a.x1, a.y0 - b.y1, b.y0 - a.y1);
+}
+function closerThan(a: BoundedFootprint, b: BoundedFootprint, gap: number) {
+  return boxGap(a, b) < gap && polygonDistance(a.points, b.points).distance < gap;
+}
+
+function nearestTableGap(project: Project) {
+  const group = new Map(project.groups?.flatMap(g => g.members.map(id => [id, g.id] as const)));
+  const bodies = project.items.filter(i => !i.hidden && isSeatFurniture(i))
+    .map(i => ({ group: group.get(i.id) ?? i.id, shape: bounded(footprint(i)) }));
+  let nearest: ReturnType<typeof polygonDistance> | null = null;
+  for (let n = 0; n < bodies.length; n++) {
+    const a = bodies[n];
+    for (let m = 0; m < n; m++) {
+      const b = bodies[m];
+      if (a.group === b.group || (nearest && boxGap(a.shape, b.shape) >= nearest.distance)) continue;
+      const gap = polygonDistance(a.shape.points, b.shape.points);
+      if (!nearest || gap.distance < nearest.distance) nearest = gap;
+    }
+  }
+  return nearest;
+}
+
 export function generateConceptLayout(baseProject: Project, rawOptions: ConceptPlannerOptions): ConceptPlanResult {
   const options: ConceptPlannerOptions = {
     ...rawOptions,
-    kitchenRatioPct: Math.max(18, Math.min(55, Math.round(rawOptions.kitchenRatioPct))),
+    kitchenRatioPct: Math.max(20, Math.min(50, Math.round(rawOptions.kitchenRatioPct))),
     aisleMm: Math.max(650, Math.min(1600, Math.round(rawOptions.aisleMm))),
   };
   const preset = businessTypeDefaults[options.businessType];
   const outline = siteOutline(baseProject);
   const warnings: string[] = [];
 
-  // 1. Strictly preserve exterior/surveyed walls, openings, columns, stairs, fixtures, utilities, and locked items
-  const preservedItems = baseProject.items.filter(item => {
-    if (item.locked) return true;
-    if (item.kind === 'door' || item.kind === 'window' || item.kind === 'column' || item.kind === 'stairs' || item.kind === 'fixture' || item.kind === 'utility') {
-      return true;
+  if (!isOrthogonalPolygon(outline)) throw Error('试排仅支持直角铺位，当前外轮廓含斜边');
+  const fixedKinds = new Set<Item['kind']>(['wall', 'partition', 'door', 'window', 'column', 'stairs', 'fixture', 'utility']);
+  const preservedIds = new Set(baseProject.items.filter(i => i.locked || fixedKinds.has(i.kind) || isAnnotation(i)).map(i => i.id));
+  // Keep the objects that a retained measurement or supported item refers to.
+  for (const i of baseProject.items) {
+    if (preservedIds.has(i.id) && i.measure) {
+      preservedIds.add(i.measure.a);
+      preservedIds.add(i.measure.b);
     }
-    if (item.kind === 'wall' && isPerimeterWall(item, baseProject, outline)) return true;
-    return false;
-  });
-  const preservedIds = new Set(preservedItems.map(i => i.id));
-  const preservedGroups: LayoutGroup[] = (baseProject.groups ?? []).filter(g => g.members.every(id => preservedIds.has(id)));
-  const preservedWalls = preservedItems.filter(i => i.kind === 'wall');
+  }
+  for (const i of baseProject.items) {
+    if (preservedIds.has(i.id) && i.supportId) preservedIds.add(i.supportId);
+  }
+  const preservedItems = baseProject.items.filter(i => preservedIds.has(i.id))
+    .map(i => i.zoneId && !preservedIds.has(i.zoneId) ? { ...i, zoneId: undefined } : i);
+  const preservedGroups = (baseProject.groups ?? []).filter(g => g.members.every(id => preservedIds.has(id)));
+  const replacementNames = baseProject.items.filter(i => !preservedIds.has(i.id)).map(i => i.name);
 
-  const interiorPoly = extractInteriorPolygon(baseProject, preservedWalls);
+  const interiorPoly = extractInteriorPolygon(baseProject);
   const interiorStrips = orthogonalStrips(interiorPoly);
-  const totalNetAreaMm2 = interiorStrips.length > 0 ? rectsArea(interiorStrips) : planningArea(baseProject);
-  const xs = interiorPoly.map(p => p.x), ys = interiorPoly.map(p => p.y);
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const spanX = maxX - minX, spanY = maxY - minY;
+  const totalNetAreaMm2 = rectsArea(interiorStrips);
+  if (!totalNetAreaMm2) throw Error('室内轮廓没有可用面积');
 
   // 2. Exact half-plane split of the real orthogonal interior polygon
   let kitchenStrips: StripRect[] = [];
   let diningStrips: StripRect[] = interiorStrips;
   let kitchenHp: HalfPlane | null = null;
   let diningHp: HalfPlane | null = null;
-  let cutValue = 0;
-
-  if (options.kitchenSide !== 'none' && interiorStrips.length > 0) {
-    const targetArea = (options.kitchenRatioPct / 100) * totalNetAreaMm2;
-    const isHorizCut = options.kitchenSide === 'rear';
-    const loBound = isHorizCut ? minY + Math.min(1400, spanY * 0.22) : minX + Math.min(1400, spanX * 0.22);
-    const hiBound = isHorizCut ? maxY - Math.min(1800, spanY * 0.35) : maxX - Math.min(1800, spanX * 0.35);
-
-    if (hiBound > loBound + 200) {
-      let lo = loBound, hi = hiBound;
-      for (let iter = 0; iter < 24; iter++) {
-        const mid = (lo + hi) / 2;
-        const hp: HalfPlane = options.kitchenSide === 'rear'
-          ? { axis: 'y', keepLess: true, value: mid }
-          : options.kitchenSide === 'left'
-            ? { axis: 'x', keepLess: true, value: mid }
-            : { axis: 'x', keepLess: false, value: mid };
-        const area = rectsArea(interiorStrips.map(r => clipRectHalfPlane(r, hp)).filter((r): r is StripRect => !!r));
-        if (options.kitchenSide === 'right') {
-          if (area > targetArea) lo = mid; else hi = mid;
-        } else {
-          if (area < targetArea) lo = mid; else hi = mid;
-        }
-      }
-      cutValue = Math.round((lo + hi) / 2);
-      kitchenHp = options.kitchenSide === 'rear'
-        ? { axis: 'y', keepLess: true, value: cutValue }
-        : options.kitchenSide === 'left'
-          ? { axis: 'x', keepLess: true, value: cutValue }
-          : { axis: 'x', keepLess: false, value: cutValue };
-      diningHp = { axis: kitchenHp.axis, keepLess: !kitchenHp.keepLess, value: cutValue };
-      kitchenStrips = interiorStrips.map(r => clipRectHalfPlane(r, kitchenHp!)).filter((r): r is StripRect => !!r);
-      diningStrips = interiorStrips.map(r => clipRectHalfPlane(r, diningHp!)).filter((r): r is StripRect => !!r);
-    } else {
-      warnings.push('当前铺位净进深或净宽较紧凑，暂以整厅就餐估算为主');
+  if (options.kitchenSide !== 'none') {
+    const targetArea = options.kitchenRatioPct / 100 * totalNetAreaMm2;
+    const axis = options.kitchenSide === 'rear' ? 'y' : 'x';
+    const keepLess = options.kitchenSide !== 'right';
+    const coordinates = interiorPoly.map(p => p[axis]);
+    let lo = Math.min(...coordinates), hi = Math.max(...coordinates);
+    while (hi - lo > 0.25) {
+      const value = (lo + hi) / 2;
+      const clipped = interiorStrips.map(r => clipRectHalfPlane(r, { axis, keepLess, value }));
+      const area = rectsArea(clipped.filter((r): r is StripRect => !!r));
+      if ((area < targetArea) === keepLess) lo = value;
+      else hi = value;
     }
+    kitchenHp = { axis, keepLess, value: Math.round((lo + hi) / 2) };
+    diningHp = { ...kitchenHp, keepLess: !keepLess };
+    kitchenStrips = interiorStrips.map(r => clipRectHalfPlane(r, kitchenHp!)).filter((r): r is StripRect => !!r);
+    diningStrips = interiorStrips.map(r => clipRectHalfPlane(r, diningHp!)).filter((r): r is StripRect => !!r);
   }
 
   const kitchenAreaMm2 = rectsArea(kitchenStrips);
@@ -501,16 +524,17 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
   }
 
   // 3. Collision & obstacle engine respecting EVERY preserved wall, door swing, column, fixture, utility
-  const hardObstacles = preservedItems.filter(i => i.kind !== 'zone' && i.kind !== 'door' && i.kind !== 'window' && i.kind !== 'lighting');
-  const hardPolys = hardObstacles.map(footprint);
+  const hardObstacles = preservedItems.filter(i => !isAnnotation(i) && i.kind !== 'zone' && i.kind !== 'door' && i.kind !== 'window' && i.kind !== 'lighting');
+  const hardPolys = hardObstacles.map(i => ({ shape: bounded(footprint(i)), seating: isSeatFurniture(i) }));
   const existingDoors = preservedItems.filter(i => i.kind === 'door');
-  const swingPolys = existingDoors.flatMap(doorSwings);
-  if (existingDoors.length === 0) {
-    warnings.push('当前铺位尚未放置入口门，摆桌估算暂未扣除门扇开启区；建议先在临街外墙放置店门再微调');
+  const swingPolys = existingDoors.flatMap(doorSwings).map(bounded);
+  if (!existingDoors.length) warnings.push('尚未放置门，试排未预留门扇开启空间');
+  if (!preservedItems.some(i => i.kind === 'utility' && i.pointType === 'entrance' && !i.hidden)) {
+    warnings.push('尚未标明顾客入口，可添加入口点位后复核进店路线');
   }
 
   const placedInterior: Item[] = [];
-  const placedPolys: Point[][] = [];
+  const placedPolys: BoundedFootprint[] = [];
   const newGroups: LayoutGroup[] = [];
   const tableCenters: { x: number; y: number; linear: boolean }[] = [];
   const seatMix = new Map<string, { count: number; seats: number }>();
@@ -522,18 +546,20 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     otherGap: number,
     doorGap = 120,
   ): boolean => {
-    const fps = cand.map(footprint);
-    for (const fp of fps) {
+    for (const item of cand) {
+      const fp = footprint(item);
+      const shape = bounded(fp);
       if (!contains(outline, fp)) return false;
       if (!polyInsideRects(fp, region)) return false;
       for (const sw of swingPolys) {
-        if (polygonDistance(fp, sw).distance < doorGap) return false;
+        if (closerThan(shape, sw, doorGap)) return false;
       }
       for (const hp of hardPolys) {
-        if (polygonDistance(fp, hp).distance < wallGap) return false;
+        const gap = hp.seating && isSeatFurniture(item) ? options.aisleMm : wallGap;
+        if (closerThan(shape, hp.shape, gap)) return false;
       }
       for (const pp of placedPolys) {
-        if (polygonDistance(fp, pp).distance < otherGap) return false;
+        if (closerThan(shape, pp, otherGap)) return false;
       }
     }
     return true;
@@ -542,12 +568,11 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
   const commitPlaced = (items: Item[]) => {
     for (const item of items) {
       placedInterior.push(item);
-      placedPolys.push(footprint(item));
+      placedPolys.push(bounded(footprint(item)));
     }
   };
 
   // 4. Smart Kitchen & Bar Equipment Placement inside kitchenStrips (WallFloorItem pattern)
-  const placedStoves: Item[] = [];
   if (options.includeKitchenEquip && kitchenStrips.length > 0) {
     const kMinX = Math.min(...kitchenStrips.map(r => r.x0));
     const kMaxX = Math.max(...kitchenStrips.map(r => r.x1));
@@ -568,83 +593,47 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
         { kind: 'fridge', model: 'upright-fridge', name: '立式双门冰箱', w: 820, d: 740, h: 1960, color: '#9bb4c2' },
       ];
 
-    if (options.kitchenSide === 'rear') {
-      let curX = kMinX + 120;
-      for (const spec of cooklineSpecs) {
-        const { isCooking, ...rest } = spec;
-        const item: Item = { ...rest, id: uid(), x: Math.round(curX), y: Math.round(kMinY + 60), rotation: 0 };
-        if (fitsInRegion([item], kitchenStrips, 20, 40, 120)) {
+    const rear = options.kitchenSide === 'rear', right = options.kitchenSide === 'right';
+    const alongMin = rear ? kMinX : kMinY, alongMax = rear ? kMaxX : kMaxY;
+    const depth = rear ? kMaxY - kMinY : kMaxX - kMinX;
+    const missing: string[] = [];
+
+    // The same wall-relative coordinates work for all three kitchen orientations.
+    function atWall(spec: Omit<Item, 'id' | 'x' | 'y' | 'rotation'>, along: number, inset: number): Item {
+      const cx = rear ? along + spec.w / 2 : right ? kMaxX - inset - spec.d / 2 : kMinX + inset + spec.d / 2;
+      const cy = rear ? kMinY + inset + spec.d / 2 : along + spec.w / 2;
+      return { ...spec, id: uid(), x: cx - spec.w / 2, y: cy - spec.d / 2, rotation: rear ? 0 : right ? 90 : -90 };
+    }
+
+    function placeAlongWall(spec: Omit<Item, 'id' | 'x' | 'y' | 'rotation'>, inset: number, reverse = false) {
+      const first = alongMin + 60, last = alongMax - spec.w - 60;
+      for (let step = 0; step <= Math.ceil((last - first) / 100) && first <= last; step++) {
+        const along = reverse ? Math.max(first, last - step * 100) : Math.min(last, first + step * 100);
+        const item = atWall(spec, along, inset);
+        if (fitsInRegion([item], kitchenStrips, 20, reverse ? 260 : 40)) {
           commitPlaced([item]);
-          if (isCooking) placedStoves.push(item);
-          curX += spec.w + 90;
+          return along;
         }
       }
-      // Size exhaust hood strictly to actually placed stoves
-      if (placedStoves.length > 0) {
-        const hx0 = Math.min(...placedStoves.map(s => s.x));
-        const hx1 = Math.max(...placedStoves.map(s => s.x + s.w));
-        const hood: Item = {
-          id: uid(), kind: 'stove', model: 'hood', name: '排烟罩组件',
-          x: hx0, y: Math.round(kMinY + 40), w: Math.max(1000, hx1 - hx0), d: 940, h: 2450, rotation: 0, color: '#adb8bc',
-        };
-        if (contains(outline, footprint(hood)) && polyInsideRects(footprint(hood), kitchenStrips)) {
-          placedInterior.push(hood); // Hood is ceiling-mounted over stoves; don't block floor below it
-        }
-      }
-      // Place front-facing cashier / pickup counter near kitchen-dining seam
-      const barW = Math.min(1800, Math.max(1100, Math.round((kMaxX - kMinX) * 0.28)));
-      const cashier: Item = {
-        id: uid(), kind: 'counter', model: 'cashier', name: '收银出餐台',
-        x: Math.round(kMaxX - barW - 140), y: Math.round(kMaxY - 760), w: barW, d: 660, h: 1080, rotation: 0, color: preset.barColor,
-      };
-      if (fitsInRegion([cashier], kitchenStrips, 20, 260, 150)) {
-        commitPlaced([cashier]);
-      }
-    } else {
-      // Left or right kitchen: place cookline flush along left or right exterior wall
-      const onLeft = options.kitchenSide === 'left';
-      let curY = kMinY + 140;
-      for (const spec of cooklineSpecs) {
-        const { isCooking, ...rest } = spec;
-        const rot = onLeft ? -90 : 90;
-        const x = onLeft
-          ? Math.round(kMinX + 60 + (spec.d - spec.w) / 2)
-          : Math.round(kMaxX - 60 - spec.d + (spec.d - spec.w) / 2);
-        const y = Math.round(curY + (spec.w - spec.d) / 2);
-        const item: Item = { ...rest, id: uid(), x, y, rotation: rot };
-        if (fitsInRegion([item], kitchenStrips, 20, 40, 120)) {
-          commitPlaced([item]);
-          if (isCooking) placedStoves.push(item);
-          curY += spec.w + 90;
-        }
-      }
-      if (placedStoves.length > 0) {
-        const hy0 = Math.min(...placedStoves.map(s => Math.min(...footprint(s).map(p => p.y))));
-        const hy1 = Math.max(...placedStoves.map(s => Math.max(...footprint(s).map(p => p.y))));
-        const hw = Math.max(1000, Math.round(hy1 - hy0));
-        const hd = 920;
-        const hx = onLeft ? Math.round(kMinX + 40 + (hd - hw) / 2) : Math.round(kMaxX - 40 - hd + (hd - hw) / 2);
-        const hy = Math.round(hy0 + (hw - hd) / 2);
-        const hood: Item = {
-          id: uid(), kind: 'stove', model: 'hood', name: '排烟罩组件',
-          x: hx, y: hy, w: hw, d: hd, h: 2450, rotation: onLeft ? -90 : 90, color: '#adb8bc',
-        };
-        if (contains(outline, footprint(hood)) && polyInsideRects(footprint(hood), kitchenStrips)) {
-          placedInterior.push(hood);
-        }
-      }
-      // Pickup/cashier counter near dining edge
-      const barW = Math.min(1600, Math.max(1100, Math.round((kMaxY - kMinY) * 0.25)));
-      const cx = onLeft ? Math.round(kMaxX - 740 + (660 - barW) / 2) : Math.round(kMinX + 80 + (660 - barW) / 2);
-      const cy = Math.round(kMaxY - barW - 180 + (barW - 660) / 2);
-      const cashier: Item = {
-        id: uid(), kind: 'counter', model: 'cashier', name: '收银出餐台',
-        x: cx, y: cy, w: barW, d: 660, h: 1080, rotation: onLeft ? -90 : 90, color: preset.barColor,
-      };
-      if (fitsInRegion([cashier], kitchenStrips, 20, 260, 150)) {
-        commitPlaced([cashier]);
+      missing.push(spec.name);
+    }
+
+    for (const { isCooking, ...spec } of cooklineSpecs) {
+      const along = placeAlongWall(spec, 60);
+      if (isCooking && along !== undefined) {
+        const hood = atWall({ kind: 'stove', model: 'hood', name: '排烟罩', w: spec.w, d: 920, h: 2450, color: '#adb8bc' }, along, 40);
+        // Overhead hoods share the stove footprint. Only the fixed obstacles constrain them.
+        if (fitsInRegion([hood], kitchenStrips, 20, 0)) placedInterior.push(hood);
+        else missing.push(hood.name);
       }
     }
+    if (cooklineSpecs.some(spec => spec.isCooking) && !placedInterior.some(i => i.model === 'hood') && !missing.includes('排烟罩')) {
+      missing.push('排烟罩');
+    }
+    const barW = Math.min(1800, Math.max(1100, Math.round((alongMax - alongMin) * 0.28)));
+    placeAlongWall({ kind: 'counter', model: 'cashier', name: '收银出餐台', w: barW, d: 660, h: 1080, color: preset.barColor }, depth - 760, true);
+    if (missing.length) warnings.push('未摆入的厨具设备：' + missing.join('、'));
+
   }
 
   // 5. Smart Collision-Free Dining Seating Packing inside diningStrips
@@ -680,7 +669,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
       for (let cy = dMinY + 1120; cy <= dMaxY - 1080;) {
         if (!blocksEntryCorridor(colX, cy)) {
           const cand = makeBooth4(colX, cy, preset.boothColor, preset.tableColor);
-          if (fitsInRegion(cand, diningStrips, 40, Math.max(700, aisle - 100), 180)) {
+          if (fitsInRegion(cand, diningStrips, 40, aisle, 180)) {
             recordGroup(`${prefix} ${idx++}`, '四人卡座', cand, 4, { x: colX, y: cy }, true);
             cy += stepY;
             continue;
@@ -711,7 +700,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
       : isComfort && options.businessType === 'restaurant'
         ? 2350 + Math.max(800, aisle)
         : isCompact
-          ? 1780 + Math.max(680, aisle - 60)
+          ? 1780 + aisle
           : 1920 + Math.max(720, aisle);
 
     const startX = dMinX + (isBench ? 960 : 720);
@@ -725,12 +714,12 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
         let placedThisSpot = false;
         if (isBench) {
           const c6 = makeCanteen6(cx, cy);
-          if (fitsInRegion(c6, diningStrips, 120, Math.max(680, aisle - 60), 180)) {
+          if (fitsInRegion(c6, diningStrips, 120, aisle, 180)) {
             recordGroup(`六人长桌 ${tableIdx++}`, '六人长桌', c6, 6, { x: cx, y: cy }, true);
             placedThisSpot = true;
           } else {
             const c4 = makeDining4(cx, cy, preset.chairColor, preset.tableColor, true);
-            if (fitsInRegion(c4, diningStrips, 120, Math.max(680, aisle - 80), 180)) {
+            if (fitsInRegion(c4, diningStrips, 120, aisle, 180)) {
               recordGroup(`四人餐桌 ${tableIdx++}`, '四人桌', c4, 4, { x: cx, y: cy }, true);
               placedThisSpot = true;
             }
@@ -763,7 +752,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
             placedThisSpot = true;
           } else {
             const c2 = makeDining2(cx, cy, preset.chairColor, preset.tableColor, false);
-            if (fitsInRegion(c2, diningStrips, 90, Math.max(660, aisle - 100), 180)) {
+            if (fitsInRegion(c2, diningStrips, 90, aisle, 180)) {
               recordGroup(`双人餐桌 ${tableIdx++}`, '双人桌', c2, 2, { x: cx, y: cy }, false);
               placedThisSpot = true;
             }
@@ -794,8 +783,8 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     }
   }
 
-  // 7. Assemble & validate final project cleanly via syncStructure + checkSpace
-  const candidate: Project = syncStructure({
+  // Applying and saving a variant must both produce a project the reader can open.
+  const candidate = parseProject({
     ...baseProject,
     clearance: options.aisleMm,
     style: nextStyle,
@@ -817,6 +806,11 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     warnings.push('当前就餐区净尺寸或过道设置偏紧，建议调低后厨占比或将过道净距调整至 800 mm');
   }
 
+  const nearestTables = nearestTableGap(candidate);
+  if (nearestTables && nearestTables.distance < options.aisleMm - 0.01) {
+    warnings.push('已有桌椅间距小于所选净距，请复核保留的桌椅位置');
+  }
+
   return {
     project: candidate,
     estimate: {
@@ -834,7 +828,8 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
       budgetMax: insights.budgetMax,
       comfortLabel: insights.comfortLabel,
       criticalConflicts,
-      preservedShellCount: preservedItems.length,
+      replacementNames,
+      nearestTables,
       warnings,
     },
   };

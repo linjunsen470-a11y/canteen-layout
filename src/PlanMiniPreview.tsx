@@ -1,13 +1,14 @@
 import { memo, useMemo } from 'react';
-import { Project, modelOf } from './model';
+import { Point, Project, modelOf } from './model';
 import { siteOutline } from './site';
 import { footprint } from './spatial';
 import { zoneArea, zoneCorners } from './zones';
 
-export default memo(function PlanMiniPreview({ project, className = '', showZoneLabels = true }: {
+export default memo(function PlanMiniPreview({ project, className = '', showZoneLabels = true, nearestTables }: {
   project: Project;
   className?: string;
   showZoneLabels?: boolean;
+  nearestTables?: { a: Point; b: Point; distance: number } | null;
 }) {
   const { outlinePts, pad, vbW, vbH, zones, furniture, walls, openings, columns } = useMemo(() => {
     const outline = siteOutline(project);
@@ -113,6 +114,14 @@ export default memo(function PlanMiniPreview({ project, className = '', showZone
           </g>
         );
       })}
+      {nearestTables && <g aria-label="桌组间最窄处">
+        <line x1={nearestTables.a.x} y1={nearestTables.a.y} x2={nearestTables.b.x} y2={nearestTables.b.y}
+          stroke="#913e20" strokeWidth={fs * 0.16} />
+        <text x={(nearestTables.a.x + nearestTables.b.x) / 2} y={(nearestTables.a.y + nearestTables.b.y) / 2 - fs / 3}
+          textAnchor="middle" fontSize={fs} fill="#793018" stroke="white" strokeWidth={fs * 0.2} paintOrder="stroke">
+          {Math.floor(nearestTables.distance + 1e-6)} mm
+        </text>
+      </g>}
     </svg>
   );
 });

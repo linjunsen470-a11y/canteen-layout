@@ -92,20 +92,6 @@ export function capturePlan(svg:SVGSVGElement,project:Project):Promise<string>{r
     arch.append(el('text',{x:0,y:sbY+20/exportScale,'font-size':12/exportScale,fill:'#58685d'},'0'));
     arch.append(el('text',{x:sbW/2,y:sbY+20/exportScale,'font-size':12/exportScale,fill:'#58685d','text-anchor':'middle'},`${sbW/2000}m`));
     arch.append(el('text',{x:sbW,y:sbY+20/exportScale,'font-size':12/exportScale,fill:'#58685d','text-anchor':'middle'},`${sbW/1000}m`));
-    const hasEntrancePoint = project.items.some(i => i.kind === 'utility' && i.pointType === 'entrance' && !i.hidden);
-    if (!hasEntrancePoint) {
-      const doors = project.items.filter(i => i.kind === 'door' && !i.hidden).sort((a, b) => (b.w - a.w) || ((b.y + b.d / 2) - (a.y + a.d / 2)));
-      const primaryDoor = doors[0];
-      if (primaryDoor) {
-        const cx = primaryDoor.x + primaryDoor.w / 2;
-        const cy = primaryDoor.y + primaryDoor.d / 2;
-        const nearBottom = Math.abs(cy - project.height) <= Math.min(cy, project.width - cx, cx) + 300;
-        const bx = nearBottom ? cx : Math.max(80 / exportScale, Math.min(project.width - 80 / exportScale, cx));
-        const by = nearBottom ? project.height + 56 / exportScale : Math.max(24 / exportScale, cy - 26 / exportScale);
-        arch.append(el('rect',{x:bx-46/exportScale,y:by-13/exportScale,width:92/exportScale,height:26/exportScale,rx:13/exportScale,fill:'#244b3c'}));
-        arch.append(el('text',{x:bx,y:by+1/exportScale,'font-size':12/exportScale,'font-weight':'650',fill:'#faf6ee','text-anchor':'middle','dominant-baseline':'middle'},nearBottom ? '▲ 主入口' : '主入口'));
-      }
-    }
     scene.append(arch);
 
     const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml'}));const image=new Image();image.onload=()=>{try{const canvas=document.createElement('canvas');canvas.width=sheetWidth;canvas.height=sheetHeight;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0);resolve(canvas.toDataURL('image/png'))}catch{reject(Error('平面图导出失败'))}finally{URL.revokeObjectURL(url)}};image.onerror=()=>{URL.revokeObjectURL(url);reject(Error('平面图导出失败'))};image.src=url;

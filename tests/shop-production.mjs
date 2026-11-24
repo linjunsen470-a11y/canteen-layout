@@ -254,6 +254,73 @@ try {
   assert.equal(await page.locator('.template-card').count(), 4);
   await page.locator('.shop-wizard-dialog').getByRole('button', { name: '关闭', exact: true }).click();
 
+  // A real project can have fixed objects assigned to a zone that the estimator replaces.
+  const fixture = { ...aligned, name: '分区存档回归', underlay: undefined, groups: [],
+    items: aligned.items.filter(i => ['wall', 'door'].includes(i.kind)) };
+  const item = (id, kind, x, y, w, d, h) => ({ id, name: id, kind, x, y, w, d, h, rotation: 0, color: '#778877' });
+  fixture.items.push(item('旧区', 'zone', 200, 200, 4000, 2800, 0),
+    { ...item('柱', 'column', 350, 360, 450, 450, 3000), zoneId: '旧区' },
+    item('玻璃隔断', 'partition', 500, 2400, 2000, 100, 1800));
+  async function importFixture(project) {
+    await button('导出与汇报').click();
+    const input = page.waitForEvent('filechooser');
+    await button('导入').click();
+    await (await input).setFiles({ name: 'shop.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(project)) });
+    await page.getByText('方案已导入为独立项目', { exact: true }).waitFor();
+  }
+  async function exportSvgText() {
+    // Inspect the exact SVG sent to the PNG rasterizer.
+    await page.evaluate(() => {
+      const serialize = XMLSerializer.prototype.serializeToString;
+      XMLSerializer.prototype.serializeToString = function(node) {
+        const xml = serialize.call(this, node);
+        window.exportLabels = [...node.querySelectorAll('text')].map(t => t.textContent);
+        XMLSerializer.prototype.serializeToString = serialize;
+        return xml;
+      };
+    });
+    await button('导出与汇报').click();
+    assert.equal((await download('导出 2D 平面图 PNG')).readUInt32BE(0), 0x89504e47);
+    return page.evaluate(() => window.exportLabels);
+  }
+  await importFixture(fixture);
+  await button('2D 平面').click();
+  assert.ok(!(await exportSvgText()).some(t => /主入口|^入口$/.test(t)));
+  await button('智能分区估算').click();
+  const ratio = conceptDialog.getByRole('slider');
+  const previousKpi = await conceptDialog.locator('.concept-kpi strong').first().innerText();
+  await ratio.focus();
+  await page.keyboard.down('End');
+  assert.equal(await ratio.inputValue(), '50');
+  assert.equal(await conceptDialog.locator('.concept-kpi strong').first().innerText(), previousKpi);
+  await page.keyboard.up('End');
+  assert.notEqual(await conceptDialog.locator('.concept-kpi strong').first().innerText(), previousKpi);
+  await button('应用到当前铺位（可撤销）').click();
+  await button('保存').click();
+  await button('已保存').waitFor();
+  await page.reload();
+  await button('已保存').waitFor();
+  await button('导出与汇报').click();
+  const reopened = JSON.parse(await download('JSON'));
+  assert.equal(reopened.name, fixture.name);
+  assert.equal(reopened.items.find(i => i.id === '柱').zoneId, undefined);
+  assert.ok(reopened.items.some(i => i.id === '玻璃隔断'));
+  await button('智能分区估算').click();
+  await button('另存为对比方案').click();
+  await conceptDialog.waitFor({ state: 'hidden' });
+  await page.reload();
+  await button('已保存').waitFor();
+  await button('导出与汇报').click();
+  const variant = JSON.parse(await download('JSON'));
+  assert.notEqual(variant.id, reopened.id);
+  assert.ok(variant.items.some(i => i.id === '柱'));
+
+  fixture.items.push({ ...item('顾客入口点', 'utility', 1100, 320, 200, 200, 80), pointType: 'entrance' });
+  await importFixture(fixture);
+  await button('2D 平面').click();
+  assert.ok((await exportSvgText()).includes('入口'));
+  console.log('PASS 试排应用与另存后刷新、滑杆提交及仅导出显式入口');
+
   assert.deepEqual(errors, []);
   console.log('PASS 实测建铺、底图两点校准、智能分区估算与同壳对比、示范案例参考、组合预览与拖放、整组四向复制与图文导出');
 } finally {

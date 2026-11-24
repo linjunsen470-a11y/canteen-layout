@@ -33,11 +33,16 @@ export function inspectSpace(p: Project, activeId: string | null, measureAisles 
  };
  const bodies=p.items.filter(i=>!i.hidden&&!['zone','text','dimension','leader','utility'].includes(i.kind)&&!(i.wallId&&p.items.find(w=>w.id===i.wallId)?.hidden)),issues:SpaceIssue[]=[],area=p.planningAreas?.find(a=>a.id===activeId),reference=p.clearance??900;
  for(const i of bodies){const f=footprint(i);if(modelOf(i)!=='shop-sign'&&!contains(siteOutline(p),f))issues.push({ids:[i.id],type:'场地越界',message:`${i.name} 的完整轮廓超出整场地`});if(area&&modelOf(i)!=='shop-sign'&&!contains(area.outline,f))issues.push({ids:[i.id],type:'范围越界',message:`${i.name} 超出 ${area.name}`});const support=supportFor(p,i);if(i.supportId&&support&&!contains(footprint(support),f))issues.push({ids:[i.id,support.id],type:'叠放待调整',message:`${i.name} 未完整落在承托物上`})}
+ // Pair checks share the same immutable footprints, bounds and heights for this inspection.
+ const geometry = bodies.map(item => ({
+   polygon: footprint(item), box: bounds([item]), bottom: baseHeight(p, item),
+ }));
  for(let n=0;n<bodies.length;n++)for(let m=n+1;m<bodies.length;m++){
   const a=bodies[n],b=bodies[m];if(a.wallId===b.id||b.wallId===a.id)continue;
-  if(Math.min(baseHeight(p,a)+a.h,baseHeight(p,b)+b.h)-Math.max(baseHeight(p,a),baseHeight(p,b))<1)continue;
-  const x=bounds([a]),y=bounds([b]);if(Math.max(x.x-y.x-y.w,y.x-x.x-x.w,x.y-y.y-y.h,y.y-x.y-x.h)>Math.max(reference, measureAisles ? 2400 : 0))continue;
-  const fa=footprint(a),fb=footprint(b),overlap=polygonCoverage(fa,[fb]).union;
+  const ga=geometry[n],gb=geometry[m];
+  if(Math.min(ga.bottom+a.h,gb.bottom+b.h)-Math.max(ga.bottom,gb.bottom)<1)continue;
+  const x=ga.box,y=gb.box;if(Math.max(x.x-y.x-y.w,y.x-x.x-x.w,x.y-y.y-y.h,y.y-x.y-x.h)>Math.max(reference, measureAisles ? 2400 : 0))continue;
+  const fa=ga.polygon,fb=gb.polygon,overlap=polygonCoverage(fa,[fb]).union;
   // Wall corners and T-junctions intentionally overlap where centerlines meet.
   if(a.kind==='wall'&&b.kind==='wall'&&wallsJoined(a,b,fa,fb))continue;
   // Exhaust hoods intentionally sit above stoves/fryers/noodle cookers.
