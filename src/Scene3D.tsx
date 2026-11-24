@@ -20,7 +20,7 @@ import SiteFloor from './SiteFloor';
 import SiteOverlay3D from './SiteOverlay3D';
 import { usePlanning, insidePlanning } from './planning';
 import { isAnnotation } from './annotations';
-import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeInteriorShot, computeStorefrontShot } from './SceneCapture';
+import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeEyeView } from './SceneCapture';
 import InstancedFurniture from './InstancedFurniture';
 import { dragOpening, isAttachedOpening } from './structure';
 import { computeFrontFacingWallIds } from './wallVisibility3D';
@@ -188,33 +188,6 @@ function InteriorLights({ project, preset }: { project: Project; preset: Lightin
 }
 
 const eyeViewNames = ['进店视角', '客区漫游视角', '吧台/明档视角', '临街门头外观'];
-function computeEyeView(project: Project, index: number) {
-  const w = project.width / 1000;
-  const h = project.height / 1000;
-  const eyeY = 1.62;
-  const idx = ((index % 4) + 4) % 4;
-  if (idx === 3) {
-    return computeStorefrontShot(project);
-  }
-  if (idx === 0) {
-    return computeInteriorShot(project);
-  }
-  if (idx === 1) {
-    // Diagonal dining hall showcase view from front-left corner
-    return {
-      pos: new T.Vector3(Math.max(0.9, w * 0.14), eyeY + 0.12, Math.max(1.0, h * 0.82)),
-      target: new T.Vector3(w * 0.62, 1.1, h * 0.32),
-      fov: 50,
-    };
-  }
-  // Right-side angle looking back toward seating & storefront windows
-  return {
-    pos: new T.Vector3(Math.min(w - 0.9, w * 0.82), eyeY + 0.08, Math.max(1.0, h * 0.72)),
-    target: new T.Vector3(w * 0.3, 1.15, h * 0.42),
-    fov: 50,
-  };
-}
-
 function CameraRig({
   focus, frame, reset, dragging, picking, pose, eyeIndex, active, navigation, pan, onPanChange
 }: {
@@ -312,8 +285,8 @@ function CameraRig({
       persp.updateProjectionMatrix();
     }
 
-    const overview = project.basicDraft && !frame && !focus && pose !== 'eye-level';
-    const key = [overview ? size.width / size.height : null, JSON.stringify(frame), focus?.id ?? 'all', focus?.w, focus?.d, focus?.h, reset, pose, pose === 'eye-level' ? eyeIndex : 0, width, height].join(':');
+    const overview = (project.survey || project.outline) && !frame && !focus && pose !== 'eye-level';
+    const key = [project.id, JSON.stringify(frame), focus?.id ?? 'all', focus?.w, focus?.d, focus?.h, reset, pose, pose === 'eye-level' ? eyeIndex : 0, width, height].join(':');
     if (pose === 'eye-level' && !focus && !frame) {
       if (framed.current === key) { invalidate(); return; }
       framed.current = key;

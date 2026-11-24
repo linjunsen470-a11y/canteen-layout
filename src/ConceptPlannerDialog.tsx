@@ -116,7 +116,7 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
         type="button"
         className="concept-planner-btn"
         disabled={!session.ready || session.busy}
-        title="基于当前实测外墙与门窗柱子，快速试算后厨/前厅面积占比与桌椅数量"
+        title="基于当前铺位外墙与门窗柱子，快速试算后厨/前厅面积占比与桌椅数量"
         onClick={openModal}
       >
         <Sparkles />智能分区估算
@@ -336,7 +336,7 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
                   )}
                   <div className="concept-canvas-card is-primary">
                     <header>
-                      <b>估算预览（实时贴合你的实测外墙）</b>
+                      <b>估算预览（沿当前铺位外墙试排）</b>
                       <span>
                         {est.criticalConflicts === 0
                           ? <><CheckCircle2 size={14} /> 未发现物件碰撞</>

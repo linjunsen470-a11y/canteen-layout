@@ -17,7 +17,11 @@ export default function BasicDraftBar({ project, notify }: { project: Project; n
     setBusy(true); setError('');
     try {
       const result = await requestBasicLayout(project, business);
-      if (!await copyProject(project.name + ' · 新稿', result.project)) throw Error(useProjectSession.getState().message || '保存新稿失败');
+      const base = project.name.replace(/(?: · 新稿(?: \d+)?)+$/, '');
+      const names = new Set(useProjectSession.getState().rows.map(row => row.project.name));
+      let name = base + ' · 新稿';
+      for (let n = 2; names.has(name); n++) name = base + ' · 新稿 ' + n;
+      if (!await copyProject(name, result.project)) throw Error(useProjectSession.getState().message || '保存新稿失败');
       useWorkspace.getState().set({ view: 'split', focusMode: false, camera: 'oblique', move3D: false, propsOpen: false });
       useStore.getState().setMode('layout');
       dialog.current?.close();

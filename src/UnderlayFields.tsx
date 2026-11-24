@@ -29,9 +29,9 @@ export default function UnderlayFields(){
   {s.tool==='underlay-calibrate' && <>
     {corners && <label>校准基准<select value={wallIndex} onChange={e=>{setWallIndex(Number(e.target.value));s.setCalibrationPoints([])}}>
       <option value={-1}>已知距离</option>
-      {corners.map((v,i)=>{const n=corners[(i+1)%corners.length];return <option key={i} value={i}>实测第 {i+1} 段 · {Math.hypot(n.x-v.x,n.y-v.y)} mm（向{n.x>v.x?'右':n.x<v.x?'左':n.y>v.y?'下':'上'}）</option>})}
+      {corners.map((v,i)=>{const n=corners[(i+1)%corners.length];return <option key={i} value={i}>{s.project.survey?.source === 'estimated' ? '估算' : '实测'}第 {i+1} 段 · {Math.hypot(n.x-v.x,n.y-v.y)} mm（向{n.x>v.x?'右':n.x<v.x?'左':n.y>v.y?'下':'上'}）</option>})}
     </select></label>}
-    <p>{a ? '在底图上依次点击该段内墙起角、末角，底图将旋转并对齐到现场记录。' : '在底图上点选两个已知间距的点。'}已选 {s.calibrationPoints.length}/2</p>
+    <p>{a ? '在底图上依次点击该段内墙起角、末角，底图将旋转并对齐到该段内墙。' : '在底图上点选两个已知间距的点。'}已选 {s.calibrationPoints.length}/2</p>
     {!a && <label>已知距离（mm）<NumberField value={known} min={1} onCommit={K}/></label>}
     <button disabled={s.calibrationPoints.length!==2} onClick={applyCalibration}>应用校准</button>
   </>}

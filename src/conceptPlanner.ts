@@ -366,7 +366,7 @@ function extractInteriorPolygon(project: Project): Point[] {
   if (project.survey) {
     const walls = project.items.filter(i => project.survey!.wallIds.includes(i.id));
     if (walls.length !== project.survey.wallIds.length || walls.some(w => !surveyWall(project, w))) {
-      throw Error('实测外墙已调整，请先复核墙段后再试排');
+      throw Error('铺位外墙已调整，请先复核墙段后再试排');
     }
     return project.survey.corners;
   }
@@ -921,7 +921,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
   }
 
   const nearestTables = nearestTableGap(candidate);
-  if (nearestTables && nearestTables.distance < options.aisleMm - 0.01) {
+  if (!basic && nearestTables && nearestTables.distance < options.aisleMm - 0.01) {
     warnings.push('已有桌椅间距小于所选净距，请复核保留的桌椅位置');
   }
 

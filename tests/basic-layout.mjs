@@ -6,7 +6,7 @@ export async function testBasicLayout(load, loadScene) {
   const { parseProject } = await load('projectIO');
   const { contains, footprint, inPolygon } = await load('spatial');
   const { checkSpace } = await load('spaceChecks');
-  const { reachableFromEntry } = await load('entryAccess');
+  const { entryRoutes } = await load('entryAccess');
   const shape = points => sketchShell(points.map(([x,y]) => ({ x:x*1000, y:y*1000 })));
   const rect = (w,d) => [[0,0],[w,0],[w,d],[0,d]];
   assert.throws(() => shape([[0,0],[5,1],[5,5],[0,5]]));
@@ -36,16 +36,26 @@ export async function testBasicLayout(load, loadScene) {
   assert.throws(() => placeSketchFixture(fixture,'column',{x:8800,y:6000},500,500));
   const placed = generate(fixture,'bistro').project;
   assert.ok(placed.groups.length && placed.items.some(i => i.kind === 'sink') && placed.items.some(i => i.model === 'cashier'));
-  const { computeInteriorShot, computeStorefrontShot } = await loadScene();
+  const { computeInteriorShot, computeStorefrontShot, computeEyeView } = await loadScene();
   const inside = computeInteriorShot(placed), outside = computeStorefrontShot(placed);
   assert.ok(inside.pos.z < 1 && inside.target.z > inside.pos.z, 'north-side entrance looks inward');
   assert.ok(outside.pos.z < 0 && outside.target.z > outside.pos.z, 'storefront follows the marked entrance');
+  const courtyard = shape([[0,0],[10,0],[10,8],[7,8],[7,3],[3,3],[3,8],[0,8]]);
+  const innerDoor = placeSketchFixture(courtyard,'entrance',{x:3200,y:5500},0,0);
+  const facing = computeStorefrontShot(innerDoor);
+  assert.ok(facing.pos.x > 3.2 && facing.pos.x < 7.2 && facing.target.x < facing.pos.x, 'camera stays in the courtyard');
+  for (const idx of [1,2]) {
+    const shot = computeEyeView(shape(l),idx);
+    assert.ok(inPolygon({x:shot.pos.x*1000,y:shot.pos.z*1000},shape(l).survey.corners));
+  }
+  const measured = { ...placed, basicDraft:undefined, survey:{ ...placed.survey, source:undefined } };
+  assert.ok(computeStorefrontShot(measured).pos.equals(outside.pos));
   const kitchen = placed.items.filter(i => i.kind === 'zone' && i.name.startsWith('后厨'));
   const entry = placed.items.find(i => i.pointType === 'entrance');
   assert.ok(kitchen.every(z => !inPolygon({x:entry.x+entry.w/2,y:entry.y+entry.d/2}, footprint(z))));
-  assert.ok(placed.items.filter(i => i.kind === 'chair').every(reachableFromEntry(placed,kitchen)));
-  const reachable = reachableFromEntry(placed);
-  assert.ok(placed.items.filter(i => i.kind === 'chair' || i.model === 'cashier').every(reachable));
+  const routes = entryRoutes(placed,kitchen);
+  assert.ok(placed.items.filter(i => i.kind === 'chair').every(routes.customer));
+  assert.ok(placed.items.filter(i => i.kind === 'chair' || i.model === 'cashier').every(routes.staff));
   let rotated = l;
   const counts = [];
   for (let n=0;n<4;n++) {

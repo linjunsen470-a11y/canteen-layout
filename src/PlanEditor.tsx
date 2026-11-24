@@ -70,7 +70,7 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
       if(e.code==='Space'){e.preventDefault();setSpace(e.type==='keydown')}
 
     };
-    const blur=()=>{setSpace(false);finish(true);if(useStore.getState().placement)useStore.getState().cancelInteraction()};window.addEventListener('keydown',key);window.addEventListener('keyup',key);window.addEventListener('blur',blur);
+    const blur=()=>{doubleClickTarget.current=null;setSpace(false);finish(true);if(useStore.getState().placement)useStore.getState().cancelInteraction()};window.addEventListener('keydown',key);window.addEventListener('keyup',key);window.addEventListener('blur',blur);
     return()=>{window.removeEventListener('keydown',key);window.removeEventListener('keyup',key);window.removeEventListener('blur',blur)};
   },[onSelect]);
   useEffect(()=>()=>{finish(true)},[]);
@@ -125,13 +125,15 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
   const passThroughLights=new Set(visibleItems.filter(i=>i.kind==='lighting'&&!ids.includes(i.id)&&floorBoxes.some(b=>{const cx=i.x+i.w/2,cy=i.y+i.d/2;return cx>=b.x&&cx<=b.x+b.w&&cy>=b.y&&cy<=b.y+b.h})).map(i=>i.id));
   return <div className="plan-viewport" ref={host}>
     <svg ref={svg} tabIndex={0} aria-label="二维布局画布" viewBox={`0 0 ${size.w} ${size.h}`} className={tool==='wall'||tool==='partition'||tool==='zone'||tool==='text'||tool==='dimension'||tool==='leader'?'is-drawing':space||tool==='pan'?(dragging?'is-grabbing':'is-pan'):dragging?'is-moving':''}
+      onPointerDownCapture={() => { doubleClickTarget.current = null; }}
       onDoubleClick={e => {
         // The SVG captures the pointer during a drag, so browsers may target
         // the final double click at the canvas instead of the furniture group.
         const id = doubleClickTarget.current;
-        if (id && !useWallPlacement.getState().session) onSelect(e.shiftKey ? [...new Set([...useStore.getState().selectedIds, id])] : [id]);
+        doubleClickTarget.current = null;
+        if (id && tool === 'select' && !useWallPlacement.getState().session) onSelect(e.shiftKey ? [...new Set([...useStore.getState().selectedIds, id])] : [id]);
       }}
-      onPointerDown={e=>begin(e)} onPointerMove={move} onPointerUp={end} onPointerCancel={()=>finish(true)} onLostPointerCapture={()=>finish(true)}
+      onPointerDown={e=>begin(e)} onPointerMove={move} onPointerUp={end} onPointerCancel={()=>{doubleClickTarget.current=null;finish(true)}} onLostPointerCapture={()=>finish(true)}
       onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='copy'}} onDrop={e=>{e.preventDefault();if(useWallPlacement.getState().session)return;const comboId=e.dataTransfer.getData('application/canteen-combo');if(comboId&&onDropCombo){onDropCombo(comboId,world(screen(e)));return}try{const c=JSON.parse(e.dataTransfer.getData('application/canteen-item'));onDropItem(c.name,c.kind,world(screen(e)),c.id)}catch{}}}>
       <defs><clipPath id="site-clip"><polygon points={floorPoints}/></clipPath><PlanFloorPattern material={style.floorMaterial}/><pattern id="plan-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 H 0 V ${gridSize}`} fill="none" stroke="#c8d0c7" strokeWidth={.7/scale}/></pattern></defs>
       <g data-plan="true" transform={`translate(${offset.x},${offset.y}) scale(${scale})`}>

@@ -80,10 +80,10 @@ export default function App() {
   const [insightsSignal, setInsightsSignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
-  const insights = useMemo(() => analyzeShop(project), [project.items, project.groups, project.outline, project.survey, project.width, project.height]);
   const activeAreaId = usePlanning(state => state.activeId);
   // During a drag, inspect the committed layout until the gesture finishes.
   const inspectionProject = s.gesture ?? project;
+  const insights = useMemo(() => analyzeShop(inspectionProject), [inspectionProject]);
   const issues = useMemo(() => checkSpace(inspectionProject, activeAreaId)
     .sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')),
     [inspectionProject, activeAreaId]);

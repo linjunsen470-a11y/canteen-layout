@@ -43,9 +43,9 @@ export default function PlanSelectionBar({
       : (catalog.find(c => c.model === 'storefront-window') ?? catalog.find(c => c.kind === 'window')!);
     const minW = kind === 'door' ? 900 : 800;
     const w = Math.min(spec.w, Math.max(minW, Math.round(usable * (kind === 'door' ? 0.28 : 0.35))));
-    const h = kind === 'door'
-      ? Math.min(spec.h, Math.max(1900, wall.h - 200))
-      : Math.min(spec.h, Math.max(900, wall.h - 400));
+    const sill = kind === 'door' ? 0 : (spec.model === 'storefront-window' ? 150 : 900);
+    const h = Math.min(spec.h, wall.h - sill - 200);
+    if (h < 100) return null;
     const candidate: Item = {
       id: crypto.randomUUID(),
       kind,
@@ -59,7 +59,7 @@ export default function PlanSelectionBar({
       rotation: wall.rotation,
       wallId: wall.id,
       offset: spanMin,
-      sill: kind === 'door' ? 0 : (spec.model === 'storefront-window' ? 150 : 900),
+      sill,
       color: spec.color,
       ...(kind === 'door' ? { flipped: true } : {}),
     };

@@ -83,6 +83,11 @@ export async function testEditableDraft(browser, url) {
     const variant = await project();
     assert.notEqual(variant.id, edited.id);
     assert.equal(variant.basicDraft.business,'cafe');
+    assert.equal(variant.name,'凹角试租 · 新稿');
+    await button('另生成一稿').click();
+    await button('生成并另存').click();
+    await page.getByRole('dialog',{name:'另生成一稿'}).waitFor({state:'hidden'});
+    assert.equal((await project()).name,'凹角试租 · 新稿 2');
     await button('项目库').click();
     await page.locator('.project-list article').filter({has:page.getByText('凹角试租',{exact:true})}).getByRole('button',{name:'打开 / 重命名'}).click();
     await button('关闭项目库').click();

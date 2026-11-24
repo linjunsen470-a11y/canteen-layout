@@ -1,5 +1,5 @@
 import { defaultConceptOptions, generateConceptLayout, nearestTableGap, type ConceptBusinessType } from './conceptPlanner';
-import { reachableFromEntry } from './entryAccess';
+import { entryRoutes } from './entryAccess';
 import type { Item, Point, Project } from './model';
 import { parseProject } from './projectIO';
 import { planningArea, siteOutline } from './site';
@@ -58,12 +58,11 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
       const kitchen = kitchenZoneIds.filter(id => !omitted.has(id)).map(id => byId.get(id)!);
       const entries = conflictFree.items.filter(i => !i.hidden && i.pointType === 'entrance');
       const entryInDining = entries.every(i => !kitchen.some(z => inPolygon({x:i.x+i.w/2,y:i.y+i.d/2}, footprint(z))));
-      const accessible = reachableFromEntry(conflictFree);
-      if (accessible) {
-        const publicAccess = reachableFromEntry(conflictFree, kitchen)!;
+      const routes = entryRoutes(conflictFree, kitchen);
+      if (routes) {
         for (const i of conflictFree.items) {
-          if (i.kind === 'chair' && !publicAccess(i)) omit(i);
-          if (['chair','counter','stove','fridge','sink'].includes(i.kind) && !accessible(i)) omit(i);
+          if (i.kind === 'chair' && !routes.customer(i)) omit(i);
+          if (['chair','counter','stove','fridge','sink'].includes(i.kind) && !routes.staff(i)) omit(i);
         }
       }
       // An overhead hood belongs to the cooking station below it.
@@ -82,6 +81,7 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
         Number(!nearest || nearest.distance >= options.aisleMm-.1), seats, -omitted.size];
       if (best && !prefer(score,best.score)) continue;
       const warnings = [...estimate.warnings];
+      if (nearest && nearest.distance < options.aisleMm - .01) warnings.push('桌椅间距小于所选净距，请复核保留的桌椅位置');
       if (estimate.tableGroups === 24 && accepted.groups?.length === 24) {
         warnings.push('基础草稿先摆 24 组桌椅，剩余面积可按需复制桌组');
       }
