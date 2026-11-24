@@ -217,6 +217,40 @@ try {
   }
   console.log('PASS 分区引用往返、固定隔断、带柱排厨与缺件、左右分区对称、斜边拦截及桌组实测净距');
 
+  // Verify surveyed inner-corner placement for columns & utilities (CW + CCW)
+  const { surveyWallInwardPoint } = await load('interiorSurvey');
+  for (const p of [rect, lShop, ccw]) {
+    const w0 = p.items[0];
+    const d0 = surveyWall(p, w0);
+    const flushPos = surveyWallInwardPoint(d0, 1000, 0, 500, 500, false);
+    const midPos = surveyWallInwardPoint(d0, 1000, 1200, 500, 500, true);
+    for (const pos of [flushPos, midPos]) {
+      const col = { id: 'col-check', kind: 'column', model: 'column', name: '柱', x: pos.x, y: pos.y, w: 500, d: 500, h: 3200, rotation: 0, color: '#8a8d89' };
+      assert.deepEqual(checkSpace({ ...p, items: [...p.items, col] }, null).filter(i => i.type !== '参考净距'), [], `${p.name} column placement`);
+    }
+    assert.throws(() => surveyWallInwardPoint(d0, d0.end - d0.start, 0, 500, 500, false), /超出本段内净长/);
+  }
+
+  // Verify 3D smart front-facing wall cutaway detection
+  const { computeFrontFacingWallIds } = await load('wallVisibility3D');
+  const frontRight = computeFrontFacingWallIds(rect, { x: 12, z: 10 });
+  assert.ok(frontRight.has(rect.items[1].id) && frontRight.has(rect.items[2].id), 'front-right camera should cutaway right & bottom walls');
+  assert.ok(!frontRight.has(rect.items[0].id) && !frontRight.has(rect.items[3].id), 'front-right camera should keep top & left walls full height');
+  const backLeft = computeFrontFacingWallIds(rect, { x: -6, z: -6 });
+  assert.ok(backLeft.has(rect.items[0].id) && backLeft.has(rect.items[3].id), 'back-left camera should cutaway top & left walls');
+
+  // Verify concept planner optional open-kitchen partition & schematic storefront openings
+  const bareShell = makeShop(9600, 7200);
+  const fullSchematic = estimate(bareShell, { includePartition: true, includeStorefront: true });
+  const parsedSchematic = parseProject(JSON.parse(JSON.stringify(fullSchematic.project)));
+  assert.equal(fullSchematic.estimate.criticalConflicts, 0);
+  assert.ok(parsedSchematic.items.some(i => i.kind === 'partition'), 'should add open-kitchen partition');
+  assert.ok(parsedSchematic.items.some(i => i.kind === 'door'), 'should add schematic storefront door when none exists');
+  // When a door already exists, includeStorefront must NOT add extra doors
+  const alreadyHasDoor = estimate(parsedSchematic, { includeStorefront: true });
+  assert.equal(alreadyHasDoor.project.items.filter(i => i.kind === 'door').length, parsedSchematic.items.filter(i => i.kind === 'door').length);
+  console.log('PASS 实测墙角放柱/点位、3D 近侧智能透视墙判断及明档隔断/门头快建');
+
   const examplePkg = JSON.parse(fs.readFileSync(new URL('../examples/songjian-noodle-bistro.canteen.json', import.meta.url), 'utf8'));
   assert.equal(examplePkg.format, 'canteen-layout-package');
   assert.equal(examplePkg.version, 1);

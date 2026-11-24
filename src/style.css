@@ -1100,3 +1100,63 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
   .concept-canvas-grid.is-compare { grid-template-columns: 1fr; }
   .template-gallery-grid { grid-template-columns: 1fr; }
 }
+
+/* === Floating 2D Quick-Action & Fast-Build Pill === */
+.plan-quick-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 20px);
+  padding: 4px 6px;
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.94);
+  border: 1px solid #d5cfc2;
+  box-shadow: 0 6px 20px rgba(24, 46, 36, 0.12);
+  backdrop-filter: blur(8px);
+}
+.plan-quick-bar button {
+  padding: 4px 8px;
+  font-size: 11.5px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: transparent;
+  color: #263f33;
+}
+.plan-quick-bar button:hover { background: #edf3ee; border-color: #d2dfd5; }
+.plan-quick-bar button svg { width: 13px; height: 13px; }
+.plan-quick-bar button.is-accent {
+  background: #224b3b;
+  color: #fffdf8;
+  font-weight: 600;
+}
+.plan-quick-bar button.is-accent:hover { background: #2c5f4b; }
+.plan-quick-bar button.is-danger { color: #b23b26; }
+.plan-quick-bar button.is-danger:hover { background: #fdf0ed; border-color: #ebc4bc; }
+.quick-bar-tag, .quick-bar-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5d6e64;
+  padding: 0 6px 0 4px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-right: 1px solid #e3ddd1;
+}
+.quick-bar-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 3px;
+  border-left: 1px solid #e3ddd1;
+  border-right: 1px solid #e3ddd1;
+}
+.quick-bar-dir button { padding: 4px 5px; }
+.library-actions.is-compact { gap: 5px; }
+.library-actions.is-compact button { font-size: 11.5px; padding: 4px 7px; }
+

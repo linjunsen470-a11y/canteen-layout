@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Columns2, CopyPlus, Sparkles, CheckCircle2, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useStore } from './store';
 import { copyProject, useProjectSession } from './projectSession';
@@ -33,7 +33,7 @@ const seatingStyleLabels: Record<ConceptSeatingStyle, string> = {
   'canteen-bench': '食堂六人长桌',
 };
 
-export default function ConceptPlannerDialog({ notify }: { notify: (msg: string) => void }) {
+export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notify: (msg: string) => void; openSignal?: number }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const project = useStore(s => s.project);
   const commit = useStore(s => s.commit);
@@ -47,8 +47,11 @@ export default function ConceptPlannerDialog({ notify }: { notify: (msg: string)
 
   const openModal = () => {
     setOpen(true);
-    dialog.current?.showModal();
+    if (!dialog.current?.open) dialog.current?.showModal();
   };
+  useEffect(() => {
+    if (openSignal > 0 && session.ready && !session.busy) openModal();
+  }, [openSignal]);
   const commitRatio = (value: number) => {
     setDraftRatio(null);
     setOptions(prev => prev.kitchenRatioPct === value ? prev : { ...prev, kitchenRatioPct: value });
@@ -259,6 +262,26 @@ export default function ConceptPlannerDialog({ notify }: { notify: (msg: string)
                   />
                   在餐桌上方配暖光吊灯（3D 氛围更直观）
                 </label>
+                {options.kitchenSide !== 'none' && options.includeKitchenEquip && (
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={!!options.includePartition}
+                      onChange={e => setOptions(o => ({ ...o, includePartition: e.target.checked }))}
+                    />
+                    在餐厨交界加明档半高隔断
+                  </label>
+                )}
+                {!project.items.some(i => i.kind === 'door') && project.items.some(i => i.kind === 'wall') && (
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={!!options.includeStorefront}
+                      onChange={e => setOptions(o => ({ ...o, includeStorefront: e.target.checked }))}
+                    />
+                    在临街外墙示意双开玻璃门与橱窗
+                  </label>
+                )}
               </div>
               <label className="concept-theme-select">
                 <span>3D 装修风格主题</span>

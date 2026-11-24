@@ -45,7 +45,7 @@ export default memo(function EquipmentLibrary({
   const itemCount = category === '成套组合' ? 0 : [...catalog, ...custom].filter(matches).length;
   const totalCount = itemCount + matchingCombos.length;
 
-  const quickChips = ['全部分类', '成套组合', '餐桌椅', '餐饮服务', '热厨设备', '照明灯具', '软装与门头', '空间构件'];
+  const quickChips = ['全部分类', '成套组合', '餐桌椅', '餐饮服务', '热厨设备', '照明灯具', '软装与门头', '空间构件', '我的物件'];
 
   return <aside className="library" hidden={!libraryOpen}>
     <div className="panel-heading">
@@ -59,20 +59,14 @@ export default memo(function EquipmentLibrary({
     {leftTab === 'objects' ? <ObjectList /> : <>
       <label className="catalog-search">
         <Search />
-        <input aria-label="搜索设备" placeholder="搜索桌椅、厨具、灯具、绿植…" value={search} onChange={e => setSearch(e.target.value)} />
+        <input aria-label="搜索设备" placeholder={`搜索桌椅、厨具、灯具…（共 ${totalCount} 项）`} value={search} onChange={e => setSearch(e.target.value)} />
       </label>
       <div className="category-chips" role="group" aria-label="快捷分类">
         {quickChips.map(chip => (
           <button key={chip} type="button" className={category === chip ? 'is-active' : ''} onClick={() => setCategory(chip)}>{chip === '全部分类' ? '全部' : chip}</button>
         ))}
       </div>
-      <div className="catalog-filter">
-        <select aria-label="设备分类" value={category} onChange={e => setCategory(e.target.value)}>
-          {['全部分类', '成套组合', ...groups].map(g => <option key={g}>{g}</option>)}
-        </select>
-        <small>{totalCount} 项</small>
-      </div>
-      <div className="library-actions">
+      <div className="library-actions is-compact">
         <CustomItemDialog onSaved={() => { setSearch(''); setCategory('我的物件'); }} />
         <button aria-pressed={managing} onClick={() => setManaging(v => !v)}>{managing ? '完成管理' : '管理规格'}</button>
       </div>

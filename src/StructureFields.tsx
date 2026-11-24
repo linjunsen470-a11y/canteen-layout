@@ -1,6 +1,7 @@
 import { Item, catalog } from './model';
 import { useStore } from './store';
 import SurveyOpeningFields from './SurveyOpeningFields';
+import SurveySiteObjectFields from './SurveySiteObjectFields';
 import { surveyWall } from './interiorSurvey';
 import { NumberField } from './NumberField';
 import { isOpening, openingSlot } from './structure';
@@ -24,7 +25,7 @@ export default function StructureFields({ item }: {
  </>;
     const cx = item.x + item.w / 2, cy = item.y + item.d / 2;
     return <>
-  {datum && <><p className="full-field">现场记录 · 第 {datum.index+1} 段内净长 {datum.end-datum.start} mm</p><SurveyOpeningFields wall={item} datum={datum} /></>}
+  {datum && <><p className="full-field">现场记录 · 第 {datum.index+1} 段内净长 {datum.end-datum.start} mm</p><SurveyOpeningFields wall={item} datum={datum} /><SurveySiteObjectFields datum={datum} /></>}
   {item.kind==='partition'&&<label className="full-field">隔断样式<select value={item.model??'partition'} onChange={e=>update({model:e.target.value as Item['model']})}>{catalog.filter(c=>c.kind==='partition').map(c=><option value={c.model} key={c.model}>{c.name}</option>)}</select></label>}
   <label>{datum ? '墙中心线长' : '长度'}（mm）<NumberField value={item.w} min={100} onCommit={w => update({ w, x: cx - w / 2 })}/></label><label>厚度（mm）<NumberField value={item.d} min={50} onCommit={d => update({ d, y: cy - d / 2 })}/></label>
   <label>高度（mm）<NumberField value={item.h} min={100} onCommit={h => update({ h })}/></label>
