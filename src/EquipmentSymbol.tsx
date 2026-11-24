@@ -71,6 +71,10 @@ export default function EquipmentSymbol({ item: i, scale = 1 }: { item: Item; sc
     {front && <path data-operation-edge="true" d={`M ${-w * 0.4} ${d * 0.46} H ${w * 0.4}`} stroke="#126b61" strokeWidth={line * 2} />}
     <g data-symbol-detail="true" visibility={Math.min(w, d) * scale < 16 ? 'hidden' : 'visible'}>
       {model === 'stove' && <>{[-0.25, 0.25].map(x => <g key={x}><circle cx={w * x} cy={-d * 0.05} r={Math.min(w * 0.16, d * 0.24)} fill="#e7ece8" /><path d={`M ${w * x - w * 0.13} ${-d * 0.05} h ${w * 0.26} M ${w * x} ${-d * 0.24} v ${d * 0.38}`} /></g>)}</>}
+      {(model === 'curved-booth' || model === 'dining-armchair') && <g stroke="#384b43" strokeOpacity=".6" strokeWidth={line*.65}>
+        <rect x={-w*.41} y={-d*.30} width={w*.82} height={d*.65} rx={Math.min(w,d)*.09} fill="#ffffff" fillOpacity=".13" />
+        {model === 'curved-booth' && <path d={'M0 '+(-d*.29)+' V'+(d*.34)} />}
+      </g>}
       {['sink', 'single-sink', 'triple-sink'].includes(model) && Array.from({ length: model === 'sink' ? 2 : model === 'triple-sink' ? 3 : 1 }, (_, n) => { const count = model === 'sink' ? 2 : model === 'triple-sink' ? 3 : 1; return <rect key={n} x={-w * 0.43 + n * w * 0.86 / count} y={-d * 0.3} width={w * 0.86 / count - w * 0.04} height={d * 0.58} rx={d * 0.08} fill="#dce9ed" />; })}
       {['sink', 'single-sink', 'triple-sink', 'stove', 'worktable', 'chair', 'dining-armchair', 'curved-booth'].includes(model) && <path data-back-edge="true" d={`M ${-w * 0.45} ${-d * 0.43} H ${w * 0.45}`} strokeWidth={model === 'chair' || model === 'dining-armchair' || model === 'curved-booth' ? d * 0.15 : line * 1.5} />}
       {cabinet && <><path d={`M 0 ${-d * 0.35} V ${d * 0.35} M ${-w * 0.12} ${d * 0.3} h ${w * 0.08} M ${w * 0.04} ${d * 0.3} h ${w * 0.08}`} /><rect x={-w * 0.43} y={-d * 0.38} width={w * 0.86} height={d * 0.73} rx={d * 0.03} /></>}

@@ -7,10 +7,11 @@ export type ProjectStyle={floorMaterial?:FloorMaterial;wallMaterial?:WallMateria
 export type Item={id:string;catalogId?:string;specification?:string;operationFace?:'positive-y'|'none';model?:ModelVariant;kind:Kind;name:string;x:number;y:number;w:number;d:number;h:number;rotation:number;color:string;elevation?:number;locked?:boolean;hidden?:boolean;fontSize?:number;zoneId?:string;wallId?:string;offset?:number;sill?:number;flipped?:boolean;hingeRight?:boolean;freeStanding?:boolean;polygon?:Point[];pointType?:'entrance'|'exhaust'|'water'|'drain'|'power';verification?:'pending'|'confirmed';notes?:string;seats?:number;supportId?:string;measure?:{a:string;b:string;distance:number}};
 export type ProjectMetadata={customer:string;site:string;purpose:string;notes:string;propertyId?:string;inquiryId?:string};
 export type Point={x:number;y:number};
+export type InteriorSurvey = { corners: Point[]; wallIds: string[]; thickness: number };
 export type Underlay={assetId:string;name:string;pixelWidth:number;pixelHeight:number;x:number;y:number;mmPerPixel:number;rotation:number;opacity:number;hidden:boolean;locked:boolean;calibration?:{points:[Point,Point];distance:number}};
 export type PlanningArea={id:string;name:string;color:string;outline:Point[]};
 export type LayoutGroup={id:string;name:string;members:string[];seats?:number};
-export type Project={id:string;schemaVersion:7;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number;style?:ProjectStyle};
+export type Project={id:string;schemaVersion:7;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];survey?:InteriorSurvey;items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number;style?:ProjectStyle};
 export const defaultProjectStyle:Required<Omit<ProjectStyle,'shopType'>>={floorMaterial:'terrazzo',wallMaterial:'warm-cream',ceilingHeight:3200,lightingPreset:'warm-dining',showCeiling:false,wallCutaway:false,showZoneTint3D:true,showLightsIn2D:true};
 export function resolveStyle(project:Pick<Project,'style'>){return {...defaultProjectStyle,...(project.style??{})};}
 export function projectIdentity() { const now=new Date().toISOString(); return {id:crypto.randomUUID(),schemaVersion:7 as const,createdAt:now,updatedAt:now,metadata:{customer:'',site:'',purpose:'',notes:''}}; }

@@ -1,7 +1,7 @@
 import { Project } from './model';
 import { isAnnotation } from './annotations';
 import { isVisible } from './editorInteraction';
-import { siteArea } from './site';
+import { siteArea, planningAreaLabel } from './site';
 import { zoneArea, zoneStats } from './zones';
 import { analyzeShop } from './shopAnalytics';
 import { checkSpace } from './spaceChecks';
@@ -95,7 +95,7 @@ export function presentationHTML(
  </header>
  <div class="body-wrap">
   <div class="stats">
-   <div class="stat"><small>铺位实用面积</small><strong>${(siteArea(p) / 1e6).toFixed(2)} ㎡</strong><span>${e((p.width / 1000).toFixed(1))}m × ${e((p.height / 1000).toFixed(1))}m</span></div>
+   <div class="stat"><small>${planningAreaLabel(p)}</small><strong>${insights.areaSqm.toFixed(2)} ㎡</strong><span>${p.survey ? '外轮廓面积 ' + (siteArea(p)/1e6).toFixed(2) + ' ㎡ · ' : ''}${e((p.width / 1000).toFixed(1))}m × ${e((p.height / 1000).toFixed(1))}m</span></div>
    <div class="stat"><small>规划客座总数</small><strong>${insights.seats} 座</strong><span>${insights.sqmPerSeat ? `约 ${insights.sqmPerSeat.toFixed(2)} ㎡/座 · ${e(insights.comfortLabel)}` : '待配置桌椅'}</span></div>
    <div class="stat"><small>餐厨面积配比</small><strong>${insights.diningRatioPct !== null ? `${insights.diningRatioPct}% : ${insights.kitchenRatioPct}%` : '未分区'}</strong><span>可见构件与设备 ${items.length} 件</span></div>
    <div class="stat"><small>预估商用配电</small><strong>${insights.estimatedPowerKw} kW</strong><span>${insights.estimatedPowerKw >= 10 ? '建议核实 380V 三相电' : '220V 商用电参考'}</span></div>
@@ -117,7 +117,7 @@ export function presentationHTML(
   </div>
 
   <section class="view">
-   <h2>一、2D 建筑平面布局图 <small>含实测尺寸标尺、主入口方向与功能分区面积（单位：mm）</small></h2>
+   <h2>一、2D 建筑平面布局图 <small>含比例尺、铺位尺寸和座位统计</small></h2>
    <div class="figure-frame"><img alt="完整场地平面图" src="${plan}"></div>
    <div class="legend">${zones.map(z => `<span style="border-color:${e(z.color)}">${e(z.name)} · ${(zoneArea(p, z) / 1e6).toFixed(2)} ㎡</span>`).join('')}</div>
    <p class="note">可见分区面积之和 ${(stats.sum / 1e6).toFixed(2)}㎡，去重覆盖 ${(stats.union / 1e6).toFixed(2)}㎡。点击任意图片可全屏放大审阅。</p>

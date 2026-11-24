@@ -50,6 +50,61 @@ try {
   assert.deepEqual(checkSpace(measured, null).filter(i => i.type !== '参考净距'), []);
   assert.throws(() => createCustomShopShell({ ...spec, shape: 'l-shape', notchWidthM: 11 }), /缺口/);
 
+  const { createSurveyShop, rectangleLegs, surveyWall, cornerDistance, openingOffset } = await load('interiorSurvey');
+  const { siteArea, planningArea } = await load('site');
+  const { wallPoint } = await load('structure');
+  const { alignUnderlay, imageToWorld } = await load('siteExtras');
+  const { bomCSV } = await load('shopAnalytics');
+  const { wallProfiles } = await load('wallJoints');
+  const rect = parseProject(createSurveyShop('现场矩形', rectangleLegs(6000,4000), 200, 3200));
+  assert.deepEqual([rect.width,rect.height,siteArea(rect),planningArea(rect)], [6400,4400,28160000,24000000]);
+  assert.equal(analyzeShop(rect).areaSqm, 24);
+  assert.match(bomCSV(rect,analyzeShop(rect)), /现场记录净面积 24.00㎡.*外轮廓面积 28.16㎡/);
+  const lLegs = [['right',6000],['down',2500],['left',2000],['down',1500],['left',4000],['up',4000]]
+    .map(([direction,length])=>({direction,length}));
+  const lShop = createSurveyShop('现场凹角',lLegs,201,3200);
+  const ccw = createSurveyShop('反向',lLegs.toReversed().map(leg=>({
+    ...leg,direction:({left:'right',right:'left',up:'down',down:'up'})[leg.direction]})),201,3200);
+  for (const p of [rect,lShop,ccw]) {
+    assert.deepEqual(buildPerimeterWalls(p), []);
+    assert.deepEqual(checkSpace(p,null).filter(i=>i.type!=='参考净距'), []);
+    const profiles = wallProfiles(p);
+    p.items.forEach((wall,i)=>{
+      const face=surveyWall(p,wall), a=p.survey.corners[i], b=p.survey.corners[(i+1)%p.items.length];
+      assert.equal(face.end-face.start,Math.hypot(b.x-a.x,b.y-a.y));
+      // Independent oracle: both surveyed corners must appear on the rendered mitered wall.
+      const axis=wall.rotation*Math.PI/180;
+      const vertices=profiles.get(wall.id).map(v=>({x:wall.x+wall.w/2+v.x*Math.cos(axis)-v.y*Math.sin(axis),
+        y:wall.y+wall.d/2+v.x*Math.sin(axis)+v.y*Math.cos(axis)}));
+      for(const pt of [a,b]) assert.ok(vertices.some(v=>Math.hypot(v.x-pt.x,v.y-pt.y)<1e-6));
+      const offset=openingOffset(face,100,250,false);
+      assert.equal(openingOffset(face,face.end-face.start-350,250,true),offset);
+    });
+  }
+  const recesses = [['right',6000],['down',4000],['left',1800],['up',500],['left',800],
+    ['down',500],['left',1000],['up',700],['left',900],['down',700],['left',1500],['up',4000]]
+    .map(([direction,length])=>({direction,length}));
+  const stepped = createSurveyShop('双凹位',recesses,200,3200);
+  assert.equal(planningArea(stepped),22970000);
+  assert.throws(()=>createSurveyShop('凹位宽度不足',recesses,450,3200),/相交|凹位|重叠|重合/);
+  assert.equal(planningArea(lShop),21000000);
+  assert.equal(planningArea(ccw),21000000);
+  assert.throws(()=>createSurveyShop('未闭合',lLegs.map((l,i)=>i===4?{...l,length:3960}:l),200,3200), /横向差 40 mm/);
+  const wall=rect.items[0], face=surveyWall(rect,wall);
+  const offset=openingOffset(face,850,900,false);
+  assert.equal(openingOffset(face,4250,900,true),offset);
+  assert.equal(cornerDistance(face,offset,900,false),850);
+  assert.equal(wallPoint(wall,offset).x-face.a.x,850);
+  assert.throws(()=>openingOffset(face,5800,900,false),/洞口超出/);
+  assert.equal(surveyWall({...rect,items:rect.items.map((w,i)=>i===1?{...w,d:250}:w)},wall),undefined);
+  assert.deepEqual(parseProject(JSON.parse(JSON.stringify(rect))).survey,rect.survey);
+  assert.throws(()=>parseProject({...rect,survey:{...rect.survey,wallIds:[]}}),/测量记录/);
+  const aligned=alignUnderlay({x:280,y:400,rotation:90,mmPerPixel:10},[{x:10,y:20},{x:10,y:80}],face.a,face.b);
+  for (const [pixel,pt] of [[{x:10,y:20},face.a],[{x:10,y:80},face.b]]) {
+    const actual=imageToWorld(aligned,pixel);
+    assert.ok(Math.hypot(pt.x-actual.x,pt.y-actual.y)<1e-6);
+  }
+  console.log('PASS 内净尺寸、反向与奇数墙厚、渲染墙面、闭合差、净面积、双端洞口及底图配准');
   const furniture = (id, kind, x, y, w, d) => ({ id, name: id, kind, x, y, w, d, rotation: 0, h: 800, color: '#aa8866' });
   const aisle = { ...project, clearance: 800, items: [
     furniture('t1', 'table', 1700, 2000, 1200, 800), furniture('c1', 'chair', 2950, 2175, 450, 450),

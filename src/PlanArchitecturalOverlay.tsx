@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
-import { Project, modelOf } from './model';
+import { Project } from './model';
 import { inspectSpace } from './spaceChecks';
 import { bounds } from './spatial';
-import { isVisible } from './editorInteraction';
 
 export default function PlanArchitecturalOverlay({
   project,
@@ -18,31 +17,17 @@ export default function PlanArchitecturalOverlay({
   const font = 11 / scale;
   const offset = 28 / scale;
 
-  // Locate primary entrance door (prefer front-most glass/double door)
-  const entranceDoor = useMemo(() => {
-    const doors = project.items.filter(i => i.kind === 'door' && isVisible(i, project));
-    if (!doors.length) return null;
-    return doors.sort((a, b) => (b.y + b.d / 2) - (a.y + a.d / 2))[0];
-  }, [project]);
-
   const flowMetrics = useMemo(() => {
     if (!showFlow) return null;
     const { issues, clearances } = inspectSpace(project, null, true);
     const critical = issues.filter(i => i.type !== '参考净距');
 
-    // Main customer flow arrow: entrance -> cashier/bar -> center dining
-    const counter = project.items.find(i => !i.hidden && (modelOf(i) === 'cashier' || modelOf(i) === 'tea-bar' || modelOf(i) === 'buffet'));
-    const entryPt = entranceDoor
-      ? { x: entranceDoor.x + entranceDoor.w / 2, y: entranceDoor.y + entranceDoor.d / 2 }
-      : { x: project.width * 0.5, y: project.height - 200 };
-    const midPt = { x: entryPt.x, y: Math.max(project.height * 0.45, entryPt.y - 2200) };
-    const counterPt = counter ? { x: counter.x + counter.w / 2, y: counter.y + counter.d + 450 } : null;
+    return { critical, clearances };
+  }, [project, showFlow]);
 
-    return { critical, clearances, entryPt, midPt, counterPt };
-  }, [project, showFlow, entranceDoor]);
-
-  const widthLabel = `${(project.width / 1000).toFixed(2)} m`;
-  const heightLabel = `${(project.height / 1000).toFixed(2)} m`;
+  const prefix = project.survey ? '外 ' : '';
+  const widthLabel = prefix + `${(project.width / 1000).toFixed(2)} m`;
+  const heightLabel = prefix + `${(project.height / 1000).toFixed(2)} m`;
   const scaleBarW = project.width >= 6000 ? 2000 : 1000;
 
   return (
@@ -88,32 +73,9 @@ export default function PlanArchitecturalOverlay({
         <text x={scaleBarW} y={14 / scale} fontSize={9.5 / scale} fill="#66766b" textAnchor="middle">{scaleBarW / 1000}m</text>
       </g>
 
-      {/* Storefront main entrance badge */}
-      {entranceDoor && (
-        <g transform={`translate(${entranceDoor.x + entranceDoor.w / 2}, ${Math.max(project.height + 24 / scale, entranceDoor.y + entranceDoor.d + 22 / scale)})`}>
-          <rect x={-38 / scale} y={-11 / scale} width={76 / scale} height={22 / scale} rx={11 / scale} fill="#1f4638" />
-          <text x={0} y={1 / scale} fontSize={10 / scale} fill="#faf5eb" textAnchor="middle" dominantBaseline="middle" fontWeight="600">
-            ▲ 主入口
-          </text>
-        </g>
-      )}
-
       {/* Toggleable Aisle Clearance & Customer Flow Overlay */}
       {showFlow && flowMetrics && (
         <g data-ui="true">
-          {/* Customer entry & service flow path */}
-          <path
-            d={flowMetrics.counterPt
-              ? `M ${flowMetrics.entryPt.x} ${flowMetrics.entryPt.y + 180} L ${flowMetrics.midPt.x} ${flowMetrics.midPt.y} L ${flowMetrics.counterPt.x} ${flowMetrics.counterPt.y}`
-              : `M ${flowMetrics.entryPt.x} ${flowMetrics.entryPt.y + 180} L ${flowMetrics.midPt.x} ${flowMetrics.midPt.y}`}
-            fill="none"
-            stroke="#2a7a5c"
-            strokeWidth={2.5 / scale}
-            strokeDasharray={`${8 / scale} ${6 / scale}`}
-            opacity={0.75}
-          />
-          <circle cx={flowMetrics.midPt.x} cy={flowMetrics.midPt.y} r={5 / scale} fill="#2a7a5c" />
-
           {/* Measured passage clearance callouts */}
           {flowMetrics.clearances.map((c, idx) => {
             const ok = c.distance >= (project.clearance ?? 900) - 0.1;

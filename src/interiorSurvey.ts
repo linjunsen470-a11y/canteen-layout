@@ -1,0 +1,118 @@
+import { blankProject, uid } from './model';
+import type { InteriorSurvey, Item, Point, Project } from './model';
+import { projectOnWall, segmentPose, wallPoint } from './structure';
+import { validateSite } from './site';
+
+export const directions = { right: '右', down: '下', left: '左', up: '上' } as const;
+export type SurveyLeg = { direction: keyof typeof directions; length: number };
+const vectors = { right: [1, 0], down: [0, 1], left: [-1, 0], up: [0, -1] } as const;
+
+export function rectangleLegs(width: number, depth: number): SurveyLeg[] {
+  return [{ direction: 'right', length: width }, { direction: 'down', length: depth },
+    { direction: 'left', length: width }, { direction: 'up', length: depth }];
+}
+
+export function traceLegs(legs: SurveyLeg[]) {
+  const path = [{ x: 0, y: 0 }];
+  for (const { direction, length } of legs) {
+    const [dx, dy] = vectors[direction];
+    const last = path[path.length - 1];
+    path.push({ x: last.x + dx * length, y: last.y + dy * length });
+  }
+  return path;
+}
+
+export function closureMessage(end: Point) {
+  return [end.x && '横向差 ' + Math.abs(end.x) + ' mm（偏' + (end.x > 0 ? '右' : '左') + '）',
+    end.y && '纵向差 ' + Math.abs(end.y) + ' mm（偏' + (end.y > 0 ? '下' : '上') + '）'].filter(Boolean).join('，');
+}
+
+// At a right-angle vertex the two outward unit normals give the exact miter.
+function offsetCorners(points: Point[], distance: number) {
+  const area2 = points.reduce((area, p, i) => {
+    const next = points[(i + 1) % points.length];
+    return area + p.x * next.y - p.y * next.x;
+  }, 0);
+  const shift = Math.sign(area2) * distance;
+  return points.map((p, i) => {
+    const prev = points[(i + points.length - 1) % points.length], next = points[(i + 1) % points.length];
+    return { x: p.x + shift * (Math.sign(p.y - prev.y) + Math.sign(next.y - p.y)),
+      y: p.y - shift * (Math.sign(p.x - prev.x) + Math.sign(next.x - p.x)) };
+  });
+}
+
+function validateCorners(corners: Point[]) {
+  // Original survey coordinates live independently of subsequent site edits.
+  validateSite({ outline: corners, width: 62000, height: 62000 });
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i], b = corners[(i + 1) % corners.length], c = corners[(i + 2) % corners.length];
+    if (![a.x, a.y].every(Number.isInteger) || (a.x !== b.x && a.y !== b.y))
+      throw Error('墙段须为整数毫米的水平或垂直边');
+    if ((a.x === b.x) === (b.x === c.x)) throw Error('相邻同向边请合并为一段，并在墙角转向');
+  }
+}
+
+export function validateSurvey(s: InteriorSurvey) {
+  if (!s || !Array.isArray(s.corners) || !Array.isArray(s.wallIds) || s.wallIds.length !== s.corners.length
+    || s.wallIds.some(id => typeof id !== 'string' || !id) || new Set(s.wallIds).size !== s.wallIds.length)
+    throw Error('现场测量记录的墙段无效');
+  if (!Number.isInteger(s.thickness) || s.thickness < 50 || s.thickness > 1000) throw Error('墙厚须为 50–1000 mm');
+  validateCorners(s.corners);
+}
+
+export function createSurveyShop(name: string, legs: SurveyLeg[], thickness: number, ceiling: number): Project {
+  if (legs.length < 4 || legs.length > 64) throw Error('请录入 4–64 段直角内墙');
+  if (legs.some(leg => !Number.isInteger(leg.length) || leg.length < 1 || leg.length > 60000)) throw Error('每段净长须为 1–60000 mm 的整数');
+  if (!Number.isInteger(ceiling) || ceiling < 2400 || ceiling > 6000) throw Error('层高须为 2400–6000 mm');
+  const path = traceLegs(legs), end = path.pop()!;
+  if (end.x || end.y) throw Error('尚未闭合：' + closureMessage(end));
+  const minX = Math.min(...path.map(p => p.x)), minY = Math.min(...path.map(p => p.y));
+  const corners = path.map(p => ({ x: p.x - minX + thickness, y: p.y - minY + thickness }));
+  const survey = { corners, thickness, wallIds: legs.map(() => uid()) };
+  validateSurvey(survey);
+  const outline = offsetCorners(corners, thickness), centers = offsetCorners(corners, thickness / 2);
+  const width = Math.max(...outline.map(p => p.x)), height = Math.max(...outline.map(p => p.y));
+  if (width - 2 * thickness > 60000 || height - 2 * thickness > 60000) throw Error('铺位内净宽、深均不可超过 60 m');
+  validateSite({ outline, width, height });
+  const walls: Item[] = centers.map((a, i) => {
+    const n = (i + 1) % centers.length, [dx, dy] = vectors[legs[i].direction];
+    if ((outline[n].x - outline[i].x) * dx + (outline[n].y - outline[i].y) * dy <= 0)
+      throw Error('第 ' + (i + 1) + ' 段凹位过窄，外墙会交叠');
+    const pose = segmentPose(a, centers[n], thickness);
+    if (pose.w < 100) throw Error('第 ' + (i + 1) + ' 段生成的墙体不足 100 mm');
+    return { id: survey.wallIds[i], name: '外墙 ' + (i + 1), kind: 'wall', model: 'wall',
+      ...pose, d: thickness, h: ceiling, color: '#eee8de' };
+  });
+  const project = blankProject(name);
+  return { ...project, width, height, outline, items: walls, survey,
+    style: { ...project.style, ceilingHeight: ceiling, floorMaterial: 'concrete', wallMaterial: 'plaster', lightingPreset: 'daylight' } };
+}
+
+// The recorded corners are usable as a datum only while both adjoining
+// junctions still match the surveyed walls. Deleted wall IDs remain historical.
+export function surveyWall(project: Project, wall: Item) {
+  const s = project.survey;
+  if (!s) return;
+  const i = s.wallIds.indexOf(wall.id), count = s.corners.length;
+  if (i < 0) return;
+  const centers = offsetCorners(s.corners, s.thickness / 2);
+  for (const j of [(i + count - 1) % count, i, (i + 1) % count]) {
+    const w = project.items.find(item => item.id === s.wallIds[j]);
+    if (!w || w.kind !== 'wall' || w.d !== s.thickness) return;
+    const next = centers[(j + 1) % count], start = wallPoint(w, 0), end = wallPoint(w, w.w);
+    if (Math.hypot(start.x - centers[j].x, start.y - centers[j].y) > 0.01 || Math.hypot(end.x - next.x, end.y - next.y) > 0.01) return;
+  }
+  const a = s.corners[i], b = s.corners[(i + 1) % count];
+  return { a, b, start: Math.round(projectOnWall(wall, a).offset * 1000) / 1000,
+    end: Math.round(projectOnWall(wall, b).offset * 1000) / 1000, index: i };
+}
+
+type WallDatum = NonNullable<ReturnType<typeof surveyWall>>;
+export function cornerDistance(datum: WallDatum, offset: number, width: number, fromEnd: boolean) {
+  return fromEnd ? datum.end - offset - width : offset - datum.start;
+}
+export function openingOffset(datum: WallDatum, distance: number, width: number, fromEnd: boolean) {
+  if (!Number.isFinite(distance) || !Number.isFinite(width) || width < 100) throw Error('请填写有效距离，洞口宽度至少 100 mm');
+  if (distance < 0 || distance + width > datum.end - datum.start) throw Error('洞口超出内墙净长');
+  return fromEnd ? datum.end - distance - width : datum.start + distance;
+}

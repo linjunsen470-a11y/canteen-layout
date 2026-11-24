@@ -9,6 +9,13 @@ export function calibrate(u:Underlay,points:[Point,Point],distance:number):Under
  const anchor=imageToWorld(u,points[0]),next={...u,mmPerPixel:distance/pixels,calibration:{points,distance}},newAnchor=imageToWorld(next,points[0]);
  return {...next,x:u.x+anchor.x-newAnchor.x,y:u.y+anchor.y-newAnchor.y};
 }
+export function alignUnderlay(u: Underlay, points: [Point,Point], a: Point, b: Point): Underlay {
+  const next = calibrate(u, points, Math.hypot(b.x-a.x,b.y-a.y));
+  const imageAngle = Math.atan2(points[1].y-points[0].y, points[1].x-points[0].x);
+  const rotation = (Math.atan2(b.y-a.y,b.x-a.x) - imageAngle) * 180 / Math.PI;
+  const origin = imageToWorld({ ...next, x: 0, y: 0, rotation }, points[0]);
+  return { ...next, rotation, x: a.x-origin.x, y: a.y-origin.y };
+}
 export function validateSiteExtras(p:Project){
  const u=p.underlay;
  if(u){
