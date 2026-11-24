@@ -74,19 +74,21 @@ export default function App() {
   const save = () => { void saveProject(); };
   const png = () => plan.current?.exportPNG();
 
+  const [takingGallery, setTakingGallery] = useState(false);
   const capture = async () => {
     const current = useWorkspace.getState(), previous = { view: current.view, focusMode: current.focusMode, focusView: current.focusView };
     try {
+      setTakingGallery(true);
       prefs.set({ focusMode: false, view: 'split' });
-      for (let attempt = 0; attempt < 30 && (!plan.current || !scene.current); attempt++) {
+      for (let attempt = 0; attempt < 30 && (!plan.current || !scene.current?.galleryReady()); attempt++) {
         await new Promise<void>(resolve => setTimeout(resolve, 100));
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 140))));
-      if (!plan.current || !scene.current) throw Error('视图尚未就绪，请稍后重试');
+      if (!plan.current || !scene.current?.galleryReady()) throw Error('视图尚未就绪，请稍后重试');
       const gallery = scene.current.captureGallery();
       const image2D = await plan.current.capturePNG();
       return { plan: image2D, scene: gallery.birdseye, gallery };
-    } finally { prefs.set(previous); }
+    } finally { setTakingGallery(false); prefs.set(previous); }
   };
 
   const addFrom = useCallback((c: CatalogItem, point?: { x: number; y: number }) => {
@@ -220,7 +222,7 @@ export default function App() {
               <SceneBoundary>
                 {sceneMounted && (
                   <Suspense fallback={<div className="scene-loading">正在加载三维渲染引擎…</div>}>
-                    <Scene3D ref={scene} snap={snap} active={view !== '2d'} />
+                    <Scene3D ref={scene} takingGallery={takingGallery} snap={snap} active={view !== '2d'} />
                   </Suspense>
                 )}
               </SceneBoundary>

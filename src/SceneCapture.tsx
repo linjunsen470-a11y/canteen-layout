@@ -11,6 +11,7 @@ export type SceneGalleryShots = {
 };
 
 export type SceneCaptureAPI = {
+  galleryReady: () => boolean;
   captureCurrent: () => string;
   captureGallery: (project: Project) => SceneGalleryShots;
 };
@@ -92,6 +93,7 @@ export default function SceneCapture({ capture }: { capture: RefObject<SceneCapt
     };
 
     capture.current = {
+      galleryReady: () => !!scene.getObjectByName('site-floor'),
       captureCurrent: () => {
         const size = gl.getSize(new Vector2());
         const scale = Math.min(1600 / Math.max(1, size.x), 2000 / Math.max(1, size.y));

@@ -1,11 +1,12 @@
 import {
-  FloorMaterial, Item, LayoutGroup, LightingPreset, Point, Project, ProjectStyle, WallMaterial,
-  modelOf, projectIdentity, resolveStyle, uid,
+  FloorMaterial, Item, LightingPreset, Point, Project, ProjectStyle, WallMaterial,
+  projectIdentity, resolveStyle, uid,
 } from './model';
 import { segmentPose, syncStructure } from './structure';
 import { siteOutline } from './site';
-import { baseHeight, contains, doorSwings, footprint, polygonDistance } from './spatial';
-import { polygonCoverage } from './polygonArea';
+import { baseHeight, contains, doorSwings, footprint, polygonDistance, supportFor } from './spatial';
+import { isAnnotation } from './annotations';
+import { seatSummary } from './layoutGroups';
 
 export type ShopBusinessType = 'bistro' | 'cafe' | 'restaurant' | 'canteen';
 export type LayoutStrategy = 'balanced' | 'high-capacity' | 'comfort';
@@ -100,13 +101,13 @@ export const strategyMeta: Record<LayoutStrategy, { label: string; badge: string
   },
   'high-capacity': {
     label: '高坪效翻台摆法',
-    badge: '最多座位',
+    badge: '紧凑排布',
     summary: '紧凑 2/4 人散台阵列 + 临窗吧台，最大化坪效收益',
   },
   comfort: {
     label: '宽敞品质体验摆法',
     badge: '宽敞舒适',
-    summary: '留足 ≥1.2m 主通道与绿植隔断，更适合客单价较高的社交餐饮',
+    summary: '增加桌组间距并预留软装空间，更适合客单价较高的社交餐饮',
   },
 };
 
@@ -229,7 +230,6 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
 
   const poly = outline ?? [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H }];
   const items: Item[] = [];
-  const groups: LayoutGroup[] = [];
   const add = (spec: Omit<Item, 'id'> & { id?: string }) => {
     const id = spec.id ?? uid();
     items.push({ ...spec, id });
@@ -316,20 +316,20 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
 
   // Keep track of dining bounding region(s)
   let diningMinX = 280;
-  let diningMaxX = W - 280;
   let diningMinY = 280;
-  const diningMaxY = H - 300;
   const counterAnchors: { x: number; y: number }[] = [];
 
   if (!useLeftKitchen) {
     // REAR KITCHEN + RIGHT CASHIER/BAR
     const kWallY = kitchenDepth;
     const barShare = rawSpec.businessType === 'cafe' ? 0.54 : rawSpec.businessType === 'canteen' ? 0.25 : 0.35;
-    const kitchenSplitX = Math.max(3200, Math.min(W - 2200, Math.round(W * (1 - barShare))));
+    // Where the kitchen reaches the notch, keep both partition faces inside the remaining wing.
+    const kitchenLimit = isL && kWallY + 320 > lCutY ? lCutX - 320 : W - 2200;
+    const kitchenSplitX = Math.min(kitchenLimit, Math.max(3200, Math.round(W * (1 - barShare))));
 
     // Zones
     add({ kind: 'zone', name: rawSpec.businessType === 'cafe' ? '后场烘焙洗消区' : '明档热厨区', x: 240, y: 240, w: kitchenSplitX - 300, d: kWallY - 300, h: 0, rotation: 0, color: '#f7ece0' });
-    add({ kind: 'zone', name: rawSpec.businessType === 'cafe' ? '咖啡烘焙吧台区' : '水吧收银区', x: kitchenSplitX + 120, y: 240, w: W - kitchenSplitX - 360, d: kWallY - 300, h: 0, rotation: 0, color: '#e7eef6' });
+    add({ kind: 'zone', name: rawSpec.businessType === 'cafe' ? '咖啡烘焙吧台区' : '水吧收银区', x: kitchenSplitX + 120, y: 240, w: W - kitchenSplitX - 360, d: Math.min(kWallY, isL ? lCutY - 200 : H) - 300, h: 0, rotation: 0, color: '#e7eef6' });
     add({
       kind: 'zone', name: '前厅就餐区',
       x: 240, y: kWallY + 140,
@@ -341,8 +341,8 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
     const kWall = addWall(inset, kWallY, kitchenSplitX, kWallY, '明档隔墙');
     addWall(kitchenSplitX, inset, kitchenSplitX, kWallY, '厨吧分隔墙');
     const kSpan = kitchenSplitX - inset;
-    if (kSpan >= 2800) {
-      if (rawSpec.businessType !== 'cafe') {
+    if (kSpan >= 2000) {
+      if (kSpan >= 2800 && rawSpec.businessType !== 'cafe') {
         const winW = Math.min(2800, Math.max(1200, Math.round(kSpan * 0.42)));
         addOpening(kWall, { kind: 'window', model: 'serving-window', name: '明档出餐窗', w: winW, h: 1120, offset: Math.round(kSpan * 0.14), sill: 950, color: '#6b7e86' });
       }
@@ -381,8 +381,8 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
       if (kLimit - kx > 2600) {
         placeBack({ kind: 'stove', model: 'fryer', name: '双缸电炸炉', w: 800, d: 740, h: 880, color: '#a7b4bd' });
       }
-      const hoodW = Math.min(kLimit - stoveStart, Math.max(1200, kx - stoveStart - 40));
-      if (hoodW >= 1200) {
+      const hoodW = Math.min(kLimit - stoveStart, kx - stoveStart - 40);
+      if (hoodW >= 1000) {
         add({ kind: 'stove', model: 'hood', name: '排烟罩组件', x: stoveStart, y: 230, w: hoodW, d: 1020, h: 2450, rotation: 0, color: '#adb8bc' });
       }
       placeBack({ kind: 'fridge', model: 'upright-fridge', name: '立式双门冰箱', w: 820, d: 740, h: 1960, color: '#9bb4c2' });
@@ -402,7 +402,7 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
     const barSpan = barRight - barLeft;
     if (barSpan >= 1600) {
       const cashierW = Math.min(1300, Math.round(barSpan * 0.42));
-      const barY = Math.max(1650, kWallY - 580);
+      const barY = Math.min(Math.max(1650, kWallY - 580), (isL ? lCutY : H) - 940);
       add({ kind: 'counter', model: 'cashier', name: '收银点餐台', x: barLeft, y: barY, w: cashierW, d: 660, h: 1080, rotation: 0, color: theme.barColor });
       counterAnchors.push({ x: barLeft + cashierW / 2, y: barY + 330 });
       const restBarW = barRight - (barLeft + cashierW + 80);
@@ -462,9 +462,10 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
     };
     placeLeftEquip({ kind: 'stove', model: 'noodle-cooker', name: '煮面炉灶', w: 1000, d: 750, h: 880, color: '#adbac0' });
     placeLeftEquip({ kind: 'stove', model: 'stove', name: '双头炉灶', w: 1200, d: 800, h: 850, color: '#96a3aa' });
+    const hoodWidth = ky - 120 - 480; // End of the last stove that fit in this run.
     placeLeftEquip({ kind: 'sink', model: 'sink', name: '双槽洗涤池', w: 1100, d: 650, h: 850, color: '#a5b7c0' });
     placeLeftEquip({ kind: 'fridge', model: 'upright-fridge', name: '立式双门冰箱', w: 820, d: 740, h: 1960, color: '#9bb4c2' });
-    add({ kind: 'stove', model: 'hood', name: '排烟罩组件', x: 260 + (950 - 2200) / 2, y: 460 + (2200 - 950) / 2, w: 2200, d: 950, h: 2450, rotation: -90, color: '#adb8bc' });
+    if (hoodWidth > 0) add({ kind: 'stove', model: 'hood', name: '排烟罩组件', x: 260 + (950 - hoodWidth) / 2, y: 480 + (hoodWidth - 950) / 2, w: hoodWidth, d: 950, h: 2450, rotation: -90, color: '#adb8bc' });
     add({ kind: 'lighting', model: 'kitchen-panel-light', name: '厨房防油平板灯', x: Math.round(kWallX / 2) - 160, y: Math.round(kEndY / 2) - 550, w: 320, d: 1100, h: 80, rotation: 0, elevation: wallH - 220, color: '#eef3f5' });
 
     // Cashier counter on rear right of dining hall
@@ -477,53 +478,89 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
     diningMinY = 420;
   }
 
+  const style: ProjectStyle = {
+    floorMaterial: rawSpec.floorMaterial,
+    wallMaterial: rawSpec.wallMaterial,
+    ceilingHeight: wallH,
+    lightingPreset: rawSpec.lightingPreset,
+    showCeiling: false,
+    wallCutaway: false,
+    showZoneTint3D: false,
+    showLightsIn2D: true,
+    shopType: theme.shopType,
+  };
+
   // Sync openings so doorSwings() returns exact world-space polygons for collision avoidance!
   const shellProject = syncStructure({
     ...projectIdentity(),
     name: rawSpec.name.trim() || `${theme.label}方案`,
-    width: W, height: H, outline, items, groups,
+    width: W, height: H, outline, items, style,
+    metadata: {
+      customer: '',
+      site: `${(W / 1000).toFixed(1)}m × ${(H / 1000).toFixed(1)}m ${isL ? 'L 形转角铺位' : '标准矩形铺位'}`,
+      purpose: `${theme.label} · ${strategyMeta[rawSpec.strategy].label}`,
+      notes: `基于实测尺寸自动生成（${strategyMeta[rawSpec.strategy].summary}），可直接在 2D/3D 中微调并与合伙人对比不同摆法。`,
+    },
   });
-  const syncedItems = shellProject.items;
-  // Windows & doors are embedded inside walls (door swings are checked explicitly via doorSwingPolys).
-  const fixedObstacles = syncedItems.filter(i => i.kind !== 'zone' && i.kind !== 'lighting' && i.kind !== 'window' && i.kind !== 'door');
-  const doorSwingPolys = syncedItems.filter(i => i.kind === 'door').flatMap(d => doorSwings(d));
+  return furnishDining(shellProject, rawSpec, { diningMinX, diningMinY, useLeftKitchen, frontX1, doorCenterX }, counterAnchors);
+}
+
+// Cache each footprint once. Most pairs in a large shop are already far apart on one axis.
+function boundedPolygon(points: Point[]) {
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  return { points, left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+}
+
+type BoundedPolygon = ReturnType<typeof boundedPolygon>;
+
+function closerThan(a: BoundedPolygon, b: BoundedPolygon, gap: number) {
+  if (a.left - b.right >= gap || b.left - a.right >= gap || a.top - b.bottom >= gap || b.top - a.bottom >= gap) return false;
+  return polygonDistance(a.points, b.points).distance < gap;
+}
+
+function furnishDining(shellProject: Project, rawSpec: AutoShopSpec, layout: {
+  diningMinX: number; diningMinY: number; useLeftKitchen: boolean; frontX1: number; doorCenterX: number;
+}, counterAnchors?: Point[]): Project {
+  const { diningMinX, diningMinY, useLeftKitchen, frontX1, doorCenterX } = layout;
+  const { width: W, height: H } = shellProject;
+  const poly = siteOutline(shellProject), isL = poly.length > 4;
+  const diningMaxX = W - 280, diningMaxY = H - 300;
+  const wallH = resolveStyle(shellProject).ceilingHeight;
+  const theme = businessTypePresets[rawSpec.businessType];
+  const syncedItems = [...shellProject.items];
+  const groups = [...(shellProject.groups ?? [])];
+  // Attached openings share the wall footprint. Keep their swing arcs clear as well.
+  const fixedObstacles = shellProject.items.filter(i => {
+    if (isAnnotation(i) || i.kind === 'utility') return false;
+    if (i.kind === 'zone') return !counterAnchors && /厨|灶|洗|备|后场|吧|收银|取餐|服务/.test(i.name);
+    if (i.wallId) return false;
+    return baseHeight(shellProject, i) < 1200;
+  }).map(item => ({ item, polygon: boundedPolygon(footprint(item)) }));
+  const doorSwingPolys = syncedItems.filter(i => i.kind === 'door').flatMap(d => doorSwings(d)).map(boundedPolygon);
 
   // Helper to verify a candidate group fits cleanly inside siteOutline with zero overlaps & healthy clearance
   const minAisle = rawSpec.strategy === 'high-capacity' ? 720 : rawSpec.strategy === 'comfort' ? 1050 : 860;
-  const placedDining: Item[] = [];
+  const placedDining: BoundedPolygon[] = [];
   const tableCenters: { x: number; y: number; linear: boolean }[] = [];
 
   const canPlaceGroup = (cand: Item[], wallGap = 140, groupGap = minAisle): boolean => {
-    const fps = cand.map(c => footprint(c));
-    for (let i = 0; i < cand.length; i++) {
-      if (!contains(poly, fps[i])) return false;
-      // Keep clear of all door swing arcs (plus 120mm breathing buffer)
-      for (const swing of doorSwingPolys) {
-        if (polygonCoverage(fps[i], [swing]).union > 1) return false;
-        if (polygonDistance(fps[i], swing).distance < 120) return false;
+    for (const item of cand) {
+      const shape = boundedPolygon(footprint(item));
+      if (!contains(poly, shape.points)) return false;
+      if (doorSwingPolys.some(swing => closerThan(shape, swing, 120))) return false;
+      for (const obstacle of fixedObstacles) {
+        const kind = obstacle.item.kind;
+        const reqGap = kind === 'wall' ? wallGap : kind === 'counter' ? 620 : Math.min(groupGap, 550);
+        if (closerThan(shape, obstacle.polygon, reqGap)) return false;
       }
-      // Keep clear of walls, counters, partitions & structural elements
-      for (const obs of fixedObstacles) {
-        if (obs.kind === 'decor' && baseHeight(shellProject, obs) >= 1200) continue;
-        if (modelOf(obs) === 'wood-feature-wall' || modelOf(obs) === 'wall-art' || modelOf(obs) === 'shop-sign') continue;
-        const ofp = footprint(obs);
-        if (polygonCoverage(fps[i], [ofp]).union > 1) return false;
-        const reqGap = obs.kind === 'wall' ? wallGap : obs.kind === 'counter' ? 620 : Math.min(groupGap, 550);
-        if (polygonDistance(fps[i], ofp).distance < reqGap) return false;
-      }
-      // Keep clear of already placed dining groups
-      for (const prev of placedDining) {
-        const pfp = footprint(prev);
-        if (polygonCoverage(fps[i], [pfp]).union > 1) return false;
-        if (polygonDistance(fps[i], pfp).distance < groupGap) return false;
-      }
+      if (placedDining.some(prev => closerThan(shape, prev, groupGap))) return false;
     }
     return true;
   };
 
   const commitGroup = (name: string, cand: Item[], seats: number, center: { x: number; y: number }, linear = false) => {
     syncedItems.push(...cand);
-    placedDining.push(...cand);
+    placedDining.push(...cand.map(i => boundedPolygon(footprint(i))));
     groups.push({ id: uid(), name, members: cand.map(c => c.id), seats });
     tableCenters.push({ ...center, linear });
   };
@@ -648,6 +685,9 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
     }
   }
 
+  // Variants keep the shop's installed lighting, kitchen and decor.
+  if (!counterAnchors) return syncStructure({ ...shellProject, items: syncedItems, groups });
+
   // 5. Architectural Lighting & Sculptural Decor
   for (const tc of tableCenters.slice(0, 10)) {
     if (rawSpec.businessType === 'restaurant' && !tc.linear) {
@@ -710,34 +750,11 @@ export function buildAutoShopPlan(rawSpec: AutoShopSpec): Project {
     };
     if (canPlaceGroup([plant], 120, 320)) {
       syncedItems.push(plant);
-      placedDining.push(plant);
+      placedDining.push(boundedPolygon(footprint(plant)));
     }
   }
 
-  const style: ProjectStyle = {
-    floorMaterial: rawSpec.floorMaterial,
-    wallMaterial: rawSpec.wallMaterial,
-    ceilingHeight: wallH,
-    lightingPreset: rawSpec.lightingPreset,
-    showCeiling: false,
-    wallCutaway: false,
-    showZoneTint3D: false,
-    showLightsIn2D: true,
-    shopType: theme.shopType,
-  };
-
-  return syncStructure({
-    ...shellProject,
-    style,
-    items: syncedItems,
-    groups,
-    metadata: {
-      customer: '',
-      site: `${(W / 1000).toFixed(1)}m × ${(H / 1000).toFixed(1)}m ${isL ? 'L 形转角铺位' : '标准矩形铺位'}`,
-      purpose: `${theme.label} · ${strategyMeta[rawSpec.strategy].label}`,
-      notes: `基于实测尺寸自动生成（${strategyMeta[rawSpec.strategy].summary}），可直接在 2D/3D 中微调并与合伙人对比不同摆法。`,
-    },
-  });
+  return syncStructure({ ...shellProject, items: syncedItems, groups });
 }
 
 export function inferAutoSpecFromProject(project: Project): AutoShopSpec {
@@ -754,8 +771,8 @@ export function inferAutoSpecFromProject(project: Project): AutoShopSpec {
   const shape: 'rectangle' | 'l-shape' = outline.length >= 6 ? 'l-shape' : 'rectangle';
   return {
     name: project.name.replace(/\s*·\s*(均衡经典版|高坪效翻台版|宽敞体验版|侧置明档版)$/, '') || '我的新店',
-    widthM: Number((project.width / 1000).toFixed(1)),
-    depthM: Number((project.height / 1000).toFixed(1)),
+    widthM: project.width / 1000,
+    depthM: project.height / 1000,
     ceilingM: Number(((style.ceilingHeight || 3200) / 1000).toFixed(1)),
     shape,
     businessType,
@@ -776,8 +793,27 @@ export type ShopVariantOption = {
   project: Project;
 };
 
-export function buildShopVariants(baseSpec: AutoShopSpec): ShopVariantOption[] {
+// Only loose, unreferenced seating can be replaced without changing the measured shop.
+function comparisonShell(source: Project): Project {
+  const removable = new Set(source.items.filter(i =>
+    (i.kind === 'table' || i.kind === 'chair') && !i.locked && !i.hidden && i.verification !== 'confirmed'
+  ).map(i => i.id));
+  for (const i of source.items) {
+    const support = supportFor(source, i);
+    if (support) removable.delete(support.id);
+    if (i.measure) { removable.delete(i.measure.a); removable.delete(i.measure.b); }
+  }
+  for (const g of source.groups ?? []) {
+    if (g.members.some(id => !removable.has(id))) g.members.forEach(id => removable.delete(id));
+  }
+  return { ...source, items: source.items.filter(i => !removable.has(i.id)),
+    groups: source.groups?.filter(g => !removable.has(g.members[0])) };
+}
+
+export function buildShopVariants(baseSpec: AutoShopSpec, source?: Project): ShopVariantOption[] {
   const baseName = baseSpec.name.trim() || '我的铺位';
+  const shell = source && comparisonShell(source);
+  const sideKitchen = !source && baseSpec.widthM >= 8.2;
   const configs: { id: string; title: string; badge: string; summary: string; patch: Partial<AutoShopSpec> }[] = [
     {
       id: 'balanced',
@@ -789,23 +825,24 @@ export function buildShopVariants(baseSpec: AutoShopSpec): ShopVariantOption[] {
     {
       id: 'high-capacity',
       title: '方案 B · 高坪效翻台摆法',
-      badge: '座位最多',
+      badge: '紧凑排布',
       summary: '紧凑散台 + 临窗吧台阵列，同等面积下释放更高高峰接待能力',
       patch: { strategy: 'high-capacity', kitchenSide: 'rear', name: `${baseName} · 高坪效翻台版` },
     },
     {
       id: 'comfort-or-side',
-      title: baseSpec.widthM >= 8.2 ? '方案 C · 侧置明档宽敞版' : '方案 C · 宽敞品质体验版',
-      badge: baseSpec.widthM >= 8.2 ? '侧厨新动线' : '最宽敞',
-      summary: baseSpec.widthM >= 8.2
+      title: sideKitchen ? '方案 C · 侧置明档宽敞版' : '方案 C · 宽敞品质体验版',
+      badge: sideKitchen ? '侧厨新动线' : '宽敞排布',
+      summary: sideKitchen
         ? '厨房改至左侧纵深排布，前厅从门头一直通透到底，适合做视觉明档'
-        : '留足 ≥1.2m 宽敞通道与软装空间，适合高客单价社交餐饮',
-      patch: baseSpec.widthM >= 8.2
+        : '增加桌组间距并预留软装空间，适合高客单价社交餐饮',
+      patch: sideKitchen
         ? { strategy: 'balanced', kitchenSide: 'left', name: `${baseName} · 侧置明档版` }
         : { strategy: 'comfort', kitchenSide: 'rear', name: `${baseName} · 宽敞体验版` },
     },
   ];
-  return configs.map(cfg => {
+  const frontDoor = shell?.items.filter(i => i.kind === 'door' && !i.hidden).sort((a, b) => b.y + b.d / 2 - a.y - a.d / 2)[0];
+  const options = configs.map(cfg => {
     const spec: AutoShopSpec = { ...baseSpec, ...cfg.patch };
     return {
       id: cfg.id,
@@ -813,7 +850,16 @@ export function buildShopVariants(baseSpec: AutoShopSpec): ShopVariantOption[] {
       badge: cfg.badge,
       summary: cfg.summary,
       spec,
-      project: buildAutoShopPlan(spec),
+      project: shell ? furnishDining({ ...shell, name: spec.name }, spec, {
+        diningMinX: 280, diningMinY: 280, useLeftKitchen: false, frontX1: shell.width - 100,
+        doorCenterX: frontDoor ? frontDoor.x + frontDoor.w / 2 : shell.width / 2,
+      }) : buildAutoShopPlan(spec),
     };
   });
+  const seats = options.map(v => seatSummary(v.project).seats);
+  const max = Math.max(...seats);
+  const tied = seats.filter(n => n === max).length > 1;
+  return options.map((v, i) => max > 0 && seats[i] === max
+    ? { ...v, badge: tied ? '并列座位最多' : '座位最多' }
+    : v);
 }

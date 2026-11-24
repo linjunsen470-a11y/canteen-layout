@@ -65,6 +65,36 @@ try {
   assert.ok(images.every(w => w >= 500));
   assert.match(await report.locator('main').innerText(), /经营测试店/);
   assert.match(await report.locator('main').innerText(), /临街门头外观效果/);
+  const birdseye = report.locator('.gallery-hero img');
+  const reference = await birdseye.getAttribute('src');
+  await button('关闭成果').click();
+  await page.locator(`[data-item-id="${tables[0].id}"]`).first().click();
+  await page.locator('.scene-more summary').click();
+  await button('物体特写').click();
+  const closeupCaption = await page.locator('.scene-caption b').innerText();
+  await button('发给合伙人').click();
+  const framed = page.frameLocator('iframe[title="客户方案预览"]');
+  const image = framed.locator('.gallery-hero img');
+  await image.waitFor();
+  // Compare image contents so a valid PNG containing only one table fails.
+  const difference = await image.evaluate(async (shot, src) => {
+    const before = new Image();
+    before.src = src;
+    await Promise.all([shot.decode(), before.decode()]);
+    const canvas = document.createElement('canvas');
+    canvas.width = 96; canvas.height = 60;
+    const ctx = canvas.getContext('2d');
+    const sample = img => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    const a = sample(before), b = sample(shot);
+    return a.reduce((sum, value, index) => sum + Math.abs(value - b[index]), 0) / a.length;
+  }, reference);
+  assert.ok(difference < 3, `物体特写导出的全景与整店快照偏差过大: ${difference}`);
+  await button('关闭成果').click();
+  assert.equal(await page.locator('.scene-caption b').innerText(), closeupCaption);
+  assert.ok(await button('物体特写').evaluate(b => b.classList.contains('active')));
   assert.deepEqual(errors, []);
   console.log('PASS 生产版建铺、连续摆放、保存恢复、门头外观、三摆法对比、平面 PNG 与四图合伙人方案书');
 } finally {

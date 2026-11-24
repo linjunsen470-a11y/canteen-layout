@@ -25,14 +25,15 @@ const SchemeCompareDialog = forwardRef<SchemeCompareHandle, { notify: (msg: stri
   useImperativeHandle(ref, () => ({ open: openModal }));
 
   const currentStats = useMemo(() => analyzeShop(project), [project]);
+  const supported = project.width <= 60000 && project.height <= 60000;
   const variants = useMemo(() => {
-    if (!opened) return [];
+    if (!opened || !supported) return [];
     const base = inferAutoSpecFromProject(project);
-    return buildShopVariants(base).map(v => ({
+    return buildShopVariants(base, project).map(v => ({
       ...v,
       stats: analyzeShop(v.project),
     }));
-  }, [opened, project.id, project.width, project.height, project.style?.shopType, project.style?.floorMaterial, project.style?.wallMaterial, project.style?.lightingPreset]);
+  }, [opened, project, supported]);
 
   const applyVariant = async (title: string, target: typeof variants[number]) => {
     const ok = await copyProject(target.project.name, target.project);
@@ -47,11 +48,11 @@ const SchemeCompareDialog = forwardRef<SchemeCompareHandle, { notify: (msg: stri
     <button onClick={openModal} title="基于当前铺位尺寸自动生成 3 种不同摆法，对比座位数、动线与预算">
       <Columns3 />换一种摆法
     </button>
-    <dialog ref={dialog} className="compare-dialog" aria-labelledby="compare-heading">
+    <dialog ref={dialog} className="compare-dialog" onClose={() => setOpened(false)} aria-labelledby="compare-heading">
       <header className="wizard-header">
         <div>
           <h2 id="compare-heading">同一铺位 · 换一种摆法对比</h2>
-          <p>保持你当前的 {(project.width / 1000).toFixed(1)}m × {(project.height / 1000).toFixed(1)}m 铺位尺寸不变，一键对比 3 种成熟摆法（采用后自动另存新方案，不覆盖原稿）</p>
+          <p>当前铺位 {project.width / 1000} m × {project.height / 1000} m。三种摆法均保留底图、墙柱和后厨，只调整可移动桌椅。采用后另存为新方案。</p>
         </div>
         <button type="button" onClick={() => dialog.current?.close()}>关闭</button>
       </header>
@@ -65,6 +66,7 @@ const SchemeCompareDialog = forwardRef<SchemeCompareHandle, { notify: (msg: stri
         <span>设备参考 {currentStats.budgetMax > 0 ? `${fmtYuan(currentStats.budgetMin)} ~ ${fmtYuan(currentStats.budgetMax)}` : '待布置'}</span>
       </div>
 
+      {!supported && <p role="status">当前铺位超过自动摆法支持的 60 m × 60 m 范围，可从项目库另存副本后手动调整。</p>}
       <div className="compare-grid">
         {variants.map(v => {
           const seatDelta = v.stats.seats - currentStats.seats;

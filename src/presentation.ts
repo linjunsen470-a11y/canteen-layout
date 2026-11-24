@@ -105,7 +105,7 @@ export function presentationHTML(
   <div class="notes-grid">
    <div class="note-card">
     <h3>可行性诊断与工程提示</h3>
-    <span class="verdict-badge ${criticalIssues.length > 0 ? 'warn' : ''}">${criticalIssues.length === 0 ? '空间零碰撞 · 动线通过校验' : `待复核 ${criticalIssues.length} 处空间冲突`}</span>
+    <span class="verdict-badge ${criticalIssues.length > 0 ? 'warn' : ''}">${criticalIssues.length === 0 ? '未发现布局碰撞' : `待复核 ${criticalIssues.length} 处空间冲突`}</span>
     <p>${e(insights.ratioAdvice)}</p>
     <p>${e(insights.powerAdvice)}</p>
     ${insights.actionTips.map(t => `<p>• ${e(t)}</p>`).join('')}

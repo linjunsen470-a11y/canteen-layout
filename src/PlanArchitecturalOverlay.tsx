@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Project, modelOf } from './model';
-import { checkSpace } from './spaceChecks';
-import { bounds, footprint, polygonDistance } from './spatial';
+import { inspectSpace } from './spaceChecks';
+import { bounds } from './spatial';
 import { isVisible } from './editorInteraction';
 
 export default function PlanArchitecturalOverlay({
@@ -27,37 +27,8 @@ export default function PlanArchitecturalOverlay({
 
   const flowMetrics = useMemo(() => {
     if (!showFlow) return null;
-    const issues = checkSpace(project, null);
+    const { issues, clearances } = inspectSpace(project, null, true);
     const critical = issues.filter(i => i.type !== '参考净距');
-    const clearances: { ax: number; ay: number; bx: number; by: number; d: number }[] = [];
-
-    // Measure distances between distinct seating groups & counters for visual aisle verification
-    const diningItems = project.items.filter(
-      i => !i.hidden && isVisible(i, project) && (i.kind === 'table' || i.kind === 'counter') && modelOf(i) !== 'coffee-machine'
-    );
-    const seen = new Set<string>();
-    for (let a = 0; a < diningItems.length; a++) {
-      const ia = diningItems[a];
-      const fa = footprint(ia);
-      let best: { ax: number; ay: number; bx: number; by: number; d: number; key: string } | null = null;
-      for (let b = 0; b < diningItems.length; b++) {
-        if (a === b) continue;
-        const ib = diningItems[b];
-        if ((project.groups ?? []).some(g => g.members.includes(ia.id) && g.members.includes(ib.id))) continue;
-        const key = ia.id < ib.id ? `${ia.id}:${ib.id}` : `${ib.id}:${ia.id}`;
-        if (seen.has(key)) continue;
-        const dist = polygonDistance(fa, footprint(ib));
-        if (dist.distance >= 420 && dist.distance <= 2400) {
-          if (!best || dist.distance < best.d) {
-            best = { ax: dist.a.x, ay: dist.a.y, bx: dist.b.x, by: dist.b.y, d: dist.distance, key };
-          }
-        }
-      }
-      if (best && clearances.length < 8) {
-        seen.add(best.key);
-        clearances.push(best);
-      }
-    }
 
     // Main customer flow arrow: entrance -> cashier/bar -> center dining
     const counter = project.items.find(i => !i.hidden && (modelOf(i) === 'cashier' || modelOf(i) === 'tea-bar' || modelOf(i) === 'buffet'));
@@ -145,19 +116,19 @@ export default function PlanArchitecturalOverlay({
 
           {/* Measured passage clearance callouts */}
           {flowMetrics.clearances.map((c, idx) => {
-            const ok = c.d >= 900;
+            const ok = c.distance >= (project.clearance ?? 900) - 0.1;
             const color = ok ? '#1d6e52' : '#c0671e';
             const bg = ok ? '#eaf5f0' : '#fdf2e6';
-            const mx = (c.ax + c.bx) / 2;
-            const my = (c.ay + c.by) / 2;
+            const mx = (c.a.x + c.b.x) / 2;
+            const my = (c.a.y + c.b.y) / 2;
             return (
               <g key={idx}>
-                <line x1={c.ax} y1={c.ay} x2={c.bx} y2={c.by} stroke={color} strokeWidth={1.6 / scale} strokeDasharray={`${4 / scale} ${3 / scale}`} />
-                <circle cx={c.ax} cy={c.ay} r={3 / scale} fill={color} />
-                <circle cx={c.bx} cy={c.by} r={3 / scale} fill={color} />
+                <line x1={c.a.x} y1={c.a.y} x2={c.b.x} y2={c.b.y} stroke={color} strokeWidth={1.6 / scale} strokeDasharray={`${4 / scale} ${3 / scale}`} />
+                <circle cx={c.a.x} cy={c.a.y} r={3 / scale} fill={color} />
+                <circle cx={c.b.x} cy={c.b.y} r={3 / scale} fill={color} />
                 <rect x={mx - 30 / scale} y={my - 9 / scale} width={60 / scale} height={18 / scale} rx={9 / scale} fill={bg} stroke={color} strokeWidth={1 / scale} />
                 <text x={mx} y={my + 1 / scale} fontSize={9.5 / scale} fill={color} textAnchor="middle" dominantBaseline="middle" fontWeight="700">
-                  {Math.round(c.d)}mm
+                  {Math.round(c.distance)}mm
                 </text>
               </g>
             );

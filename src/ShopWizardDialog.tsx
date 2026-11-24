@@ -6,6 +6,7 @@ import {
   AutoShopSpec, KitchenSide, LayoutStrategy, ShopBusinessType,
   buildAutoShopPlan, businessTypePresets, strategyMeta,
 } from './autoShopLayout';
+import { checkSpace } from './spaceChecks';
 import { analyzeShop } from './shopAnalytics';
 import { copyProject, useProjectSession } from './projectSession';
 import { useWorkspace } from './workspace';
@@ -58,7 +59,8 @@ const ShopWizardDialog = forwardRef<ShopWizardHandle, { notify: (msg: string) =>
     if (!opened || tab !== 'auto') return null;
     const project = buildAutoShopPlan(autoSpec);
     const stats = analyzeShop(project);
-    return { project, stats };
+    const conflict = checkSpace(project, null).find(issue => issue.type !== '参考净距');
+    return { project, stats, conflict };
   }, [opened, tab, autoSpec]);
 
   const selectBusinessType = (bt: ShopBusinessType) => {
@@ -110,8 +112,8 @@ const ShopWizardDialog = forwardRef<ShopWizardHandle, { notify: (msg: string) =>
 
   const applyAutoPlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    const project = buildAutoShopPlan(autoSpec);
-    const stats = analyzeShop(project);
+    if (!autoPreview || autoPreview.conflict) return;
+    const { project, stats } = autoPreview;
     const ok = await copyProject(project.name, project);
     if (ok) {
       dialog.current?.close();
@@ -177,7 +179,7 @@ const ShopWizardDialog = forwardRef<ShopWizardHandle, { notify: (msg: string) =>
     <button className="wizard-trigger" onClick={() => openModal('templates')}>
       <Sparkles />开店模板 / 建铺
     </button>
-    <dialog ref={dialog} className="shop-wizard-dialog" aria-labelledby="shop-wizard-heading">
+    <dialog ref={dialog} onClose={() => setOpened(false)} className="shop-wizard-dialog" aria-labelledby="shop-wizard-heading">
       <header className="wizard-header">
         <div>
           <h2 id="shop-wizard-heading">开店规划起步中心</h2>
@@ -339,9 +341,11 @@ const ShopWizardDialog = forwardRef<ShopWizardHandle, { notify: (msg: string) =>
                 <div className="wide"><small>设备软装参考预算</small><strong>{fmtYuan(autoPreview.stats.budgetMin)} ~ {fmtYuan(autoPreview.stats.budgetMax)}</strong></div>
               </div>
             )}
+            {autoPreview?.conflict && <p role="alert">当前摆法有空间冲突：{autoPreview.conflict.message}。请调整厨房方位或摆法，也可新建实测铺位后手动布置。</p>}
+            {autoPreview && !autoPreview.conflict && autoPreview.stats.seats === 0 && <p role="status">当前空间未能排入客座，可调整摆法或生成后手动摆放。</p>}
             <div className="dialog-actions">
               <button type="button" onClick={() => dialog.current?.close()}>取消</button>
-              <button type="submit" className="primary" disabled={busy}>
+              <button type="submit" className="primary" disabled={busy || !!autoPreview?.conflict}>
                 <Wand2 />一键生成我的完整方案
               </button>
             </div>

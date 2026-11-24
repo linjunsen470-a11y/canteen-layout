@@ -406,11 +406,12 @@ const presetLabels: Record<LightingPreset, string> = {
 };
 
 export type SceneHandle = {
+  galleryReady: () => boolean;
   capturePNG: () => string;
   captureGallery: () => SceneGalleryShots;
 };
 
-export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }>(function Scene3D({ active = true, snap = true }, ref) {
+export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; takingGallery?: boolean }>(function Scene3D({ active = true, snap = true, takingGallery = false }, ref) {
   const live = useStore(s => active ? s.project : null), lastProject = useRef(useStore.getState().project);
   if (live) lastProject.current = live;
   const project = lastProject.current;
@@ -433,6 +434,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
   const capture = useRef<SceneCaptureAPI | null>(null);
 
   useImperativeHandle(ref, () => ({
+    galleryReady: () => takingGallery && !!capture.current?.galleryReady(),
     capturePNG: () => {
       const data = capture.current?.captureCurrent();
       if (!data) throw Error('三维场景尚未就绪');
@@ -538,7 +540,8 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
   }), [moveMode, snap, prefs.snapSize, ids]);
 
   const item = project.items.find(i => i.id === selected && i.kind !== 'zone' && !isAnnotation(i) && isVisible(i, project));
-  const focus = closeup ? (item?.wallId ? project.items.find(w => w.id === item.wallId) : item) : undefined;
+  const inspectionFocus = closeup ? (item?.wallId ? project.items.find(w => w.id === item.wallId) : item) : undefined;
+  const focus = takingGallery ? undefined : inspectionFocus;
   const profiles = useMemo(() => wallProfiles(project), [project.items]);
   const renderOptions: BuildingRenderOptions = useMemo(() => ({
     wallMaterial: style.wallMaterial,
@@ -627,7 +630,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean }
         )}
         {[...groups.values()].filter(items => items.length >= 3).flat().filter(i => ids.includes(i.id)).map(i => <group key={i.id} position={[(i.x + i.w / 2) / 1000, (i.sill ?? 0) / 1000, (i.y + i.d / 2) / 1000]} rotation={[0, -i.rotation * Math.PI / 180, 0]}><SelectionBox item={i} /></group>)}
         {focus && <ContactShadows key={[focus.id, focus.x, focus.y, focus.w, focus.d, focus.h, focus.rotation].join('-')} position={[(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000]} scale={Math.max(focus.w, focus.d) / 1000 * 2.5} far={focus.h / 1000 * 1.5} resolution={256} blur={2.5} opacity={0.4} frames={1} color="#3e453d" />}
-        <CameraRig pan={pan} onPanChange={setPanMode} navigation={navigation} frame={frame} active={active} focus={focus} reset={reset} dragging={dragging} picking={picking} pose={prefs.camera} eyeIndex={eyeIndex} />
+        <CameraRig pan={pan} onPanChange={setPanMode} navigation={navigation} frame={frame} active={active} focus={inspectionFocus} reset={reset} dragging={dragging} picking={picking} pose={prefs.camera} eyeIndex={eyeIndex} />
       </Canvas>
       {picking && <SceneRegionPicker navigation={navigation} onCancel={() => setPicking(false)} onPick={points => showFrame(framePoints(points, 0, '框选区域'))} />}
       <div className={`scene-caption ${style.lightingPreset === 'evening' ? 'is-dark' : ''}`}>
