@@ -10,7 +10,7 @@ export async function testEditableDraft(browser, url) {
     const [download] = await Promise.all([page.waitForEvent('download'), button(name).click()]);
     return readFile(await download.path());
   };
-  const project = async () => { await button('导出与汇报').click(); return JSON.parse(await file('JSON')); };
+  const project = async () => { await button('项目文件').click(); return JSON.parse(await file('JSON')); };
   const grid = page.getByLabel('直角铺位绘图格网');
   async function point(x,y) {
     const p = await grid.evaluate((svg,[x,y]) => {
@@ -73,11 +73,11 @@ export async function testEditableDraft(browser, url) {
     await page.reload();
     await page.locator('.basic-draft-bar').waitFor();
     assert.deepEqual((await project()).items,edited.items);
-    await button('导出与汇报').click();
+    await button('项目文件').click();
     assert.equal((await file('导出 2D 平面图 PNG')).readUInt32BE(0),0x89504e47);
     await page.locator('.scene-more summary').click();
     assert.equal((await file('效果图截图')).readUInt32BE(0),0x89504e47);
-    await button('导出与汇报').click();
+    await button('项目文件').click();
     const pack = await file('项目包');
     await button('另生成一稿').click();
     await page.getByRole('dialog',{name:'另生成一稿'}).getByLabel('餐饮业态').selectOption('cafe');
@@ -95,7 +95,7 @@ export async function testEditableDraft(browser, url) {
     await page.locator('.project-list article').filter({has:page.getByText('凹角试租',{exact:true})}).getByRole('button',{name:'打开 / 重命名'}).click();
     await button('关闭项目库').click();
     assert.deepEqual((await project()).items,edited.items);
-    await button('导出与汇报').click();
+    await button('项目文件').click();
     const chooser = page.waitForEvent('filechooser');
     await button('导入').click();
     await (await chooser).setFiles({name:'draft.canteen.json',mimeType:'application/json',buffer:pack});
@@ -105,20 +105,19 @@ export async function testEditableDraft(browser, url) {
     assert.deepEqual(imported.items,edited.items);
     assert.deepEqual(imported.basicDraft,edited.basicDraft);
     await button('新建铺位').click();
-    await page.getByText('按尺寸画矩形或 L 形',{exact:true}).click();
     await page.getByLabel('铺位净宽（米）').fill('8.5');
     await page.getByLabel('铺位净深（米）').fill('6');
-    await button('应用尺寸').click();
+    await button('先标入口和柱子').click();
     await page.getByText('已闭合 · 估算 51.0 ㎡',{exact:true}).waitFor();
     await page.getByText('修改轮廓尺寸',{exact:true}).click();
     await page.getByLabel('铺位形状').selectOption('l-shape');
     await page.getByLabel('缺口位置').selectOption('top-left');
     await page.getByLabel('缺口宽度（米）').fill('9');
     await page.getByLabel('缺口深度（米）').fill('2');
-    await button('应用尺寸').click();
+    await button('先标入口和柱子').click();
     await page.getByRole('alert').filter({hasText:'缺口宽度和深度'}).waitFor();
     await page.getByLabel('缺口宽度（米）').fill('3');
-    await button('应用尺寸').click();
+    await button('先标入口和柱子').click();
     await page.getByText('已闭合 · 估算 45.0 ㎡',{exact:true}).waitFor();
     await point(8400,3200);
     await button('生成基础布局').click();

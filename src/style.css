@@ -1602,3 +1602,17 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
 .sketch-dimensions label { display: grid; gap: 4px; }
 .sketch-dimensions input, .sketch-dimensions select { width: 100%; min-width: 0; }
 .sketch-dimensions .property-error { grid-column: 1 / -1; }
+
+.plan { position:relative; }
+.blank-start { position:absolute; z-index:2; left:50%; top:34%; transform:translateX(-50%); box-shadow:0 4px 18px #23453222; color:#245742; white-space:nowrap; }
+.size-presets,.image-formats { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+.image-export { width:min(860px,94vw); max-height:90vh; overflow:auto; border:1px solid #c7d3cb; border-radius:12px; padding:18px; color:#263d31; }
+.image-export::backdrop { background:#17251c66; }
+.image-export header,.image-export footer { display:flex; align-items:center; gap:8px; }
+.image-export h2 { margin:0 auto 0 0; font-size:19px; }
+.image-proof { display:grid; place-items:center; height:clamp(140px,50vh,520px); background:#eeefea; border-radius:6px; }
+.image-proof img { width:100%; height:100%; object-fit:contain; min-height:0; }
+.image-export footer { margin-top:12px; }
+.image-export footer span { margin-right:auto; }
+.image-export footer a[hidden] { display:none; }
+.image-formats button[aria-pressed=true] { background:#315c48; color:white; }

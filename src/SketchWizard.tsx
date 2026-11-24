@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { businessTypeDefaults, type ConceptBusinessType } from './conceptPlanner';
 import { requestBasicLayout } from './requestBasicLayout';
 import { checkSketchEdge, placeSketchFixture, sketchFixtures, sketchShell, type SketchFixture } from './sketchGeometry';
@@ -54,13 +54,14 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
     } else if (shell) setShells(shells.slice(0, -1));
     else setCorners(corners.slice(0, -1));
   }
-  function applyDimensions(points: Point[]) {
+  function applyDimensions(points: Point[], direct: boolean) {
     const next = sketchShell(points);
     const w = Math.max(...points.map(p => p.x)), d = Math.max(...points.map(p => p.y));
     const width = Math.max(2000, w * 1.2, d * 1.2 / .56);
     setCamera({ width, x: (w - width) / 2, y: (d - width * .56) / 2 });
     setCorners(points); setShells([next]); setFromDimensions(true);
     setError(''); setInvalid(null); setLength(''); setPanMode(false);
+    if (direct) void generate(next);
   }
   function zoom(factor: number, anchor?: Point) {
     setCamera(c => {
@@ -115,15 +116,24 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
     if (p) setCamera({ ...camera, x: p.x - (e.clientX - p.point.x) * p.scale, y: p.y - (e.clientY - p.point.y) * p.scale });
     else setCursor(world(e.clientX, e.clientY));
   }
-  async function generate() {
-    if (!shell || busy) return;
+  async function generate(source = shell) {
+    if (!source || busy) return;
     onBusy(true);
     try {
-      const result = await requestBasicLayout({ ...shell, name: name.trim() || '我的铺位' }, business);
+      const result = await requestBasicLayout({ ...source, name: name.trim() || '我的铺位' }, business);
       await onSave(result.project, result.warnings);
     } catch (e) { setError((e as Error).message); }
     finally { onBusy(false); }
   }
+  // A stamp may add a door and its entrance marker as one editable fixture.
+  const stamps = useMemo(() => {
+    const live = new Set(shell?.items.map(i => i.id));
+    return shells.slice(1).flatMap((state, index) => {
+      const previous = new Set(shells[index].items.map(i => i.id));
+      const added = state.items.filter(i => !previous.has(i.id) && live.has(i.id));
+      return added.length ? [added] : [];
+    });
+  }, [shells, shell]);
   const size = camera.width / 900;
   const preview = invalid ?? (cursor && endpoint(cursor));
   return <fieldset className="sketch-wizard" disabled={busy}>
@@ -133,7 +143,7 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
         {Object.entries(businessTypeDefaults).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
       </select></label>
     </div>
-    <div hidden={corners.length > 0 && (!fromDimensions || shells.length > 1)}>
+    <div hidden={corners.length > 0 && (!fromDimensions || stamps.length > 0)}>
       <SketchDimensions onApply={applyDimensions} editing={fromDimensions} />
     </div>
     <div className="sketch-controls">
@@ -174,11 +184,17 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
       <div className="sketch-controls"><span>知道入口可点外墙，也可拖入固定构件</span>{Object.entries(sketchFixtures).map(([key,label]) =>
         <button draggable key={key} aria-pressed={fixture === key} onClick={() => setFixture(key as SketchFixture)}
           onDragStart={e => e.dataTransfer.setData('application/canteen-sketch',key)}>{label}</button>)}</div>
+      {stamps.length > 0 && <div className="size-presets" aria-label="已标固定构件">{stamps.map((items, index) =>
+        <button key={items[0].id} title={'移除' + items[0].name} onClick={() => {
+          const ids = new Set(items.map(i => i.id));
+          setShells([...shells, { ...shell, items: shell.items.filter(i => !ids.has(i.id)) }]);
+          setError('');
+        }}>{items[0].name} {index + 1} ×</button>)}</div>}
       {fixture !== 'entrance' && <div className="sketch-controls">
         <label>构件宽（米）<input type="number" min=".1" step=".1" value={width} onChange={e => setWidth(e.target.value)}/></label>
         <label>构件深（米）<input type="number" min=".1" step=".1" value={depth} onChange={e => setDepth(e.target.value)}/></label>
       </div>}
-      <button className="primary" onClick={generate}>{busy ? '正在试排…' : '生成基础布局'}</button>
+      <button className="primary" onClick={() => void generate()}>{busy ? '正在试排…' : '生成基础布局'}</button>
     </>}
     {error && <p role="alert" className="property-error">{error}</p>}
   </fieldset>;

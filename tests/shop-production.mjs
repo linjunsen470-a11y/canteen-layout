@@ -1,3 +1,4 @@
+import { testQuickExport } from './quick-export.mjs';
 import { testEditableDraft } from './editable-draft.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -11,6 +12,7 @@ try {
     channel: process.env.CI ? undefined : 'chrome',
     args: ['--enable-unsafe-swiftshader'],
   });
+  await testQuickExport(browser, 'http://127.0.0.1:' + server.httpServer.address().port);
   await testEditableDraft(browser, 'http://127.0.0.1:' + server.httpServer.address().port);
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   page.setDefaultTimeout(45000);
@@ -59,7 +61,7 @@ try {
   await button('撤销').click();
   assert.match(await page.locator('.project-count').innerText(), /2 座/);
   await button('重做').click();
-  await button('开店概览').click();
+  await page.locator('.footer-check-pill').click();
   const dialog = page.locator('.insights-dialog');
   assert.match(await dialog.innerText(), /4 座/);
   assert.equal(await dialog.locator('.insights-issues button').filter({ hasText: /物件重叠|门扇开启范围|固定障碍碰撞|场地越界/ }).count(), 0);
@@ -69,7 +71,7 @@ try {
   await page.reload();
   await button('已保存').waitFor();
   assert.match(await page.locator('.project-count').innerText(), /4 座/);
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const project = JSON.parse(await download('JSON'));
   const tables = project.items.filter(i => i.kind === 'table');
   assert.equal(tables.length, 2);
@@ -77,12 +79,12 @@ try {
   assert.equal(tables[1].x - tables[0].x, 1650);
   assert.equal(project.groups.length, 2);
   assert.notDeepEqual([tables[0].x, tables[0].y], [tables[1].x, tables[1].y]);
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   assert.equal((await download('导出 2D 平面图 PNG')).readUInt32BE(0), 0x89504e47);
   await button('2D + 3D 分屏').click();
   await button('门头外观').click();
   await button('人视点进店').click();
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   await button('客户成果').click();
   const html = (await download('下载展示页')).toString('utf8');
   const report = await browser.newPage();
@@ -102,7 +104,7 @@ try {
   await page.locator('.scene-more summary').click();
   await button('物体特写').click();
   const closeupCaption = await page.locator('.scene-caption b').innerText();
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   await button('客户成果').click();
   const framed = page.frameLocator('iframe[title="客户方案预览"]');
   const image = framed.locator('.gallery-hero img');
@@ -183,20 +185,20 @@ try {
   await button('已保存').waitFor();
   await page.reload();
   await button('已保存').waitFor();
-  await button('开店概览').click();
+  await page.locator('.footer-check-pill').click();
   assert.match(await page.locator('.kpi-card').first().innerText(), /现场记录净面积[\s\S]*21.00 ㎡[\s\S]*外轮廓面积 25.16 ㎡/);
   await dialog.getByRole('button',{name:'关闭',exact:true}).click();
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const raw = await download('项目包');
   const saved = JSON.parse(raw).project;
   assert.equal(saved.items.find(i=>i.kind==='door').offset,950);
   assert.equal(saved.survey.wallIds.length,6);
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const choosing = page.waitForEvent('filechooser');
   await button('导入').click();
   await (await choosing).setFiles({name:'survey.canteen.json',mimeType:'application/json',buffer:raw});
   await page.getByText('方案已导入为独立项目',{exact:true}).waitFor();
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const restored = JSON.parse(await download('JSON'));
   assert.notEqual(restored.id,saved.id);
   assert.deepEqual(restored.survey,saved.survey);
@@ -206,11 +208,11 @@ try {
   await page.locator('.combo-card').filter({hasText:'双人咖啡圆桌组'}).click();
   await page.locator('.combo-card').filter({hasText:'四人双面卡座组'}).click();
   assert.match(await page.locator('.project-count').innerText(), /6 座/);
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const furnishedPlan = await download('导出 2D 平面图 PNG');
   assert.equal(furnishedPlan.readUInt32BE(16),2220);
   assert.equal(furnishedPlan.readUInt32BE(20),1700);
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const furnished = JSON.parse(await download('JSON'));
   assert.equal(furnished.groups.length,2);
   await button('场地轮廓').click();
@@ -228,7 +230,7 @@ try {
   }
   await button('应用校准').click();
   await page.getByText(/已校准 6000mm/).waitFor();
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const aligned = JSON.parse(await download('JSON'));
   assert.deepEqual(aligned.items,furnished.items);
   assert.deepEqual(aligned.outline,furnished.outline);
@@ -243,7 +245,7 @@ try {
   assert.equal(await conceptDialog.locator('.concept-canvas-card').count(), 2);
   await conceptDialog.getByRole('button', { name: '应用到当前铺位（可撤销）', exact: true }).click();
   await conceptDialog.waitFor({ state: 'hidden' });
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const zoned = JSON.parse(await download('JSON'));
   assert.deepEqual(zoned.survey, aligned.survey);
   assert.deepEqual(zoned.outline, aligned.outline);
@@ -266,7 +268,7 @@ try {
     { ...item('柱', 'column', 350, 360, 450, 450, 3000), zoneId: '旧区' },
     item('玻璃隔断', 'partition', 500, 2400, 2000, 100, 1800));
   async function importFixture(project) {
-    await button('导出与汇报').click();
+    await button('项目文件').click();
     const input = page.waitForEvent('filechooser');
     await button('导入').click();
     await (await input).setFiles({ name: 'shop.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(project)) });
@@ -283,7 +285,7 @@ try {
         return xml;
       };
     });
-    await button('导出与汇报').click();
+    await button('项目文件').click();
     assert.equal((await download('导出 2D 平面图 PNG')).readUInt32BE(0), 0x89504e47);
     return page.evaluate(() => window.exportLabels);
   }
@@ -304,7 +306,7 @@ try {
   await button('已保存').waitFor();
   await page.reload();
   await button('已保存').waitFor();
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const reopened = JSON.parse(await download('JSON'));
   assert.equal(reopened.name, fixture.name);
   assert.equal(reopened.items.find(i => i.id === '柱').zoneId, undefined);
@@ -314,7 +316,7 @@ try {
   await conceptDialog.waitFor({ state: 'hidden' });
   await page.reload();
   await button('已保存').waitFor();
-  await button('导出与汇报').click();
+  await button('项目文件').click();
   const variant = JSON.parse(await download('JSON'));
   assert.notEqual(variant.id, reopened.id);
   assert.ok(variant.items.some(i => i.id === '柱'));
@@ -361,13 +363,12 @@ try {
   assert.ok(underLight, 'concept layout should include overhead table lights');
   await page.mouse.click(underLight.x, underLight.y);
   assert.doesNotMatch(await page.locator('.quick-bar-name').innerText(), /吊灯|射灯/, 'clicking center of table under a pendant light must select the table, not the light');
-  await page.locator('.stage-stepper button').nth(2).click();
-  assert.equal(await page.locator('.stage-stepper button').nth(2).getAttribute('aria-pressed'), 'true');
+  await button('3D 效果图').click();
   assert.equal(await button('3D 效果图').getAttribute('aria-pressed'), 'true');
   await page.locator('.footer-check-pill').click();
   await dialog.waitFor({ state: 'visible' });
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  console.log('PASS 试排应用、墙体快捷加门、吊灯点击穿透、三步导航、3D 悬浮胶囊与底部开店指标条');
+  console.log('PASS 试排应用、墙体快捷加门、吊灯点击穿透、视图切换、3D 悬浮胶囊与底部开店指标条');
 
   const atmosphere = page.locator('.scene-atmos-menu');
   for (const preset of ['自然光', '暖光营业']) {

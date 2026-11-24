@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { BarChart3, CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Lightbulb } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Download, LocateFixed, Zap, Lightbulb } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
 import { planningAreaLabel, siteArea } from './site';
@@ -44,9 +44,6 @@ export default function ShopInsightsDialog({ openSignal, insights, issues, criti
   const clearanceCount = issues.length - criticalCount;
 
   return <>
-    <button onClick={open} title="查看面积坪效、餐厨比、配电负荷、动线体检与采购预算">
-      <BarChart3 />开店概览
-    </button>
     <dialog ref={dialog} className="insights-dialog" aria-labelledby="insights-heading">
       <header className="wizard-header">
         <div>
