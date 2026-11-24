@@ -1,10 +1,15 @@
 import * as T from 'three';
 import { Item, Point, Project } from './model';
+import { siteOutline } from './site';
 import { baseHeight, footprint } from './spatial';
 export type SceneFrame={min:[number,number,number];max:[number,number,number];label:string};
 export function framePoints(points:Point[],height:number,label:string):SceneFrame {
   if(!points.length||points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))throw Error('当前区域无法定位');
   return {min:[Math.min(...points.map(p=>p.x))/1000,0,Math.min(...points.map(p=>p.y))/1000],max:[Math.max(...points.map(p=>p.x))/1000,Math.max(.05,height/1000),Math.max(...points.map(p=>p.y))/1000],label};
+}
+export function frameShop(project: Project) {
+  const height = project.items.reduce((h,i) => i.hidden ? h : Math.max(h,(i.elevation ?? 0)+i.h), project.style?.ceilingHeight ?? 3200);
+  return framePoints(siteOutline(project), height, '整间铺位');
 }
 export function frameItems(project:Project,items:Item[],label='选中对象'){
   return framePoints(items.flatMap(footprint),Math.max(...items.map(i=>baseHeight(project,i)+i.h)),label);

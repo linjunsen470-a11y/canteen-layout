@@ -1386,7 +1386,8 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
   z-index: 6;
   display: inline-flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 3px;
   padding: 3px 4px;
   border-radius: 999px;
@@ -1585,3 +1586,13 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
 .sketch-controls button[aria-pressed=true] { color:white; background:#335e4b; }
 .sketch-grid { display:block; width:100%; aspect-ratio:100/56; background:#f5f8f3; border:1px solid #ccd8cc; border-radius:6px; touch-action:none; user-select:none; }
 .sketch-grid text { fill:#274637; paint-order:stroke; stroke:#f5f8f3; stroke-width:.15em; }
+
+.basic-draft-bar { display:flex; align-items:center; gap:.65rem; flex-wrap:wrap; padding:4px 10px; color:#355647; background:#f0f5ef; font-size:12px; }
+.basic-draft-bar > span { margin-right:auto; }
+.basic-draft-bar details { position:relative; }
+.basic-draft-bar summary { cursor:pointer; }
+.basic-draft-bar details > div { position:absolute; z-index:12; top:100%; right:0; width:min(290px,70vw); background:white; box-shadow:0 3px 14px #20352833; padding:12px; }
+.basic-draft-bar ul { padding-left:18px; }
+.basic-draft-bar > button { min-height:24px; padding:2px 8px; }
+.draft-variant-dialog { max-width:360px; padding:20px; border:1px solid #adbaae; border-radius:10px; }
+.draft-variant-dialog label, .draft-variant-dialog footer { display:flex; gap:10px; align-items:center; margin-top:12px; }

@@ -1,5 +1,5 @@
 import { ScenePanMode, useSceneSpacePan } from './useSceneSpacePan';
-import { SceneFrame, frameItems, framePoints, frameDistance } from './sceneFraming';
+import { SceneFrame, frameItems, framePoints, frameShop, frameDistance } from './sceneFraming';
 import SceneRegionPicker, { SceneNavigation } from './SceneRegionPicker';
 import { useWallPlacement } from './wallPlacementState';
 import { groupSelection, movableSelection } from './layoutGroups';
@@ -20,7 +20,7 @@ import SiteFloor from './SiteFloor';
 import SiteOverlay3D from './SiteOverlay3D';
 import { usePlanning, insidePlanning } from './planning';
 import { isAnnotation } from './annotations';
-import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeInteriorShot, computeStorefrontShot } from './SceneCapture';
+import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeEyeView } from './SceneCapture';
 import InstancedFurniture from './InstancedFurniture';
 import { dragOpening, isAttachedOpening } from './structure';
 import { computeFrontFacingWallIds } from './wallVisibility3D';
@@ -188,33 +188,6 @@ function InteriorLights({ project, preset }: { project: Project; preset: Lightin
 }
 
 const eyeViewNames = ['进店视角', '客区漫游视角', '吧台/明档视角', '临街门头外观'];
-function computeEyeView(project: Project, index: number) {
-  const w = project.width / 1000;
-  const h = project.height / 1000;
-  const eyeY = 1.62;
-  const idx = ((index % 4) + 4) % 4;
-  if (idx === 3) {
-    return computeStorefrontShot(project);
-  }
-  if (idx === 0) {
-    return computeInteriorShot(project);
-  }
-  if (idx === 1) {
-    // Diagonal dining hall showcase view from front-left corner
-    return {
-      pos: new T.Vector3(Math.max(0.9, w * 0.14), eyeY + 0.12, Math.max(1.0, h * 0.82)),
-      target: new T.Vector3(w * 0.62, 1.1, h * 0.32),
-      fov: 50,
-    };
-  }
-  // Right-side angle looking back toward seating & storefront windows
-  return {
-    pos: new T.Vector3(Math.min(w - 0.9, w * 0.82), eyeY + 0.08, Math.max(1.0, h * 0.72)),
-    target: new T.Vector3(w * 0.3, 1.15, h * 0.42),
-    fov: 50,
-  };
-}
-
 function CameraRig({
   focus, frame, reset, dragging, picking, pose, eyeIndex, active, navigation, pan, onPanChange
 }: {
@@ -312,7 +285,8 @@ function CameraRig({
       persp.updateProjectionMatrix();
     }
 
-    const key = [JSON.stringify(frame), focus?.id ?? 'all', focus?.w, focus?.d, focus?.h, reset, pose, pose === 'eye-level' ? eyeIndex : 0, width, height].join(':');
+    const overview = (project.survey || project.outline) && !frame && !focus && pose !== 'eye-level';
+    const key = [project.id, JSON.stringify(frame), focus?.id ?? 'all', focus?.w, focus?.d, focus?.h, reset, pose, pose === 'eye-level' ? eyeIndex : 0, width, height].join(':');
     if (pose === 'eye-level' && !focus && !frame) {
       if (framed.current === key) { invalidate(); return; }
       framed.current = key;
@@ -363,8 +337,9 @@ function CameraRig({
       : structural
         ? new T.Vector3(0.5, 0.7, 1.5).applyAxisAngle(new T.Vector3(0, 1, 0), -focus.rotation * Math.PI / 180)
         : new T.Vector3(0.95, 0.88, 1.28);
-    if (frame) {
-      const fitted = frameDistance(frame, direction, persp.fov, aspect);
+    const bounds = frame ?? (overview ? frameShop(project) : null);
+    if (bounds) {
+      const fitted = frameDistance(bounds, direction, persp.fov, aspect);
       center = fitted.center;
       distance = fitted.distance;
     }
@@ -443,7 +418,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
   const focusRequest = useStore(s => active ? s.focusRequest : lastView.current.focusRequest);
   if (active) lastView.current = { selected, ids, focusRequest };
 
-  const prefs = useWorkspace(), moveMode = prefs.move3D, planning = usePlanning();
+  const prefs = useWorkspace(), moveMode = !project.basicDraft && prefs.move3D, planning = usePlanning();
   const faded = (i: Item) => planning.dim && !insidePlanning(i, project);
   const navigation = useRef<SceneNavigation | null>(null);
   const [frame, setFrame] = useState<SceneFrame | null>(null), [picking, setPicking] = useState(false), [detail, setDetail] = useState(false);
@@ -666,7 +641,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
           <button className={!focus && !frame ? 'active' : ''} onClick={() => { setFrame(null); setPicking(false); setCloseup(false); setReset(n => n + 1); }}>空间全景</button>
           <button disabled={!item} className={focus ? 'active' : ''} onClick={() => { setFrame(null); setPicking(false); setCloseup(true); setReset(n => n + 1); }}>物体特写</button>
           <button aria-pressed={style.showCeiling} onClick={() => updateStyle({ showCeiling: !style.showCeiling })}>{style.showCeiling ? '吊顶已开启' : '吊顶已关闭'}</button>
-          <button aria-pressed={moveMode} title="开启后可直接拖动物体；关闭后拖动旋转视角" onClick={() => { useStore.getState().cancelInteraction(); prefs.set({ move3D: !moveMode }); }}>{moveMode ? '移动已开启' : '移动已关闭'}</button>
+          {!project.basicDraft && <button aria-pressed={moveMode} title="开启后可直接拖动物体；关闭后拖动旋转视角" onClick={() => { useStore.getState().cancelInteraction(); prefs.set({ move3D: !moveMode }); }}>{moveMode ? '移动已开启' : '移动已关闭'}</button>}
           <button aria-pressed={grid} title="三维网格" onClick={() => setGrid(v => !v)}>网格</button>
           <button title="重置三维视角" onClick={() => { setFrame(null); setPicking(false); setCloseup(false); prefs.set({ camera: 'oblique' }); setReset(n => n + 1); }}>复位</button>
           <button aria-pressed={detail} onClick={() => setDetail(v => !v)}>{detail ? '精细画质' : '流畅画质'}</button>

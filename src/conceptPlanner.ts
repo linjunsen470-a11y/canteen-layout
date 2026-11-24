@@ -12,7 +12,7 @@ import { analyzeShop } from './shopAnalytics';
 import { checkSpace } from './spaceChecks';
 import { polygonPatch } from './zones';
 
-export type ConceptBusinessType = 'bistro' | 'cafe' | 'restaurant' | 'canteen';
+export type ConceptBusinessType = NonNullable<Project['basicDraft']>['business'];
 export type ConceptKitchenSide = 'rear' | 'left' | 'right' | 'none';
 export type ConceptSeatingStyle = 'balanced' | 'compact' | 'comfort' | 'canteen-bench';
 export type ConceptThemeId = 'keep' | 'oak-bistro' | 'cream-cafe' | 'warm-restaurant' | 'bright-canteen' | 'raw-concrete';
@@ -139,6 +139,7 @@ export type ConceptEstimate = {
 };
 
 export type ConceptPlanResult = {
+  kitchenZoneIds: string[];
   project: Project;
   estimate: ConceptEstimate;
 };
@@ -365,7 +366,7 @@ function extractInteriorPolygon(project: Project): Point[] {
   if (project.survey) {
     const walls = project.items.filter(i => project.survey!.wallIds.includes(i.id));
     if (walls.length !== project.survey.wallIds.length || walls.some(w => !surveyWall(project, w))) {
-      throw Error('实测外墙已调整，请先复核墙段后再试排');
+      throw Error('铺位外墙已调整，请先复核墙段后再试排');
     }
     return project.survey.corners;
   }
@@ -557,6 +558,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
     const kName = options.businessType === 'cafe' ? '水吧操作与备餐区' : '后厨与明档区';
     zoneItems.push(...makeZoneItemsFromRegion(interiorPoly, kitchenStrips, kitchenHp, kName, '#f7ece0'));
   }
+  const kitchenZoneIds = zoneItems.map(i => i.id);
   if (diningStrips.length > 0) {
     zoneItems.push(...makeZoneItemsFromRegion(interiorPoly, diningStrips, diningHp, '前厅就餐区', '#e6f0e6'));
   }
@@ -897,7 +899,7 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
 
   // Applying and saving a variant must both produce a project the reader can open.
   const candidate = parseProject({
-    ...baseProject,
+    ...baseProject, basicDraft: undefined,
     clearance: options.aisleMm,
     style: nextStyle,
     items: [...zoneItems, ...preservedItems, ...placedInterior],
@@ -919,12 +921,13 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
   }
 
   const nearestTables = nearestTableGap(candidate);
-  if (nearestTables && nearestTables.distance < options.aisleMm - 0.01) {
+  if (!basic && nearestTables && nearestTables.distance < options.aisleMm - 0.01) {
     warnings.push('已有桌椅间距小于所选净距，请复核保留的桌椅位置');
   }
 
   return {
     project: candidate,
+    kitchenZoneIds,
     estimate: {
       totalAreaSqm,
       kitchenAreaSqm,

@@ -51,7 +51,7 @@ export default function ShopInsightsDialog({ openSignal, insights, issues, criti
       <header className="wizard-header">
         <div>
           <h2 id="insights-heading">{project.name} · 可行性体检与预算概览</h2>
-          <p>汇总实测面积、客座舒适度、餐厨比、商用配电预估、空间体检与分类采购预算</p>
+          <p>汇总铺位面积、客座舒适度、餐厨比、商用配电预估、空间体检与分类采购预算</p>
         </div>
         <div className="insights-header-actions">
           <button type="button" onClick={exportCSV}><Download />导出清单 CSV</button>

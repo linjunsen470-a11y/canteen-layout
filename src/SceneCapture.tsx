@@ -2,6 +2,9 @@ import { useEffect, RefObject } from 'react';
 import { Object3D, PerspectiveCamera, Vector2, Vector3 } from 'three';
 import { useStore } from './store';
 import { useThree } from '@react-three/fiber';
+import { frameDistance, frameShop } from './sceneFraming';
+import { surveyWall } from './interiorSurvey';
+import { siteOutline, sitePlacement } from './site';
 import { Project } from './model';
 
 export type SceneGalleryShots = {
@@ -16,7 +19,41 @@ export type SceneCaptureAPI = {
   captureGallery: (project: Project) => SceneGalleryShots;
 };
 
+// New drafts may have an entrance on any face, including an inside corner.
+function entryView(project: Project) {
+  if (!project.survey) return;
+  const marker = project.items.find(i => !i.hidden && i.pointType === 'entrance');
+  if (!marker) return;
+  const doors = project.items.filter(i => i.kind === 'door' && !i.hidden && i.wallId);
+  const distance = (d: typeof marker) => Math.hypot(d.x+d.w/2-marker.x-marker.w/2, d.y+d.d/2-marker.y-marker.d/2);
+  const door = doors.sort((a,b) => distance(a)-distance(b))[0];
+  if (!door || distance(door) > 1000) return;
+  const wall = project.items.find(i => i.id === door.wallId);
+  const face = wall && surveyWall(project, wall);
+  if (!face) return;
+  const center = { x: door.x + door.w / 2, y: door.y + door.d / 2 };
+  const axis = face.inward.x ? 'x' : 'y';
+  const across = axis === 'x' ? 'y' : 'x';
+  const outline = siteOutline(project);
+  // The first outward intersection is the door facade, the next can be the opposite wing.
+  const crossings = outline.flatMap((a, i) => {
+    const b = outline[(i + 1) % outline.length];
+    if (a[axis] !== b[axis] || center[across] < Math.min(a[across], b[across]) ||
+        center[across] > Math.max(a[across], b[across])) return [];
+    return [(center[axis] - a[axis]) * face.inward[axis] / 1000];
+  }).filter(d => d > 0).sort((a,b) => a - b);
+  const facade = crossings[0] ?? 0;
+  const opposite = crossings.find(d => d > facade + .001);
+  const setback = opposite === undefined ? 5.8 : Math.min(5.8, (facade + opposite) / 2);
+  return (inset: number, height: number) => new Vector3(
+    center.x / 1000 + Math.max(-setback, inset) * face.inward.x, height,
+    center.y / 1000 + Math.max(-setback, inset) * face.inward.y,
+  );
+}
+
 export function computeStorefrontShot(project: Project) {
+  const entry = entryView(project);
+  if (entry) return { pos: entry(-5.8,2.05), target: entry(0,1.55), fov:44 };
   const w = project.width / 1000;
   const h = project.height / 1000;
   const door = project.items.find(i => i.kind === 'door' && !i.hidden && (i.y + i.d / 2) / 1000 > h * 0.65);
@@ -30,6 +67,8 @@ export function computeStorefrontShot(project: Project) {
 }
 
 export function computeInteriorShot(project: Project) {
+  const entry = entryView(project);
+  if (entry) return { pos: entry(.32,1.62), target: entry(2.5,1.35), fov:52 };
   const w = project.width / 1000;
   const h = project.height / 1000;
   const door = project.items.find(i => i.kind === 'door' && !i.hidden && (i.y + i.d / 2) / 1000 > h * 0.6);
@@ -38,10 +77,33 @@ export function computeInteriorShot(project: Project) {
   const startZ = Math.max(1.2, h - 1.1);
   const targetX = counter ? (counter.x + counter.w / 2) / 1000 : w * 0.55;
   const targetZ = counter ? Math.max(1.0, (counter.y + counter.d / 2) / 1000) : h * 0.32;
+  const start = interiorPoint(project, startX, startZ);
   return {
-    pos: new Vector3(startX, 1.62, startZ),
+    pos: new Vector3(start.x/1000, 1.62, start.y/1000),
     target: new Vector3(targetX, 1.18, targetZ),
     fov: 52,
+  };
+}
+
+function interiorPoint(project: Project, x: number, z: number) {
+  const floor = project.survey ? { ...project, outline: project.survey.corners } : project;
+  return sitePlacement(floor, { x: x * 1000, y: z * 1000 });
+}
+
+export function computeEyeView(project: Project, index: number) {
+  const idx = ((index % 4) + 4) % 4;
+  if (idx === 0) return computeInteriorShot(project);
+  if (idx === 3) return computeStorefrontShot(project);
+  const w = project.width / 1000, h = project.height / 1000;
+  const dining = idx === 1;
+  const eye = dining
+    ? interiorPoint(project, Math.max(.9, w * .14), Math.max(1, h * .82))
+    : interiorPoint(project, Math.min(w - .9, w * .82), Math.max(1, h * .72));
+  const target = interiorPoint(project, w * (dining ? .62 : .3), h * (dining ? .32 : .42));
+  return {
+    pos: new Vector3(eye.x / 1000, dining ? 1.74 : 1.70, eye.y / 1000),
+    target: new Vector3(target.x / 1000, dining ? 1.1 : 1.15, target.y / 1000),
+    fov: 50,
   };
 }
 
@@ -51,6 +113,10 @@ export function computeBirdseyeShot(project: Project) {
   const extent = Math.max(w, h);
   const center = new Vector3(w / 2, 0.45, h / 2);
   const dir = new Vector3(0.86, 0.92, 1.24).normalize();
+  if (project.survey || project.outline) {
+    const fit = frameDistance(frameShop(project),dir,38,1440/900);
+    return { pos: fit.center.clone().addScaledVector(dir, fit.distance), target: fit.center, fov:38 };
+  }
   return {
     pos: center.clone().add(dir.multiplyScalar(extent * 1.24)),
     target: center,

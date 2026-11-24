@@ -81,12 +81,12 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
   };
 
   const applyToCurrent = () => {
-    if (!result) return;
+    if (!result || project.basicDraft) return;
     if (commit(result.project)) {
       dialog.current?.close();
       setOpen(false);
       useWorkspace.getState().set({ view: 'split', focusMode: false });
-      notify(`已按实测壳体落位：后厨 ${result.estimate.kitchenAreaSqm.toFixed(1)}㎡ · 前厅 ${result.estimate.diningAreaSqm.toFixed(1)}㎡ · ${result.estimate.seats} 座（可一键撤销）`);
+      notify(`已按当前铺位落位，后厨 ${result.estimate.kitchenAreaSqm.toFixed(1)}㎡ · 前厅 ${result.estimate.diningAreaSqm.toFixed(1)}㎡ · ${result.estimate.seats} 座（可一键撤销）`);
     }
   };
 
@@ -116,7 +116,7 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
         type="button"
         className="concept-planner-btn"
         disabled={!session.ready || session.busy}
-        title="基于当前实测外墙与门窗柱子，快速试算后厨/前厅面积占比与桌椅数量"
+        title="基于当前铺位外墙与门窗柱子，快速试算后厨/前厅面积占比与桌椅数量"
         onClick={openModal}
       >
         <Sparkles />智能分区估算
@@ -336,7 +336,7 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
                   )}
                   <div className="concept-canvas-card is-primary">
                     <header>
-                      <b>估算预览（实时贴合你的实测外墙）</b>
+                      <b>估算预览（沿当前铺位外墙试排）</b>
                       <span>
                         {est.criticalConflicts === 0
                           ? <><CheckCircle2 size={14} /> 未发现物件碰撞</>
@@ -380,14 +380,14 @@ export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notif
             >
               <CopyPlus />{saving ? '正在另存…' : '另存为对比方案'}
             </button>
-            <button
+            {!project.basicDraft && <button
               type="button"
               className="primary"
               disabled={!result || saving}
               onClick={applyToCurrent}
             >
               <Sparkles />应用到当前铺位（可撤销）
-            </button>
+            </button>}
           </div>
         </footer>
       </dialog>

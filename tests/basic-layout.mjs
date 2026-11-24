@@ -1,17 +1,23 @@
 import assert from 'node:assert/strict';
 
-export async function testBasicLayout(load) {
+export async function testBasicLayout(load, loadScene) {
   const { sketchShell, placeSketchFixture } = await load('sketchGeometry');
   const { generateBasicLayout } = await load('basicLayout');
   const { parseProject } = await load('projectIO');
-  const { contains, footprint } = await load('spatial');
+  const { contains, footprint, inPolygon } = await load('spatial');
   const { checkSpace } = await load('spaceChecks');
-  const { reachableFromEntry } = await load('entryAccess');
+  const { entryRoutes } = await load('entryAccess');
   const shape = points => sketchShell(points.map(([x,y]) => ({ x:x*1000, y:y*1000 })));
   const rect = (w,d) => [[0,0],[w,0],[w,d],[0,d]];
   assert.throws(() => shape([[0,0],[5,1],[5,5],[0,5]]));
   assert.throws(() => shape([[0,0],[6,0],[6,4],[2,4],[2,-1],[0,-1]]));
   assert.throws(() => shape(rect(61,2)));
+  const stairs = [[0,0],[32,0]];
+  for (let level = 0; level < 31; level++) stairs.push([32-level,level+1], [level === 30 ? 0 : 31-level,level+1]);
+  assert.equal(shape(stairs).survey.corners.length,64);
+  assert.throws(() => shape([...stairs.slice(0,-1),[1,31],[1,32],[0,32]]), /64/);
+  const thinNotch = shape([[0,0],[8,0],[8,6],[5,6],[5,4],[4.8,4],[4.8,6],[0,6]]);
+  assert.equal(thinNotch.survey.thickness, 50);
   function generate(shell, business) {
     const { project, warnings } = generateBasicLayout(shell, business);
     const parsed = parseProject(JSON.parse(JSON.stringify(project)));
@@ -30,8 +36,26 @@ export async function testBasicLayout(load) {
   assert.throws(() => placeSketchFixture(fixture,'column',{x:8800,y:6000},500,500));
   const placed = generate(fixture,'bistro').project;
   assert.ok(placed.groups.length && placed.items.some(i => i.kind === 'sink') && placed.items.some(i => i.model === 'cashier'));
-  const reachable = reachableFromEntry(placed);
-  assert.ok(placed.items.filter(i => i.kind === 'chair' || i.model === 'cashier').every(reachable));
+  const { computeInteriorShot, computeStorefrontShot, computeEyeView } = await loadScene();
+  const inside = computeInteriorShot(placed), outside = computeStorefrontShot(placed);
+  assert.ok(inside.pos.z < 1 && inside.target.z > inside.pos.z, 'north-side entrance looks inward');
+  assert.ok(outside.pos.z < 0 && outside.target.z > outside.pos.z, 'storefront follows the marked entrance');
+  const courtyard = shape([[0,0],[10,0],[10,8],[7,8],[7,3],[3,3],[3,8],[0,8]]);
+  const innerDoor = placeSketchFixture(courtyard,'entrance',{x:3200,y:5500},0,0);
+  const facing = computeStorefrontShot(innerDoor);
+  assert.ok(facing.pos.x > 3.2 && facing.pos.x < 7.2 && facing.target.x < facing.pos.x, 'camera stays in the courtyard');
+  for (const idx of [1,2]) {
+    const shot = computeEyeView(shape(l),idx);
+    assert.ok(inPolygon({x:shot.pos.x*1000,y:shot.pos.z*1000},shape(l).survey.corners));
+  }
+  const measured = { ...placed, basicDraft:undefined, survey:{ ...placed.survey, source:undefined } };
+  assert.ok(computeStorefrontShot(measured).pos.equals(outside.pos));
+  const kitchen = placed.items.filter(i => i.kind === 'zone' && i.name.startsWith('后厨'));
+  const entry = placed.items.find(i => i.pointType === 'entrance');
+  assert.ok(kitchen.every(z => !inPolygon({x:entry.x+entry.w/2,y:entry.y+entry.d/2}, footprint(z))));
+  const routes = entryRoutes(placed,kitchen);
+  assert.ok(placed.items.filter(i => i.kind === 'chair').every(routes.customer));
+  assert.ok(placed.items.filter(i => i.kind === 'chair' || i.model === 'cashier').every(routes.staff));
   let rotated = l;
   const counts = [];
   for (let n=0;n<4;n++) {
@@ -52,6 +76,10 @@ export async function testBasicLayout(load) {
     'a usable compact dining room takes priority over an equipment-only kitchen');
   const small = generate(shape(rect(1,1)),'restaurant');
   assert.equal(small.project.groups.length,0);
+  assert.ok(small.project.items.some(i => i.kind === 'fridge'));
+  const empty = generate(shape(rect(.6,.6)), 'restaurant');
+  assert.ok(empty.project.items.every(i => i.kind === 'wall'));
+  assert.deepEqual(small.project.basicDraft,{business:'restaurant',warnings:small.warnings});
   assert.match(small.warnings.join(' '), /未摆入/);
   const divided = placeSketchFixture(shape(rect(10,6)), 'entrance', {x:1500,y:200},0,0);
   const blocked = placeSketchFixture(divided,'room',{x:5200,y:3200},1000,6000);

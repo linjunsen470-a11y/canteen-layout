@@ -1,8 +1,9 @@
 import { defaultConceptOptions, generateConceptLayout, nearestTableGap, type ConceptBusinessType } from './conceptPlanner';
-import { reachableFromEntry } from './entryAccess';
+import { entryRoutes } from './entryAccess';
 import type { Item, Point, Project } from './model';
 import { parseProject } from './projectIO';
 import { planningArea, siteOutline } from './site';
+import { footprint, inPolygon } from './spatial';
 import { checkSpace } from './spaceChecks';
 
 function quarterTurn(project: Project): Project {
@@ -35,7 +36,7 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
   let best: { project: Project; warnings: string[]; score: number[] } | undefined;
   for (let turn = 0; turn < 4; turn++, frame = quarterTurn(frame)) {
     for (const layout of layouts) {
-      const { project, estimate } = generateConceptLayout(frame, layout, true);
+      const { project, estimate, kitchenZoneIds } = generateConceptLayout(frame, layout, true);
       const omitted = new Set<string>();
       const groups = project.groups ?? [];
       const byId = new Map(project.items.map(i => [i.id,i]));
@@ -54,10 +55,14 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
       const conflictFree = omitted.size
         ? { ...project, items: project.items.filter(i => !omitted.has(i.id)) }
         : project;
-      const accessible = reachableFromEntry(conflictFree);
-      if (accessible) {
+      const kitchen = kitchenZoneIds.filter(id => !omitted.has(id)).map(id => byId.get(id)!);
+      const entries = conflictFree.items.filter(i => !i.hidden && i.pointType === 'entrance');
+      const entryInDining = entries.every(i => !kitchen.some(z => inPolygon({x:i.x+i.w/2,y:i.y+i.d/2}, footprint(z))));
+      const routes = entryRoutes(conflictFree, kitchen);
+      if (routes) {
         for (const i of conflictFree.items) {
-          if (['chair','counter','stove','fridge','sink'].includes(i.kind) && !accessible(i)) omit(i);
+          if (i.kind === 'chair' && !routes.customer(i)) omit(i);
+          if (['chair','counter','stove','fridge','sink'].includes(i.kind) && !routes.staff(i)) omit(i);
         }
       }
       // An overhead hood belongs to the cooking station below it.
@@ -71,11 +76,12 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
       const functions = [cook, has('sink'), has('counter','cashier'), has('fridge')];
       const seats = accepted.items.filter(i => i.kind === 'chair' && !i.hidden).reduce((s,i) => s+(i.seats ?? 1),0);
       const nearest = omitted.size ? nearestTableGap(accepted) : estimate.nearestTables;
-      const diningService = cook && has('sink') && seats > 0;
-      const score = [Number(diningService), functions.filter(Boolean).length, Number(cook), Number(has('sink')), Number(has('counter','cashier')),
+      const diningService = cook && has('sink') && seats > 0 && entryInDining;
+      const score = [Number(diningService), functions.filter(Boolean).length, Number(cook), Number(has('sink')), Number(has('counter','cashier')), Number(entryInDining),
         Number(!nearest || nearest.distance >= options.aisleMm-.1), seats, -omitted.size];
       if (best && !prefer(score,best.score)) continue;
       const warnings = [...estimate.warnings];
+      if (nearest && nearest.distance < options.aisleMm - .01) warnings.push('桌椅间距小于所选净距，请复核保留的桌椅位置');
       if (estimate.tableGroups === 24 && accepted.groups?.length === 24) {
         warnings.push('基础草稿先摆 24 组桌椅，剩余面积可按需复制桌组');
       }
@@ -96,5 +102,6 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
       }), groups: accepted.groups, clearance: options.aisleMm }), warnings, score };
     }
   }
-  return { project: best!.project, warnings: best!.warnings };
+  const { project, warnings } = best!;
+  return { project: { ...project, basicDraft: { business, warnings } }, warnings };
 }

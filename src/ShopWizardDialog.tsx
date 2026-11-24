@@ -99,15 +99,13 @@ export default function ShopWizardDialog({ notify }: { notify: (message: string)
         <button disabled={saving} aria-pressed={mode === 'templates'} onClick={() => { setMode('templates'); setError(''); }}><LayoutGrid />示范案例参考</button>
       </div>
       {mode === 'sketch' ? <SketchWizard key={sketchNumber} onBusy={setSaving} busy={saving || session.busy} onSave={async (project, warnings) => {
-        setSaving(true);
-        try {
-          if (!await copyProject(project.name, project)) throw Error(useProjectSession.getState().message || '保存草稿失败');
-          dialog.current?.close();
-          useWorkspace.getState().set({ view: 'split', focusMode: false, camera: 'oblique', move3D: false, propsOpen: false, libraryOpen: true });
-          useStore.getState().setTool('select');
-          setSketchNumber(n => n + 1);
-          notify(['已生成基础布局', ...warnings].join(' · '));
-        } finally { setSaving(false); }
+        if (!await copyProject(project.name, project)) throw Error(useProjectSession.getState().message || '保存草稿失败');
+        dialog.current?.close();
+        useWorkspace.getState().set({ view: 'split', focusMode: false, camera: 'oblique', move3D: false, propsOpen: false, libraryOpen: true });
+        useStore.getState().setMode('layout');
+        useStore.getState().setTool('select');
+        setSketchNumber(n => n + 1);
+        notify(warnings.length ? '已生成基础布局，点「生成记录」查看缺项' : '已生成基础布局，可以拖动桌椅');
       }} /> : mode === 'templates' ? (
         <div className="template-gallery">
           <p className="template-gallery-note">

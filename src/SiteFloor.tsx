@@ -40,7 +40,7 @@ export default function SiteFloor({ project, grid, forceCeiling = false }: { pro
 
   return <group>
     {/* Subtle exterior mall corridor / street promenade apron along storefront facade */}
-    {!isClay && (
+    {!isClay && !project.survey && (project.outline?.length ?? 4) === 4 && (
       <group position={[wM / 2, -0.025, hM + 1.55]}>
         <mesh receiveShadow>
           <boxGeometry args={[wM + 3.6, 0.05, 3.1]} />
@@ -83,7 +83,7 @@ export default function SiteFloor({ project, grid, forceCeiling = false }: { pro
             side={T.BackSide}
           />
         </mesh>
-        {!isClay && Array.from({ length: beamCount }, (_, idx) => {
+        {!isClay && !project.survey && (project.outline?.length ?? 4) === 4 && Array.from({ length: beamCount }, (_, idx) => {
           const bx = ((idx + 0.5) / beamCount) * wM;
           return (
             <mesh key={idx} position={[bx, ceilingY - 0.055, hM / 2]}>

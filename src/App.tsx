@@ -15,6 +15,7 @@ import PresentationDialog from './PresentationDialog';
 import PlanEditor, { PlanHandle } from './PlanEditor';
 import SplitView from './SplitView';
 import SidebarResize from './SidebarResize';
+import BasicDraftBar from './BasicDraftBar';
 import ShopWizardDialog from './ShopWizardDialog';
 import ShopInsightsDialog from './ShopInsightsDialog';
 import ConceptPlannerDialog from './ConceptPlannerDialog';
@@ -79,10 +80,10 @@ export default function App() {
   const [insightsSignal, setInsightsSignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
-  const insights = useMemo(() => analyzeShop(project), [project.items, project.groups, project.outline, project.survey, project.width, project.height]);
   const activeAreaId = usePlanning(state => state.activeId);
   // During a drag, inspect the committed layout until the gesture finishes.
   const inspectionProject = s.gesture ?? project;
+  const insights = useMemo(() => analyzeShop(inspectionProject), [inspectionProject]);
   const issues = useMemo(() => checkSpace(inspectionProject, activeAreaId)
     .sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')),
     [inspectionProject, activeAreaId]);
@@ -213,6 +214,7 @@ export default function App() {
             <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !s.selectedIds.length) s.setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
           </div>
         </div>
+        {project.basicDraft && !focusMode && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} />}
         <PlanningBar />
         <WallPlacementBar />
         <div className="canvas-context" hidden={s.tool === 'select'}>

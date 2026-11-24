@@ -11,7 +11,8 @@ export type InteriorSurvey = { source?: 'estimated'; corners: Point[]; wallIds: 
 export type Underlay={assetId:string;name:string;pixelWidth:number;pixelHeight:number;x:number;y:number;mmPerPixel:number;rotation:number;opacity:number;hidden:boolean;locked:boolean;calibration?:{points:[Point,Point];distance:number}};
 export type PlanningArea={id:string;name:string;color:string;outline:Point[]};
 export type LayoutGroup={id:string;name:string;members:string[];seats?:number};
-export type Project={id:string;schemaVersion:7;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];survey?:InteriorSurvey;items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number;style?:ProjectStyle};
+export type BasicDraft = { business: 'bistro'|'cafe'|'restaurant'|'canteen'; warnings: string[] };
+export type Project={basicDraft?:BasicDraft;id:string;schemaVersion:7;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];survey?:InteriorSurvey;items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number;style?:ProjectStyle};
 export const defaultProjectStyle:Required<Omit<ProjectStyle,'shopType'>>={floorMaterial:'terrazzo',wallMaterial:'warm-cream',ceilingHeight:3200,lightingPreset:'warm-dining',showCeiling:false,wallCutaway:false,showZoneTint3D:true,showLightsIn2D:true};
 export function resolveStyle(project:Pick<Project,'style'>){return {...defaultProjectStyle,...(project.style??{})};}
 export function projectIdentity() { const now=new Date().toISOString(); return {id:crypto.randomUUID(),schemaVersion:7 as const,createdAt:now,updatedAt:now,metadata:{customer:'',site:'',purpose:'',notes:''}}; }

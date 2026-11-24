@@ -1,0 +1,107 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+export async function testEditableDraft(browser, url) {
+  const page = await browser.newPage({ viewport:{ width:1440, height:900 } });
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const button = name => page.getByRole('button', { name, exact:true });
+  const file = async name => {
+    const [download] = await Promise.all([page.waitForEvent('download'), button(name).click()]);
+    return readFile(await download.path());
+  };
+  const project = async () => { await button('导出与汇报').click(); return JSON.parse(await file('JSON')); };
+  const grid = page.getByLabel('直角铺位绘图格网');
+  async function point(x,y) {
+    const p = await grid.evaluate((svg,[x,y]) => {
+      const p = new DOMPoint(x,y).matrixTransform(svg.getScreenCTM());
+      return { x:p.x, y:p.y };
+    }, [x,y]);
+    await page.mouse.click(p.x,p.y);
+  }
+  try {
+    await page.goto(url);
+    await button('已保存').waitFor();
+    await button('新建铺位').click();
+    await page.getByLabel('铺位名称').fill('凹角试租');
+    await point(0,0);
+    await page.getByLabel('下一段边长（米）').fill('10');
+    await point(5000,0);
+    for (const p of [[10000,4000],[6000,4000],[6000,7000],[0,7000],[0,0]]) await point(...p);
+    await button('生成基础布局').waitFor();
+    await point(2400,0);
+    await button('柱').click();
+    await point(4500,3500);
+    await button('生成基础布局').click();
+    await page.locator('.basic-draft-bar').waitFor();
+    assert.equal(await button('2D + 3D 分屏').getAttribute('aria-pressed'),'true');
+    const before = await project();
+    assert.equal(await button('移动已关闭').count(),0);
+    assert.equal(before.items.filter(i => i.kind === 'wall').length,6);
+    assert.ok(before.items.some(i => i.kind === 'door') && before.items.some(i => i.kind === 'column'));
+    assert.equal(before.survey.source,'estimated');
+    const group = before.groups[0];
+    const members = before.items.filter(i => group.members.includes(i.id));
+    const table = members.find(i => i.kind === 'table');
+    const chair = members.find(i => i.kind === 'chair');
+    const objectCenter = id => page.locator(`[data-plan] [data-item-id="${id}"]`).evaluate(el => {
+      const p = new DOMPoint(0,0).matrixTransform(el.getScreenCTM()); return { x:p.x, y:p.y };
+    });
+    const start = await objectCenter(table.id);
+    await page.mouse.move(start.x,start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x+13,start.y+7,{ steps:5 });
+    await page.mouse.up();
+    const moved = await project();
+    const delta = members.map(i => { const m = moved.items.find(m => m.id === i.id); return [m.x-i.x,m.y-i.y]; });
+    assert.notDeepEqual(delta[0],[0,0]);
+    assert.ok(delta.every(d => d[0] === delta[0][0] && d[1] === delta[0][1]));
+    const c = await objectCenter(chair.id);
+    await page.mouse.dblclick(c.x,c.y);
+    await page.keyboard.press('Delete');
+    const edited = await project();
+    assert.equal(edited.items.length, moved.items.length-1);
+    assert.ok(!edited.items.some(i => i.id === chair.id));
+    await button('撤销').click();
+    assert.deepEqual((await project()).items, moved.items);
+    await button('重做').click();
+    await button('保存').click();
+    await button('已保存').waitFor();
+    await page.reload();
+    await page.locator('.basic-draft-bar').waitFor();
+    assert.deepEqual((await project()).items,edited.items);
+    await button('导出与汇报').click();
+    assert.equal((await file('导出 2D 平面图 PNG')).readUInt32BE(0),0x89504e47);
+    await page.locator('.scene-more summary').click();
+    assert.equal((await file('效果图截图')).readUInt32BE(0),0x89504e47);
+    await button('导出与汇报').click();
+    const pack = await file('项目包');
+    await button('另生成一稿').click();
+    await page.getByRole('dialog',{name:'另生成一稿'}).getByLabel('餐饮业态').selectOption('cafe');
+    await button('生成并另存').click();
+    await page.getByRole('dialog',{name:'另生成一稿'}).waitFor({state:'hidden'});
+    const variant = await project();
+    assert.notEqual(variant.id, edited.id);
+    assert.equal(variant.basicDraft.business,'cafe');
+    assert.equal(variant.name,'凹角试租 · 新稿');
+    await button('另生成一稿').click();
+    await button('生成并另存').click();
+    await page.getByRole('dialog',{name:'另生成一稿'}).waitFor({state:'hidden'});
+    assert.equal((await project()).name,'凹角试租 · 新稿 2');
+    await button('项目库').click();
+    await page.locator('.project-list article').filter({has:page.getByText('凹角试租',{exact:true})}).getByRole('button',{name:'打开 / 重命名'}).click();
+    await button('关闭项目库').click();
+    assert.deepEqual((await project()).items,edited.items);
+    await button('导出与汇报').click();
+    const chooser = page.waitForEvent('filechooser');
+    await button('导入').click();
+    await (await chooser).setFiles({name:'draft.canteen.json',mimeType:'application/json',buffer:pack});
+    await page.getByText('方案已导入为独立项目',{exact:true}).waitFor();
+    const imported = await project();
+    assert.notEqual(imported.id,edited.id);
+    assert.deepEqual(imported.items,edited.items);
+    assert.deepEqual(imported.basicDraft,edited.basicDraft);
+    assert.deepEqual(errors,[]);
+    console.log('PASS 格网 L 铺、后台生成、双视图、整组拖动、单椅删改与撤销、双图导出、独立新稿与项目包回读');
+  } finally { await page.close(); }
+}
