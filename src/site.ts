@@ -1,6 +1,21 @@
 import { Project } from './model';
 
 export type SitePoint = { x: number; y: number };
+export type NotchCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export function dimensionedOutline(width: number, depth: number, notch?: { width: number; depth: number; corner: NotchCorner }): SitePoint[] {
+  if (![width, depth].every(n => Number.isInteger(n) && n > 0 && n <= 60000)) {
+    throw Error('净宽和净深须大于 0 米且不超过 60 米，最多三位小数');
+  }
+  if (!notch) return [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: depth }, { x: 0, y: depth }];
+  if (![notch.width, notch.depth].every(n => Number.isInteger(n) && n > 0) || notch.width >= width || notch.depth >= depth) {
+    throw Error('缺口宽度和深度须大于零，并分别小于铺位净宽和净深');
+  }
+  const innerX = width - notch.width, innerY = depth - notch.depth;
+  return [[0,0], [width,0], [width,innerY], [innerX,innerY], [innerX,depth], [0,depth]].map(([x,y]) => ({
+    x: notch.corner.endsWith('left') ? width - x : x,
+    y: notch.corner.startsWith('top') ? depth - y : y,
+  }));
+}
 export const siteOutline = (p: Project): SitePoint[] => p.outline ?? [{ x: 0, y: 0 }, { x: p.width, y: 0 }, { x: p.width, y: p.height }, { x: 0, y: p.height }];
 export const polygonArea = (points: SitePoint[]) => Math.abs(points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]; return sum + p.x * q.y - q.x * p.y; }, 0)) / 2;
 export const siteArea = (p: Project) => polygonArea(siteOutline(p));

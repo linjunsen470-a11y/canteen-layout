@@ -1,6 +1,6 @@
 import { FloorMaterial, Item, LayoutGroup, LightingPreset, Point, Project, ProjectStyle, WallMaterial, projectIdentity, uid } from './model';
 import { segmentPose, syncStructure, wallPoint } from './structure';
-import { siteOutline } from './site';
+import { dimensionedOutline, siteOutline } from './site';
 
 export type ShopTemplateMeta = {
   id: string;
@@ -559,16 +559,8 @@ export function createCustomShopShell(spec: CustomShopSpec): Project {
   const innerX = W - Math.round((spec.notchWidthM ?? W * 0.38 / 1000) * 1000);
   const innerY = H - Math.round((spec.notchDepthM ?? H * 0.45 / 1000) * 1000);
   if (spec.shape === 'l-shape') {
-    if (!(innerX > 0 && innerY > 0 && innerX < W && innerY < H)) throw Error('缺口宽度和深度必须分别小于开间和进深');
+    outline = dimensionedOutline(W, H, { width: W - innerX, depth: H - innerY, corner: 'bottom-right' });
     if (spec.addWalls && Math.min(innerX - 200, innerY - 200, W - innerX, H - innerY) < 300) throw Error('外墙中心线最短需 300 mm。请核对缺口尺寸，或取消围墙后手动画墙');
-    outline = [
-      { x: 0, y: 0 },
-      { x: W, y: 0 },
-      { x: W, y: innerY },
-      { x: innerX, y: innerY },
-      { x: innerX, y: H },
-      { x: 0, y: H },
-    ];
   }
 
   if (spec.addZones) {

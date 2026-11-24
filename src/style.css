@@ -1596,3 +1596,9 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
 .basic-draft-bar > button { min-height:24px; padding:2px 8px; }
 .draft-variant-dialog { max-width:360px; padding:20px; border:1px solid #adbaae; border-radius:10px; }
 .draft-variant-dialog label, .draft-variant-dialog footer { display:flex; gap:10px; align-items:center; margin-top:12px; }
+
+.sketch-dimensions summary { cursor: pointer; color: #335e4b; font-weight: 600; }
+.sketch-dimensions form { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); align-items: end; gap: 8px; padding: 10px 0; }
+.sketch-dimensions label { display: grid; gap: 4px; }
+.sketch-dimensions input, .sketch-dimensions select { width: 100%; min-width: 0; }
+.sketch-dimensions .property-error { grid-column: 1 / -1; }
