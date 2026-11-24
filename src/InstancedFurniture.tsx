@@ -3,8 +3,11 @@ import * as T from 'three';
 import { ThreeEvent } from '@react-three/fiber';
 import { Item } from './model';
 import { createFurniture, disposeFurniture, fadeFurniture } from './furniture';
+import { BuildingRenderOptions } from './buildingModels';
+
 export type FurnitureHandlers={onPointerDown:(e:ThreeEvent<PointerEvent>,item:Item)=>void;onPointerMove:(e:ThreeEvent<PointerEvent>)=>void;onPointerUp:(e:ThreeEvent<PointerEvent>)=>void;onDoubleClick:(e:ThreeEvent<MouseEvent>,item:Item)=>void};
 type Part={geometry:T.BufferGeometry;material:T.Material|T.Material[];matrix:T.Matrix4;castShadow:boolean;receiveShadow:boolean};
+
 function Instances({part,items,handlers}:{part:Part;items:Item[];handlers:FurnitureHandlers}){
  const ref=useRef<T.InstancedMesh>(null);
  useEffect(()=>{const mesh=ref.current!;return()=>{mesh.dispose()}},[]);
@@ -14,9 +17,10 @@ function Instances({part,items,handlers}:{part:Part;items:Item[];handlers:Furnit
  },[items,part]);
  return <instancedMesh name="item:instances" ref={ref} args={[part.geometry,part.material,items.length]} castShadow={part.castShadow} receiveShadow={part.receiveShadow} onDoubleClick={e=>{if(e.instanceId!==undefined)handlers.onDoubleClick(e,items[e.instanceId])}} onPointerDown={e=>{if(e.instanceId!==undefined)handlers.onPointerDown(e,items[e.instanceId])}} onPointerMove={handlers.onPointerMove} onPointerUp={handlers.onPointerUp} dispose={null}/>;
 }
+
 // Identical local specifications share each component mesh in one instanced draw.
-export default function InstancedFurniture({items,spec,handlers,faded}:{items:Item[];spec:string;handlers:FurnitureHandlers;faded:boolean}){
- const model=useMemo(()=>{const model=createFurniture(items[0]);if(faded)fadeFurniture(model);return model},[spec,faded]);
+export default function InstancedFurniture({items,spec,handlers,faded,renderOptions}:{items:Item[];spec:string;handlers:FurnitureHandlers;faded:boolean;renderOptions?:BuildingRenderOptions}){
+ const model=useMemo(()=>{const model=createFurniture(items[0],[],undefined,renderOptions);if(faded)fadeFurniture(model);return model},[spec,faded,renderOptions?.lightingPreset,renderOptions?.wallMaterial,renderOptions?.cutaway]);
  const parts=useMemo(()=>{model.updateMatrixWorld(true);const result:Part[]=[];model.traverse(o=>{if(o instanceof T.Mesh)result.push({geometry:o.geometry,material:o.material,matrix:o.matrixWorld.clone(),castShadow:o.castShadow,receiveShadow:o.receiveShadow})});return result},[model]);
  useEffect(()=>()=>disposeFurniture(model),[model]);
  return <>{parts.map((part,n)=><Instances key={`${n}:${items.length}`} part={part} items={items} handlers={handlers}/>)}</>;

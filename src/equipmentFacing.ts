@@ -2,8 +2,8 @@ import { Item, ModelVariant, Point } from './model';
 
 // Frozen v1 convention, independent of mutable catalog names/defaults.
 // Plan +Y = model +Z. Both views rotate around the footprint centre.
-export const facingModels = new Set<ModelVariant>(['stove','sink','single-sink','triple-sink','upright-fridge','steamer','sterilizer','worktable','buffet','chair']);
-export const ordinaryEquipment = (i: Pick<Item,'kind'>) => ['table','chair','counter','sink','fridge','stove','shelf'].includes(i.kind);
+export const facingModels = new Set<ModelVariant>(['stove','sink','single-sink','triple-sink','upright-fridge','steamer','sterilizer','worktable','buffet','chair','dining-armchair','curved-booth','tea-bar','sushi-display','dish-pass','podium']);
+export const ordinaryEquipment = (i: Pick<Item,'kind'>) => ['table','chair','counter','sink','fridge','stove','shelf','lighting','decor'].includes(i.kind);
 export function operationFace(i: Pick<Item,'model'|'operationFace'>): 'positive-y'|'none' {
   return i.operationFace ?? (i.model && facingModels.has(i.model) ? 'positive-y' : 'none');
 }

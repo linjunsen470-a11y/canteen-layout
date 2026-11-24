@@ -2,7 +2,7 @@
 
 基于 React、TypeScript、Vite、Zustand、SVG 和 Three.js 的本地 2D/3D 规划工具。统一以毫米保存尺寸与位置，二维编辑和三维预览共用项目数据。
 
-**`main` 当前使用项目格式 6。** G1–G4 已完成本地阶段验收，G5 已接入设备规格与自定义目录。阶段证据与历史版本见 [文档索引](docs/README.md) 和 [商业路线图](docs/commercial-roadmap.md)。
+**当前使用项目格式 7，支持读取历史版本 1–6。** 首次使用可从开店模板或实测尺寸建铺，在同一方案中编辑平面、预览三维并导出。阶段证据与历史版本见 [文档索引](docs/README.md) 和 [商业路线图](docs/commercial-roadmap.md)。
 
 ## 本地运行
 
@@ -18,10 +18,11 @@ pnpm dev
 ```bash
 pnpm typecheck
 pnpm build
+pnpm test
 pnpm preview
 ```
 
-构建输出到 `dist/`，可由静态 HTTP 服务托管。推送到 `main` 或向 `main` 提交拉取请求时，GitHub Actions 使用锁文件安装依赖并验证构建。修改依赖时一并更新 `package.json` 和 `pnpm-lock.yaml`。
+构建输出到 `dist/`，可由静态 HTTP 服务托管。本机测试使用 Chrome，先构建再运行。向 `main` 推送或提交 PR 时，GitHub Actions 使用锁文件安装依赖、构建并运行模板几何和生产版浏览器测试。
 
 ## 工作台与常用操作
 

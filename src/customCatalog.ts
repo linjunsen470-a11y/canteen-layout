@@ -15,9 +15,10 @@ export function validateCatalogEntry(value:unknown,legacy=false):CatalogEntry {
   if(c.specification!==undefined&&(typeof c.specification!=='string'||c.specification.length>500))throw Error('规格说明最多 500 个字符');
   if(c.notes!==undefined&&(typeof c.notes!=='string'||c.notes.length>2000))throw Error('备注最多 2000 个字符');
   if(c.seats!==undefined&&(!Number.isInteger(c.seats)||c.seats<0||c.seats>1000))throw Error('座位数需为 0–1000 的整数，未知请留空');
+  if(c.elevation!==undefined&&(typeof c.elevation!=='number'||!Number.isFinite(c.elevation)||c.elevation<0||c.elevation>15000))throw Error('安装离地高度需为 0–15000mm');
   const model=modelOf(c),face=c.operationFace??'none';
   if(!['positive-y','none'].includes(face)||(face==='positive-y'&&(!ordinaryEquipment(c)||!facingModels.has(model))))throw Error('此模型尚未定义操作面');
-  return {id:c.id,model,kind:c.kind,name:c.name.trim(),w:c.w,d:c.d,h:c.h,color:c.color,group:'我的物件',seats:c.seats,specification:c.specification,notes:c.notes,...(ordinaryEquipment(c)?{operationFace:face}:{} )};
+  return {id:c.id,model,kind:c.kind,name:c.name.trim(),w:c.w,d:c.d,h:c.h,color:c.color,group:'我的物件',seats:c.seats,elevation:c.elevation,specification:c.specification,notes:c.notes,...(ordinaryEquipment(c)?{operationFace:face}:{} )};
 }
 export function parseCustomCatalog(raw:string|null):CatalogEntry[]{
   if(raw===null)return [];
@@ -29,10 +30,10 @@ export function parseCustomCatalog(raw:string|null):CatalogEntry[]{
 }
 export function specificationFromItem(i:Item):CatalogEntry {
   // Explicit whitelist excludes position, rotation, locks, zones and all relationships.
-  return validateCatalogEntry({model:modelOf(i),kind:i.kind,name:i.name,w:i.w,d:i.d,h:i.h,color:i.color,seats:i.seats,specification:i.specification,notes:i.notes,operationFace:ordinaryEquipment(i)?operationFace(i):undefined});
+  return validateCatalogEntry({model:modelOf(i),kind:i.kind,name:i.name,w:i.w,d:i.d,h:i.h,color:i.color,seats:i.seats,elevation:i.elevation,specification:i.specification,notes:i.notes,operationFace:ordinaryEquipment(i)?operationFace(i):undefined});
 }
-export function catalogItemDefaults(c:CatalogEntry):Pick<Item,'catalogId'|'specification'|'notes'|'model'|'kind'|'name'|'w'|'d'|'h'|'color'|'seats'|'operationFace'> {
-  return {catalogId:c.id,specification:c.specification,notes:c.notes,model:modelOf(c),kind:c.kind,name:c.name,w:c.w,d:c.d,h:c.h,color:c.color,seats:c.seats,...(ordinaryEquipment(c)?{operationFace:c.operationFace??operationFace(c)}:{})};
+export function catalogItemDefaults(c:CatalogEntry):Pick<Item,'catalogId'|'specification'|'notes'|'model'|'kind'|'name'|'w'|'d'|'h'|'color'|'seats'|'elevation'|'operationFace'> {
+  return {catalogId:c.id,specification:c.specification,notes:c.notes,model:modelOf(c),kind:c.kind,name:c.name,w:c.w,d:c.d,h:c.h,color:c.color,seats:c.seats,elevation:c.elevation,...(ordinaryEquipment(c)?{operationFace:c.operationFace??operationFace(c)}:{})};
 }
 type CatalogState={entries:CatalogEntry[];raw:string|null;error:string|null};
 function readCatalog():CatalogState {

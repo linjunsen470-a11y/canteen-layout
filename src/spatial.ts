@@ -9,7 +9,8 @@ export const length=(p:Point)=>Math.hypot(p.x,p.y);
 export const edges=(p:Point[])=>p.map((a,i)=>({a,b:p[(i+1)%p.length]}));
 export const inPolygon=(p:Point,outline:Point[])=>pointInSite({outline} as Project,p);
 export function footprint(i:Item):Point[]{
- if(modelOf(i)==='round-table')return Array.from({length:48},(_,n)=>{const a=n*Math.PI/24,t=i.rotation*Math.PI/180,x=Math.cos(a)*i.w/2,y=Math.sin(a)*i.d/2;return{x:i.x+i.w/2+x*Math.cos(t)-y*Math.sin(t),y:i.y+i.d/2+x*Math.sin(t)+y*Math.cos(t)}});
+ const m=modelOf(i);
+ if(m==='round-table'||m==='marble-round-table'||m==='pendant-lamp'||m==='chandelier'||m==='potted-plant')return Array.from({length:48},(_,n)=>{const a=n*Math.PI/24,t=i.rotation*Math.PI/180,x=Math.cos(a)*i.w/2,y=Math.sin(a)*i.d/2;return{x:i.x+i.w/2+x*Math.cos(t)-y*Math.sin(t),y:i.y+i.d/2+x*Math.sin(t)+y*Math.cos(t)}});
  return zoneCorners(i);
 }
 export function bounds(items:Item[]){const p=items.flatMap(footprint),x=Math.min(...p.map(p=>p.x)),y=Math.min(...p.map(p=>p.y));return{x,y,w:Math.max(...p.map(p=>p.x))-x,h:Math.max(...p.map(p=>p.y))-y}}
@@ -25,11 +26,33 @@ export function polygonDistance(a:Point[],b:Point[]){
  }return result;
 }
 export const surfaceModels=new Set(['coffee-machine','microwave','rice-cooker','beverage']);
-export const isSurface=(i:Item)=>i.kind==='table'||i.kind==='fixture'||i.kind==='counter'&&['buffet','worktable','display-counter','return-counter','salad-counter','cashier'].includes(modelOf(i));
+export const isSurface=(i:Item)=>i.kind==='table'||i.kind==='fixture'||i.kind==='counter'&&['buffet','worktable','display-counter','return-counter','salad-counter','cashier','tea-bar','sushi-display','dish-pass'].includes(modelOf(i));
+export function defaultElevation(i:Pick<Item,'kind'|'name'|'model'>):number {
+ const m=modelOf(i);
+ switch(m){
+  case 'pendant-lamp': return 2150;
+  case 'linear-light': return 2300;
+  case 'track-light': return 2750;
+  case 'wall-sconce': return 1850;
+  case 'chandelier': return 2350;
+  case 'kitchen-panel-light': return 2750;
+  case 'wall-art': return 1350;
+  case 'menu-board': return 1950;
+  case 'shop-sign': return 2350;
+  case 'tv-screen': return 1950;
+  default: return 0;
+ }
+}
 export function supportFor(p:Project,i:Item){
  if(i.supportId)return p.items.find(v=>v.id===i.supportId&&isSurface(v));
  if(!surfaceModels.has(modelOf(i)))return undefined;
  return p.items.find(v=>v.id!==i.id&&!v.hidden&&isSurface(v)&&contains(footprint(v),footprint(i)));
 }
-export const baseHeight=(p:Project,i:Item)=>(i.sill??supportFor(p,i)?.h??0);
+export const baseHeight=(p:Project,i:Item)=>{
+ if(i.sill!==undefined)return i.sill;
+ if(i.elevation!==undefined)return i.elevation;
+ const elev=defaultElevation(i);
+ if(elev>0)return elev;
+ return supportFor(p,i)?.h??0;
+};
 export function doorSwings(i:Item){const a=i.rotation*Math.PI/180,c=Math.cos(a),s=Math.sin(a),sign=i.flipped?-1:1,cx=i.x+i.w/2,cy=i.y+i.d/2;return doorLeaves(i).map(leaf=>[{x:leaf.hinge,y:0},...Array.from({length:25},(_,n)=>({x:leaf.hinge+leaf.direction*leaf.width*Math.cos(n*Math.PI/48),y:sign*leaf.width*Math.sin(n*Math.PI/48)}))].map(p=>({x:cx+p.x*c-p.y*s,y:cy+p.x*s+p.y*c})))}

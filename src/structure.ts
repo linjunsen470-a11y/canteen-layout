@@ -41,6 +41,7 @@ export function syncStructure(project: Project): Project {
         if(i.notes!==undefined&&typeof i.notes!=='string')throw Error('现场备注无效');
         if(i.verification!==undefined&&!['pending','confirmed'].includes(i.verification))throw Error('现场确认状态无效');
         if(i.pointType!==undefined&&(i.kind!=='utility'||!['entrance','exhaust','water','drain','power'].includes(i.pointType)))throw Error('工程点位类型无效');
+        if(i.elevation!==undefined&&(!Number.isFinite(i.elevation)||i.elevation<0||i.elevation>15000))throw Error('安装离地高度需在 0–15000mm 之间');
         if (!isOpening(i)) {
             if (i.wallId !== undefined || i.offset !== undefined || i.sill !== undefined)
                 throw Error('只有门窗可以设置墙体关联与离地高度');

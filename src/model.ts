@@ -1,15 +1,21 @@
-export type Kind='table'|'chair'|'counter'|'sink'|'fridge'|'stove'|'shelf'|'partition'|'wall'|'door'|'window'|'stairs'|'text'|'dimension'|'leader'|'zone'|'column'|'fixture'|'utility';
-export type ModelVariant='column'|'fixture'|'utility'|'stairs'|'rect-table'|'round-table'|'chair'|'bench'|'buffet'|'worktable'|'sink'|'upright-fridge'|'chest-freezer'|'stove'|'shelf'|'partition'|'wall'|'door'|'double-door'|'window'|'bar-table'|'beverage'|'bin'|'cabinet'|'cart'|'cashier'|'coffee-machine'|'dishwasher'|'display-counter'|'fixed-window'|'fold-table'|'fryer'|'glass-fridge'|'glass-partition'|'griddle'|'handwash'|'hood'|'ice-maker'|'induction'|'locker'|'microwave'|'noodle-cooker'|'oven'|'return-counter'|'rice-cooker'|'salad-counter'|'single-sink'|'slat-partition'|'sofa'|'steamer'|'sterilizer'|'stool'|'tray-cart'|'tray-rack'|'triple-sink'|'undercounter-fridge'|'waiting-bench'|'wall-shelf'|'water-boiler'|'wok';
-export type Item={id:string;catalogId?:string;specification?:string;operationFace?:'positive-y'|'none';model?:ModelVariant;kind:Kind;name:string;x:number;y:number;w:number;d:number;h:number;rotation:number;color:string;locked?:boolean;hidden?:boolean;fontSize?:number;zoneId?:string;wallId?:string;offset?:number;sill?:number;flipped?:boolean;hingeRight?:boolean;freeStanding?:boolean;polygon?:Point[];pointType?:'entrance'|'exhaust'|'water'|'drain'|'power';verification?:'pending'|'confirmed';notes?:string;seats?:number;supportId?:string;measure?:{a:string;b:string;distance:number}};
+export type Kind='table'|'chair'|'counter'|'sink'|'fridge'|'stove'|'shelf'|'partition'|'wall'|'door'|'window'|'stairs'|'text'|'dimension'|'leader'|'zone'|'column'|'fixture'|'utility'|'lighting'|'decor';
+export type ModelVariant='column'|'fixture'|'utility'|'stairs'|'rect-table'|'round-table'|'chair'|'bench'|'buffet'|'worktable'|'sink'|'upright-fridge'|'chest-freezer'|'stove'|'shelf'|'partition'|'wall'|'door'|'double-door'|'window'|'bar-table'|'beverage'|'bin'|'cabinet'|'cart'|'cashier'|'coffee-machine'|'dishwasher'|'display-counter'|'fixed-window'|'fold-table'|'fryer'|'glass-fridge'|'glass-partition'|'griddle'|'handwash'|'hood'|'ice-maker'|'induction'|'locker'|'microwave'|'noodle-cooker'|'oven'|'return-counter'|'rice-cooker'|'salad-counter'|'single-sink'|'slat-partition'|'sofa'|'steamer'|'sterilizer'|'stool'|'tray-cart'|'tray-rack'|'triple-sink'|'undercounter-fridge'|'waiting-bench'|'wall-shelf'|'water-boiler'|'wok'|'pendant-lamp'|'linear-light'|'track-light'|'wall-sconce'|'chandelier'|'kitchen-panel-light'|'potted-plant'|'planter-divider'|'wall-art'|'menu-board'|'shop-sign'|'wood-feature-wall'|'podium'|'tv-screen'|'storefront-window'|'serving-window'|'glass-double-door'|'booth-table'|'marble-round-table'|'dining-armchair'|'curved-booth'|'tea-bar'|'hotpot-table'|'sushi-display'|'dish-pass';
+export type FloorMaterial='oak-wood'|'terrazzo'|'warm-tile'|'concrete'|'checker';
+export type WallMaterial='warm-cream'|'plaster'|'wood-panel'|'brick-white'|'concrete';
+export type LightingPreset='daylight'|'warm-dining'|'evening'|'clay';
+export type ProjectStyle={floorMaterial?:FloorMaterial;wallMaterial?:WallMaterial;ceilingHeight?:number;lightingPreset?:LightingPreset;showCeiling?:boolean;wallCutaway?:boolean;showZoneTint3D?:boolean;showLightsIn2D?:boolean;shopType?:string};
+export type Item={id:string;catalogId?:string;specification?:string;operationFace?:'positive-y'|'none';model?:ModelVariant;kind:Kind;name:string;x:number;y:number;w:number;d:number;h:number;rotation:number;color:string;elevation?:number;locked?:boolean;hidden?:boolean;fontSize?:number;zoneId?:string;wallId?:string;offset?:number;sill?:number;flipped?:boolean;hingeRight?:boolean;freeStanding?:boolean;polygon?:Point[];pointType?:'entrance'|'exhaust'|'water'|'drain'|'power';verification?:'pending'|'confirmed';notes?:string;seats?:number;supportId?:string;measure?:{a:string;b:string;distance:number}};
 export type ProjectMetadata={customer:string;site:string;purpose:string;notes:string;propertyId?:string;inquiryId?:string};
 export type Point={x:number;y:number};
 export type Underlay={assetId:string;name:string;pixelWidth:number;pixelHeight:number;x:number;y:number;mmPerPixel:number;rotation:number;opacity:number;hidden:boolean;locked:boolean;calibration?:{points:[Point,Point];distance:number}};
 export type PlanningArea={id:string;name:string;color:string;outline:Point[]};
 export type LayoutGroup={id:string;name:string;members:string[];seats?:number};
-export type Project={id:string;schemaVersion:6;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number};
-export function projectIdentity() { const now=new Date().toISOString(); return {id:crypto.randomUUID(),schemaVersion:6 as const,createdAt:now,updatedAt:now,metadata:{customer:'',site:'',purpose:'',notes:''}}; }
-export function blankProject(name='未命名方案'):Project { return {...projectIdentity(),name,width:20000,height:12000,items:[]}; }
-export type CatalogEntry={id?:string;model?:ModelVariant;kind:Kind;name:string;w:number;d:number;h:number;color:string;group:string;seats?:number;operationFace?:Item['operationFace'];specification?:string;notes?:string};
+export type Project={id:string;schemaVersion:7;createdAt:string;updatedAt:string;metadata:ProjectMetadata;name:string;width:number;height:number;outline?:Point[];items:Item[];underlay?:Underlay;planningAreas?:PlanningArea[];groups?:LayoutGroup[];clearance?:number;style?:ProjectStyle};
+export const defaultProjectStyle:Required<Omit<ProjectStyle,'shopType'>>={floorMaterial:'terrazzo',wallMaterial:'warm-cream',ceilingHeight:3200,lightingPreset:'warm-dining',showCeiling:false,wallCutaway:false,showZoneTint3D:true,showLightsIn2D:true};
+export function resolveStyle(project:Pick<Project,'style'>){return {...defaultProjectStyle,...(project.style??{})};}
+export function projectIdentity() { const now=new Date().toISOString(); return {id:crypto.randomUUID(),schemaVersion:7 as const,createdAt:now,updatedAt:now,metadata:{customer:'',site:'',purpose:'',notes:''}}; }
+export function blankProject(name='未命名方案'):Project { return {...projectIdentity(),name,width:12000,height:9000,style:{...defaultProjectStyle},items:[]}; }
+export type CatalogEntry={id?:string;model?:ModelVariant;kind:Kind;name:string;w:number;d:number;h:number;color:string;group:string;seats?:number;elevation?:number;operationFace?:Item['operationFace'];specification?:string;notes?:string};
 // IDs are literal, frozen catalog identities. Do not renumber when reordering entries.
 export const catalog:CatalogEntry[]=[
 {id:'builtin-001',kind:'column',model:'column',name:'矩形柱体',w:600,d:600,h:2800,color:'#a2aaa4',group:'现场设施'},
@@ -20,7 +26,7 @@ export const catalog:CatalogEntry[]=[
 {id:'builtin-006',kind:'table',model:'rect-table',name:'六人长桌',w:1800,d:800,h:750,color:'#d9b98c',group:'餐桌椅'},
 {id:'builtin-007',kind:'table',model:'round-table',name:'圆餐桌',w:1200,d:1200,h:750,color:'#d9b98c',group:'餐桌椅'},
 {id:'builtin-008',kind:'chair',model:'chair',seats:1,name:'餐椅',w:420,d:450,h:850,color:'#8b9aab',group:'餐桌椅'},
-{id:'builtin-009',kind:'chair',model:'bench',name:'长凳',w:1200,d:380,h:450,color:'#8b9aab',group:'餐桌椅'},
+{id:'builtin-009',kind:'chair',model:'bench',seats:3,name:'长凳',w:1200,d:380,h:450,color:'#c8a477',group:'餐桌椅'},
 {id:'builtin-010',kind:'counter',model:'buffet',name:'自助取餐台',w:2400,d:750,h:900,color:'#8ca7a0',group:'餐饮设备'},
 {id:'builtin-011',kind:'counter',model:'worktable',name:'操作工作台',w:1800,d:700,h:850,color:'#a6aeb7',group:'餐饮设备'},
 {id:'builtin-012',kind:'sink',model:'sink',name:'双槽洗手池',w:1200,d:650,h:850,color:'#91a9b7',group:'餐饮设备'},
@@ -28,9 +34,9 @@ export const catalog:CatalogEntry[]=[
 {id:'builtin-014',kind:'fridge',model:'chest-freezer',name:'冷柜',w:1200,d:700,h:850,color:'#9eb8c7',group:'厨房设备'},
 {id:'builtin-015',kind:'stove',model:'stove',name:'双头炉灶',w:1200,d:900,h:850,color:'#87919b',group:'厨房设备'},
 {id:'builtin-016',kind:'shelf',model:'shelf',name:'储物货架',w:1200,d:450,h:1800,color:'#b9a58c',group:'收纳设施'},
-{id:'builtin-017',kind:'wall',model:'wall',name:'墙体',w:4000,d:200,h:2800,color:'#dddcd3',group:'空间构件'},
-{id:'builtin-018',kind:'door',model:'door',name:'单开门',w:900,d:200,h:2100,color:'#b59a75',group:'空间构件'},
-{id:'builtin-019',kind:'door',model:'double-door',name:'双开门',w:1600,d:200,h:2100,color:'#b59a75',group:'空间构件'},
+{id:'builtin-017',kind:'wall',model:'wall',name:'墙体',w:4000,d:200,h:3000,color:'#eee8de',group:'空间构件'},
+{id:'builtin-018',kind:'door',model:'door',name:'单开门',w:900,d:200,h:2150,color:'#b59a75',group:'空间构件'},
+{id:'builtin-019',kind:'door',model:'double-door',name:'双开门',w:1600,d:200,h:2200,color:'#b59a75',group:'空间构件'},
 {id:'builtin-020',kind:'window',model:'window',name:'推拉窗',w:1500,d:200,h:1200,color:'#7d919b',group:'空间构件'},
 {id:'builtin-021',kind:'partition',model:'partition',name:'隔断',w:2000,d:100,h:1800,color:'#b7c0c8',group:'空间构件'},
 {id:'builtin-022',"kind": "table", "model": "rect-table", "name": "双人方桌", "w": 800, "d": 800, "h": 750, "color": "#cfb18a", "group": "餐桌椅"},
@@ -40,9 +46,9 @@ export const catalog:CatalogEntry[]=[
 {id:'builtin-026',"kind": "table", "model": "fold-table", "name": "折叠培训桌", "w": 1500, "d": 600, "h": 740, "color": "#d0b58e", "group": "餐桌椅"},
 {id:'builtin-027',"kind": "table", "model": "round-table", "name": "双人洽谈圆桌", "w": 700, "d": 700, "h": 730, "color": "#d8c9ad", "group": "餐桌椅"},
 {id:'builtin-028',"kind": "chair", "model": "stool", "seats": 1, "name": "吧台高脚凳", "w": 420, "d": 420, "h": 750, "color": "#82735d", "group": "餐桌椅"},
-{id:'builtin-029',"kind": "chair", "model": "chair", "name": "塑料餐椅", "w": 460, "d": 500, "h": 820, "color": "#b3bca3", "group": "餐桌椅"},
-{id:'builtin-030',"kind": "chair", "model": "sofa", "name": "双人卡座沙发", "w": 1200, "d": 650, "h": 950, "color": "#5b796d", "group": "餐桌椅"},
-{id:'builtin-031',"kind": "chair", "model": "waiting-bench", "name": "三人等候排椅", "w": 1800, "d": 600, "h": 850, "color": "#718c9b", "group": "餐桌椅"},
+{id:'builtin-029',"kind": "chair", "model": "chair", "seats": 1, "name": "塑料餐椅", "w": 460, "d": 500, "h": 820, "color": "#b3bca3", "group": "餐桌椅"},
+{id:'builtin-030',"kind": "chair", "model": "sofa", "seats": 2, "name": "双人卡座沙发", "w": 1200, "d": 650, "h": 950, "color": "#5b796d", "group": "餐桌椅"},
+{id:'builtin-031',"kind": "chair", "model": "waiting-bench", "seats": 3, "name": "三人等候排椅", "w": 1800, "d": 600, "h": 850, "color": "#718c9b", "group": "餐桌椅"},
 {id:'builtin-032',"kind": "counter", "model": "cashier", "name": "收银台", "w": 1200, "d": 650, "h": 1100, "color": "#b0a18c", "group": "餐饮服务"},
 {id:'builtin-033',"kind": "counter", "model": "return-counter", "name": "餐具回收台", "w": 1500, "d": 750, "h": 900, "color": "#aebbb9", "group": "餐饮服务"},
 {id:'builtin-034',"kind": "shelf", "model": "tray-rack", "name": "托盘餐具架", "w": 900, "d": 500, "h": 1400, "color": "#b7c2c4", "group": "餐饮服务"},
@@ -78,10 +84,38 @@ export const catalog:CatalogEntry[]=[
 {id:'builtin-064',"kind": "counter", "model": "rice-cooker", "name": "商用电饭煲", "w": 550, "d": 550, "h": 500, "color": "#b5c1bd", "group": "小型设备"},
 {id:'builtin-065',"kind": "partition", "model": "glass-partition", "name": "玻璃隔断", "w": 2000, "d": 100, "h": 2100, "color": "#7f9b9e", "group": "空间构件"},
 {id:'builtin-066',"kind": "partition", "model": "slat-partition", "name": "木格栅隔断", "w": 1800, "d": 120, "h": 2000, "color": "#b28e60", "group": "空间构件"},
-{id:'builtin-067',"kind": "window", "model": "fixed-window", "name": "固定玻璃窗", "w": 1200, "d": 200, "h": 1000, "color": "#698793", "group": "空间构件"}
+{id:'builtin-067',"kind": "window", "model": "fixed-window", "name": "固定玻璃窗", "w": 1200, "d": 200, "h": 1000, "color": "#698793", "group": "空间构件"},
+// Lighting fixtures (照明灯具)
+{id:'builtin-068',kind:'lighting',model:'pendant-lamp',name:'暖光餐桌吊灯',w:420,d:420,h:700,elevation:2150,color:'#d8a25e',group:'照明灯具'},
+{id:'builtin-069',kind:'lighting',model:'linear-light',name:'条形餐桌吊灯',w:1500,d:140,h:500,elevation:2300,color:'#343a3d',group:'照明灯具'},
+{id:'builtin-070',kind:'lighting',model:'track-light',name:'商用轨道射灯',w:1800,d:200,h:240,elevation:2750,color:'#2f3438',group:'照明灯具'},
+{id:'builtin-071',kind:'lighting',model:'wall-sconce',name:'氛围壁灯',w:240,d:180,h:360,elevation:1850,color:'#c99556',group:'照明灯具'},
+{id:'builtin-072',kind:'lighting',model:'chandelier',name:'环形主吊灯',w:950,d:950,h:650,elevation:2350,color:'#cfa058',group:'照明灯具'},
+{id:'builtin-073',kind:'lighting',model:'kitchen-panel-light',name:'厨房防油平板灯',w:1200,d:320,h:80,elevation:2750,color:'#edf2f4',group:'照明灯具'},
+// Decor & Branding (软装与门头)
+{id:'builtin-074',kind:'decor',model:'potted-plant',name:'大型绿植盆栽',w:650,d:650,h:1700,color:'#4c7a52',group:'软装与门头'},
+{id:'builtin-075',kind:'decor',model:'planter-divider',name:'绿植花槽隔断',w:1500,d:380,h:1150,color:'#8a6d4f',group:'软装与门头'},
+{id:'builtin-076',kind:'decor',model:'wall-art',name:'装饰挂画组合',w:1400,d:60,h:850,elevation:1350,color:'#c6845c',group:'软装与门头'},
+{id:'builtin-077',kind:'decor',model:'menu-board',name:'发光菜单灯箱',w:1800,d:120,h:720,elevation:1950,color:'#2a3236',group:'软装与门头'},
+{id:'builtin-078',kind:'decor',model:'shop-sign',name:'门头发光招牌',w:3200,d:220,h:760,elevation:2350,color:'#274238',group:'软装与门头'},
+{id:'builtin-079',kind:'decor',model:'wood-feature-wall',name:'木饰面造型墙',w:2000,d:80,h:2800,color:'#b78d5e',group:'软装与门头'},
+{id:'builtin-080',kind:'decor',model:'podium',name:'迎宾点餐台',w:650,d:500,h:1150,color:'#584b40',group:'软装与门头'},
+{id:'builtin-081',kind:'decor',model:'tv-screen',name:'叫号宣传屏',w:1200,d:80,h:700,elevation:1950,color:'#20262b',group:'软装与门头'},
+// Commercial storefront & hospitality furniture/counters
+{id:'builtin-082',kind:'window',model:'storefront-window',name:'商场落地橱窗',w:3000,d:200,h:2400,color:'#4f636b',group:'空间构件'},
+{id:'builtin-083',kind:'window',model:'serving-window',name:'明档出餐窗',w:2000,d:200,h:1100,color:'#697d85',group:'空间构件'},
+{id:'builtin-084',kind:'door',model:'glass-double-door',name:'商场双开玻璃门',w:1800,d:200,h:2300,color:'#4a5e66',group:'空间构件'},
+{id:'builtin-085',kind:'table',model:'booth-table',name:'四人卡座餐桌',w:1200,d:750,h:750,color:'#bc8d5d',group:'餐桌椅'},
+{id:'builtin-086',kind:'table',model:'marble-round-table',name:'大理石圆桌',w:850,d:850,h:750,color:'#e4dfd5',group:'餐桌椅'},
+{id:'builtin-087',kind:'chair',model:'dining-armchair',seats:1,name:'软包扶手餐椅',w:520,d:520,h:800,color:'#9b6b4a',group:'餐桌椅'},
+{id:'builtin-088',kind:'chair',model:'curved-booth',seats:2,name:'软包靠背卡座',w:1200,d:620,h:1040,color:'#4f6d60',group:'餐桌椅'},
+{id:'builtin-089',kind:'counter',model:'tea-bar',name:'饮品水吧台',w:2400,d:750,h:960,color:'#596d65',group:'餐饮服务'},
+{id:'builtin-090',kind:'table',model:'hotpot-table',name:'四人电磁炉桌',w:1300,d:880,h:750,color:'#9b724d',group:'餐桌椅'},
+{id:'builtin-091',kind:'counter',model:'sushi-display',name:'明档冷藏食材柜',w:1800,d:800,h:1260,color:'#7f939a',group:'餐饮服务'},
+{id:'builtin-092',kind:'counter',model:'dish-pass',name:'备餐传菜台',w:1600,d:700,h:1350,color:'#9ea9af',group:'餐饮设备'}
 ];
 export const uid=()=>crypto.randomUUID();
-export const initial:Project={...projectIdentity(),name:'食堂示例方案',width:20000,height:12000,items:[
+export const initial:Project={...projectIdentity(),name:'食堂示例方案',width:20000,height:12000,style:{...defaultProjectStyle},items:[
 {id:'zone-dining',kind:'zone',name:'就餐区',x:500,y:500,w:11500,d:11000,h:0,rotation:0,color:'#e9f2e9'},
 {id:'zone-kitchen',kind:'zone',name:'厨房区',x:12500,y:500,w:7000,d:7000,h:0,rotation:0,color:'#f8eee2'},
 {id:'zone-pickup',kind:'zone',name:'取餐区',x:12500,y:7800,w:7000,d:3700,h:0,rotation:0,color:'#e9eff8'},
@@ -94,5 +128,5 @@ export const initial:Project={...projectIdentity(),name:'食堂示例方案',wid
 {id:'k2',kind:'stove',model:'stove',name:'双头炉灶',x:14000,y:1800,w:1200,d:900,h:850,rotation:0,color:'#87919b'}
 ]};
 export function modelOf(item: {kind:Kind;name:string;model?:ModelVariant}):ModelVariant {
- return item.model ?? catalog.find(c=>c.name===item.name)?.model ?? ({column:'column',fixture:'fixture',utility:'utility',table:'rect-table',chair:'chair',counter:'worktable',sink:'sink',fridge:'upright-fridge',stove:'stove',shelf:'shelf',partition:'partition',zone:'partition',wall:'wall',door:'door',window:'window',stairs:'stairs',text:'partition',dimension:'partition',leader:'partition'} as const)[item.kind];
+ return item.model ?? catalog.find(c=>c.name===item.name)?.model ?? ({column:'column',fixture:'fixture',utility:'utility',table:'rect-table',chair:'chair',counter:'worktable',sink:'sink',fridge:'upright-fridge',stove:'stove',shelf:'shelf',partition:'partition',zone:'partition',wall:'wall',door:'door',window:'window',stairs:'stairs',text:'partition',dimension:'partition',leader:'partition',lighting:'pendant-lamp',decor:'potted-plant'} as const)[item.kind];
 }

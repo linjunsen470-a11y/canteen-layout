@@ -59,7 +59,7 @@ export default async function runG1StorageChecks() {
   assert(!(await db.readProject(c)).deletedAt, '项目恢复可打开');
   const legacy={name:'旧矩形',width:9000,height:6000,items:[]};
   const rect=parseProject(legacy);
-  assert(rect.width===9000&&rect.height===6000&&rect.schemaVersion===6,'旧矩形 JSON 升级保留尺寸');
+  assert(rect.width===9000&&rect.height===6000&&rect.schemaVersion===7,'旧矩形 JSON 升级保留尺寸');
   const l=parseProject({...legacy,name:'旧 L 形',outline:[{x:0,y:0},{x:9000,y:0},{x:9000,y:3000},{x:4000,y:3000},{x:4000,y:6000},{x:0,y:6000}]});
   assert(siteArea(l)===39000000&&JSON.stringify(parseProject(JSON.parse(JSON.stringify(l))))===JSON.stringify(l),'凹多边形 JSON 往返保持轮廓与面积');
   let refused=false;try{parseProject({...l,schemaVersion:99})}catch(e){refused=e.message.includes('版本')}
