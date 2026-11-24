@@ -12,6 +12,9 @@ export function checkSketchEdge(corners: Point[], end: Point, closing: boolean) 
   if (horizontal === (start.x === end.x)) throw Error('请选择水平或垂直方向的另一个墙角');
   if (!closing && corners.length >= 64) throw Error('最多支持 64 个墙角');
   if (closing && corners.length < 4) throw Error('闭合轮廓至少需要四个墙角');
+  if (closing && (corners[0].y === corners[1].y) === horizontal) {
+    throw Error('末段墙与首段墙共线，请退回上一点并从墙角闭合');
+  }
   const prev = corners.at(-2);
   if (prev && (prev.y === start.y) === horizontal) throw Error('请在墙角转向，或退回上一点更正墙长');
   for (let i = closing ? 1 : 0; i < corners.length - 2; i++) {

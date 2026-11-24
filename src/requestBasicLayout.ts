@@ -8,7 +8,16 @@ export function requestBasicLayout(...args: Parameters<typeof generateBasicLayou
       if (data.error) reject(new Error(data.error));
       else resolve(data.result);
     };
-    worker.onerror = () => { worker.terminate(); reject(new Error('基础布局生成失败，请重试')); };
-    worker.postMessage(args);
+    const fail = () => {
+      worker.terminate();
+      reject(new Error('基础布局生成失败，请重试'));
+    };
+    worker.onerror = fail;
+    worker.onmessageerror = fail;
+    try {
+      worker.postMessage(args);
+    } catch {
+      fail();
+    }
   });
 }

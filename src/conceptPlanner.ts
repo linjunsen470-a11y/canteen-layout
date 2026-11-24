@@ -467,7 +467,7 @@ function closerThan(a: BoundedFootprint, b: BoundedFootprint, gap: number) {
   return boxGap(a, b) < gap && polygonDistance(a.points, b.points).distance < gap;
 }
 
-function nearestTableGap(project: Project) {
+export function nearestTableGap(project: Project) {
   const group = new Map(project.groups?.flatMap(g => g.members.map(id => [id, g.id] as const)));
   const bodies = project.items.filter(i => !i.hidden && isSeatFurniture(i))
     .map(i => ({ group: group.get(i.id) ?? i.id, shape: bounded(footprint(i)) }));
@@ -876,7 +876,6 @@ export function generateConceptLayout(baseProject: Project, rawOptions: ConceptP
       }
       cy += tableIdx > beforeRow ? yStep : 450;
     }
-    if (basic && newGroups.length === groupLimit) warnings.push('基础草稿先摆 24 组桌椅，剩余面积可按需复制桌组');
   }
 
   // 6. Optional subtle dining pendant lights over placed table groups

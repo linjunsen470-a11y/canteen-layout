@@ -1,4 +1,4 @@
-import { defaultConceptOptions, generateConceptLayout, type ConceptBusinessType } from './conceptPlanner';
+import { defaultConceptOptions, generateConceptLayout, nearestTableGap, type ConceptBusinessType } from './conceptPlanner';
 import { reachableFromEntry } from './entryAccess';
 import type { Item, Point, Project } from './model';
 import { parseProject } from './projectIO';
@@ -52,14 +52,16 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
           if (issue.type !== '参考净距') issue.ids.forEach(id => omit(byId.get(id)!));
         }
       }
-      const kitchen = kitchenZoneIds.map(id => byId.get(id)!);
-      const entries = project.items.filter(i => !i.hidden && i.pointType === 'entrance');
+      const conflictFree = omitted.size
+        ? { ...project, items: project.items.filter(i => !omitted.has(i.id)) }
+        : project;
+      const kitchen = kitchenZoneIds.filter(id => !omitted.has(id)).map(id => byId.get(id)!);
+      const entries = conflictFree.items.filter(i => !i.hidden && i.pointType === 'entrance');
       const entryInDining = entries.every(i => !kitchen.some(z => inPolygon({x:i.x+i.w/2,y:i.y+i.d/2}, footprint(z))));
-      const accessible = reachableFromEntry(project);
+      const accessible = reachableFromEntry(conflictFree);
       if (accessible) {
-        // Customers should be able to reach their seats without crossing the cookline.
-        const publicAccess = reachableFromEntry(project, kitchen)!;
-        for (const i of project.items) {
+        const publicAccess = reachableFromEntry(conflictFree, kitchen)!;
+        for (const i of conflictFree.items) {
           if (i.kind === 'chair' && !publicAccess(i)) omit(i);
           if (['chair','counter','stove','fridge','sink'].includes(i.kind) && !accessible(i)) omit(i);
         }
@@ -74,10 +76,15 @@ export function generateBasicLayout(shell: Project, business: ConceptBusinessTyp
       const cook = business === 'cafe' ? has('counter','tea-bar') : accepted.items.some(i => i.kind === 'stove' && i.model !== 'hood' && !i.hidden);
       const functions = [cook, has('sink'), has('counter','cashier'), has('fridge')];
       const seats = accepted.items.filter(i => i.kind === 'chair' && !i.hidden).reduce((s,i) => s+(i.seats ?? 1),0);
-      const score = [functions.filter(Boolean).length, Number(cook), Number(has('sink')), Number(has('counter','cashier')), Number(entryInDining),
-        Number(!estimate.nearestTables || estimate.nearestTables.distance >= options.aisleMm-.1), seats, -omitted.size];
+      const nearest = omitted.size ? nearestTableGap(accepted) : estimate.nearestTables;
+      const diningService = cook && has('sink') && seats > 0 && entryInDining;
+      const score = [Number(diningService), functions.filter(Boolean).length, Number(cook), Number(has('sink')), Number(has('counter','cashier')), Number(entryInDining),
+        Number(!nearest || nearest.distance >= options.aisleMm-.1), seats, -omitted.size];
       if (best && !prefer(score,best.score)) continue;
       const warnings = [...estimate.warnings];
+      if (estimate.tableGroups === 24 && accepted.groups?.length === 24) {
+        warnings.push('基础草稿先摆 24 组桌椅，剩余面积可按需复制桌组');
+      }
       if (omitted.size) {
         const names = [...new Set(project.items.filter(i => omitted.has(i.id)).map(i => i.name))];
         warnings.push('因碰撞或入口通路不足已省略' + names.join('、'));
