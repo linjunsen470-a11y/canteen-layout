@@ -61,7 +61,7 @@ export function placeSketchFixture(project: Project, kind: SketchFixture, point:
     if (offset === undefined) throw Error('这段墙没有足够的开口净长');
     const along = offset - datum.start + item.w / 2 - 100;
     const marker = surveyWallInwardPoint(datum, along, 0, 200, 200, false);
-    added = [{ ...item, offset }, { ...item, ...marker, id: uid(), name: '顾客入口', kind: 'utility', wallId: undefined,
+    added = [{ ...item, offset }, { ...marker, id: uid(), name: '顾客入口', kind: 'utility', color: '#659e71', rotation: 0,
       w: 200, d: 200, h: 50, pointType: 'entrance', verification: 'pending' }];
   } else if (!(width >= 100 && depth >= 100) || !contains(project.survey!.corners, footprint(item))) {
     throw Error('固定构件必须完整位于铺位内，宽深至少 0.1 米');
