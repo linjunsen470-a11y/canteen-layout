@@ -412,6 +412,74 @@ try {
   const legacyPartial = parseProject(JSON.parse(JSON.stringify({ ...bistroDraft, style: { floorMaterial: 'concrete', wallMaterial: 'plaster' } })));
   assert.equal(activeQuickThemeId(legacyPartial), 'raw-concrete');
   console.log('PASS 首稿业态默认风格、手工材质保护、快捷切换零破坏与旧项目缺省样式回读');
+
+  // Step 5: local drag clearance check (nearby groups, tight/ok/out-of-range, surveyWall, overlap, 300-item speed)
+  const { computeDragClearance } = await load('spaceChecks');
+  const dragShop = sketchShell(dimensionedOutline(10000, 8000));
+  const t1 = { id: 'dt1', kind: 'table', model: 'rect-table', name: '桌1', x: 3000, y: 3000, w: 1200, d: 800, h: 750, rotation: 0, color: '#cfa777' };
+  const c1 = { id: 'dc1', kind: 'chair', model: 'chair', name: '椅1', x: 3350, y: 2520, w: 450, d: 450, h: 820, rotation: 0, color: '#8d6247' };
+  const t2 = { id: 'dt2', kind: 'table', model: 'rect-table', name: '桌2', x: 4800, y: 3000, w: 1200, d: 800, h: 750, rotation: 0, color: '#cfa777' };
+  const baseDragProject = {
+    ...dragShop,
+    clearance: 900,
+    items: [...dragShop.items, t1, c1, t2],
+    groups: [{ id: 'dg1', name: '桌组1', members: ['dt1', 'dc1'], seats: 1 }],
+  };
+
+  // 600 mm gap between dt1 (right=4200) and dt2 (left=4800): ignores own chair dc1, flags tight (< 900 mm)
+  const tightGap = computeDragClearance(baseDragProject, ['dt1', 'dc1']);
+  assert.ok(tightGap, '应返回邻近桌组净距');
+  assert.equal(tightGap.targetId, 'dt2');
+  assert.equal(tightGap.targetKind, 'item');
+  assert.ok(Math.abs(tightGap.distance - 600) < 0.5, `expected 600mm, got ${tightGap.distance}`);
+  assert.equal(tightGap.tight, true);
+  assert.equal(tightGap.overlapping, false);
+
+  // 1100 mm gap (>= 900 mm, <= 900 + 600 mm): ok (not tight)
+  const okProject = { ...baseDragProject, items: baseDragProject.items.map(i => i.id === 'dt2' ? { ...i, x: 5300 } : i) };
+  const okGap = computeDragClearance(okProject, ['dt1', 'dc1']);
+  assert.ok(okGap);
+  assert.equal(okGap.targetId, 'dt2');
+  assert.ok(Math.abs(okGap.distance - 1100) < 0.5);
+  assert.equal(okGap.tight, false);
+
+  for (const distance of [0, 200, 221]) {
+    const partition = { ...t2, id: 'divider', kind: 'partition', model: 'partition', x: t1.x + t1.w + distance, w: 100 };
+    const gap = computeDragClearance({ ...okProject, items: [...okProject.items, partition] }, [t1.id]);
+    assert.equal(gap.targetId, partition.id);
+    assert.equal(gap.distance, distance);
+    assert.equal(gap.tight, true);
+  }
+
+  // Far away (> clearance + 600 mm from all items and walls): null
+  const farProject = { ...baseDragProject, items: baseDragProject.items.filter(i => i.id !== 'dt2') };
+  assert.equal(computeDragClearance(farProject, ['dt1', 'dc1']), null);
+
+  // Near surveyed inner wall (inner left wall is at x = survey.thickness = 200; placing dt1 at x = 650 => 450 mm)
+  const wallGapProject = { ...farProject, items: farProject.items.map(i => i.id === 'dt1' ? { ...i, x: 650 } : i.id === 'dc1' ? { ...i, x: 1000 } : i) };
+  const wallGap = computeDragClearance(wallGapProject, ['dt1', 'dc1']);
+  assert.ok(wallGap);
+  assert.equal(wallGap.targetKind, 'wall');
+  assert.ok(Math.abs(wallGap.distance - 450) < 1, `expected ~450mm to surveyWall, got ${wallGap.distance}`);
+  assert.equal(wallGap.tight, true);
+
+  // Overlapping table => distance 0, overlapping true, tight true
+  const overlapProject = { ...baseDragProject, items: baseDragProject.items.map(i => i.id === 'dt2' ? { ...i, x: 4000 } : i) };
+  const overlapGap = computeDragClearance(overlapProject, ['dt1', 'dc1']);
+  assert.ok(overlapGap && overlapGap.overlapping && overlapGap.tight && overlapGap.distance === 0);
+
+  // 300-item synthetic scene micro-benchmark (must stay well below 2 ms per call)
+  const items300 = Array.from({ length: 300 }, (_, n) => ({
+    id: 'p-' + n, kind: 'table', model: 'rect-table', name: '桌' + n,
+    x: 1000 + (n % 20) * 1800, y: 1000 + Math.floor(n / 20) * 1800,
+    w: 1200, d: 800, h: 750, rotation: 0, color: '#cfa777',
+  }));
+  const proj300 = { ...dragShop, width: 40000, height: 30000, outline: undefined, survey: undefined, clearance: 900, items: items300 };
+  const t0 = performance.now();
+  for (let k = 0; k < 200; k++) computeDragClearance(proj300, ['p-0']);
+  const avgMs = (performance.now() - t0) / 200;
+  assert.ok(avgMs < 2, `300-item computeDragClearance avg ${avgMs.toFixed(3)} ms should be < 2 ms`);
+  console.log(`PASS 拖拽实时净距计算（桌组/实测内墙/重叠/超距过滤与 300 物件均耗时 ${avgMs.toFixed(2)} ms）`);
 } finally {
   await server.close();
 }

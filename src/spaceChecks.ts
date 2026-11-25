@@ -1,8 +1,19 @@
-import { Item, Project, modelOf } from './model';
+import { Item, Point, Project, modelOf } from './model';
 import { footprint, bounds, contains, inPolygon, polygonDistance, doorSwings, baseHeight, supportFor } from './spatial';
 import { polygonCoverage } from './polygonArea';
 import { siteOutline } from './site';
+import { surveyWall } from './interiorSurvey';
 export type SpaceIssue={ids:string[];type:string;message:string};
+export type DragClearance = {
+  a: Point;
+  b: Point;
+  distance: number;
+  reference: number;
+  tight: boolean;
+  overlapping: boolean;
+  targetKind: 'wall' | 'item';
+  targetId: string;
+};
 const wallMountedModels=new Set(['shop-sign','wall-art','menu-board','tv-screen','wood-feature-wall','wall-sconce']);
 const isWallOrOpening=(i:Item)=>i.kind==='wall'||i.kind==='partition'||i.kind==='door'||i.kind==='window';
 const isStructural=(i:Item)=>['wall','partition','door','window','column','fixture','stairs'].includes(i.kind);
@@ -67,4 +78,121 @@ export function inspectSpace(p: Project, activeId: string | null, measureAisles 
  for(const door of bodies.filter(i=>i.kind==='door'))for(const other of bodies){if(other.id===door.id||other.id===door.wallId||other.kind==='door'||other.kind==='lighting'||isWallMounted(other)||baseHeight(p,other)>=door.h)continue;if(doorSwings(door).some(swing=>polygonCoverage(swing,[footprint(other)]).union>1))issues.push({ids:[door.id,other.id],type:'门扇开启范围',message:`${door.name} 的示意开启范围与 ${other.name} 重叠`})}
  const clearances = [...new Set(nearest.values())].sort((a,b) => a.distance-b.distance).slice(0,8);
  return { issues, clearances };
+}
+
+const nonDragClearanceKinds = new Set<Item['kind']>(['zone', 'text', 'dimension', 'leader', 'utility', 'window', 'lighting']);
+
+function fastHalfExtents(item: Item): { hx: number; hy: number } {
+  const r = ((item.rotation % 180) + 180) % 180;
+  if (r === 0) return { hx: item.w / 2, hy: item.d / 2 };
+  if (r === 90) return { hx: item.d / 2, hy: item.w / 2 };
+  const rad = item.rotation * Math.PI / 180;
+  const c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
+  return { hx: (item.w * c + item.d * s) / 2, hy: (item.w * s + item.d * c) / 2 };
+}
+
+// Fast local clearance check for the currently dragged item(s): broad-phase AABB expanded by clearance + 600 mm,
+// narrow-phase exact polygon/surveyWall distance only against nearby hits so 300-item drags stay smooth.
+export function computeDragClearance(p: Project, draggedIds: readonly string[]): DragClearance | null {
+  if (!draggedIds.length) return null;
+  const draggedSet = new Set(draggedIds);
+  const excluded = new Set(draggedIds);
+  for (const g of p.groups ?? []) {
+    if (g.members.some(id => draggedSet.has(id))) {
+      for (const id of g.members) excluded.add(id);
+    }
+  }
+
+  const active: Array<{ item: Item; poly: Point[]; bottom: number }> = [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const item of p.items) {
+    if (!draggedSet.has(item.id) || item.hidden) continue;
+    if (nonDragClearanceKinds.has(item.kind) || isWallOrOpening(item) || isWallMounted(item)) continue;
+    const bottom = baseHeight(p, item);
+    if (item.kind === 'decor' && bottom >= 1100) continue;
+    const poly = footprint(item);
+    active.push({ item, poly, bottom });
+    for (const pt of poly) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+  }
+  if (!active.length) return null;
+
+  const reference = p.clearance ?? 900;
+  const margin = reference + 600;
+  const qMinX = minX - margin, qMinY = minY - margin, qMaxX = maxX + margin, qMaxY = maxY + margin;
+
+  let hiddenWalls: Set<string> | null = null;
+  for (const item of p.items) {
+    if (item.kind === 'wall' && item.hidden) {
+      if (!hiddenWalls) hiddenWalls = new Set();
+      hiddenWalls.add(item.id);
+    }
+  }
+
+  let best: DragClearance | null = null;
+  for (const other of p.items) {
+    if (other.hidden || excluded.has(other.id)) continue;
+    if (nonDragClearanceKinds.has(other.kind) || other.kind === 'door' || isWallMounted(other)) continue;
+    if (other.wallId && hiddenWalls?.has(other.wallId)) continue;
+
+    // Cheap AABB broad-phase filter before any polygon/height allocation.
+    const cx = other.x + other.w / 2;
+    const cy = other.y + other.d / 2;
+    const { hx, hy } = fastHalfExtents(other);
+    if (cx + hx < qMinX || cx - hx > qMaxX || cy + hy < qMinY || cy - hy > qMaxY) continue;
+
+    const otherBottom = baseHeight(p, other);
+    if (other.kind === 'decor' && otherBottom >= 1100) continue;
+
+    const isWall = other.kind === 'wall';
+    const otherFootprint = footprint(other);
+    const datum = isWall && p.survey ? surveyWall(p, other) : undefined;
+    const measurePoly = datum ? [datum.a, datum.b] : otherFootprint;
+
+    for (const ab of active) {
+      if (ab.item.wallId === other.id || other.wallId === ab.item.id) continue;
+      if (Math.min(ab.bottom + ab.item.h, otherBottom + other.h) - Math.max(ab.bottom, otherBottom) < 1) continue;
+      if (isHoodOverStove(ab.item, other)) continue;
+
+      const overlap = polygonCoverage(ab.poly, [otherFootprint]).union;
+      if (overlap > 1) {
+        const gap = polygonDistance(ab.poly, measurePoly);
+        const candidate: DragClearance = {
+          a: gap.a,
+          b: gap.b,
+          distance: 0,
+          reference,
+          tight: true,
+          overlapping: true,
+          targetKind: isWall ? 'wall' : 'item',
+          targetId: other.id,
+        };
+        if (!best || !best.overlapping) best = candidate;
+        continue;
+      }
+
+      const gap = polygonDistance(ab.poly, measurePoly);
+      if (other.kind === 'partition' && isModularLine(ab.item) && gap.distance <= 220) continue;
+      if (!isWall && isModularLine(ab.item) && isModularLine(other) && gap.distance <= 200) continue;
+      if (gap.distance > margin) continue;
+
+      if (!best || gap.distance < best.distance) {
+        best = {
+          a: gap.a,
+          b: gap.b,
+          distance: gap.distance,
+          reference,
+          tight: reference > 0 && gap.distance < reference - 0.1,
+          overlapping: false,
+          targetKind: isWall ? 'wall' : 'item',
+          targetId: other.id,
+        };
+      }
+    }
+  }
+  return best;
 }

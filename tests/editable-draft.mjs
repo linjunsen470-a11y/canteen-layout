@@ -72,6 +72,28 @@ export async function testEditableDraft(browser, url) {
     const objectCenter = id => page.locator(`[data-plan] [data-item-id="${id}"]`).evaluate(el => {
       const p = new DOMPoint(0,0).matrixTransform(el.getScreenCTM()); return { x:p.x, y:p.y };
     });
+
+    // Live drag clearance feedback: drag group 0 close to group 1 (< clearance), verify alert ruler appears,
+    // disappears immediately on pointerup, and single undo restores pre-drag coordinates.
+    if (before.groups.length >= 2) {
+      const otherTable = before.items.find(i => before.groups[1].members.includes(i.id) && i.kind === 'table');
+      const from = await objectCenter(table.id);
+      const toward = await objectCenter(otherTable.id);
+      const ruler = page.locator('[data-drag-clearance="true"]');
+      assert.equal(await ruler.count(), 0);
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(from.x + (toward.x - from.x) * 0.72, from.y + (toward.y - from.y) * 0.72, { steps: 8 });
+      await ruler.waitFor({ state: 'visible' });
+      assert.equal(await ruler.getAttribute('data-tight'), 'true', '桌组拖近至小于参考净距时应显示警示态');
+      assert.match(await ruler.getAttribute('class') ?? '', /\bis-tight\b/);
+      assert.match(await ruler.locator('text').textContent() ?? '', /\d+\s*mm/);
+      await page.mouse.up();
+      assert.equal(await ruler.count(), 0, '松手后实时净距标尺应立即消失');
+      await button('撤销').click();
+      assert.deepEqual((await project()).items, before.items, '撤销一次应完整回到拖前位置');
+    }
+
     const start = await objectCenter(table.id);
     await page.mouse.move(start.x,start.y);
     await page.mouse.down();
