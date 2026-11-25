@@ -443,6 +443,14 @@ try {
   assert.ok(Math.abs(okGap.distance - 1100) < 0.5);
   assert.equal(okGap.tight, false);
 
+  for (const distance of [0, 200, 221]) {
+    const partition = { ...t2, id: 'divider', kind: 'partition', model: 'partition', x: t1.x + t1.w + distance, w: 100 };
+    const gap = computeDragClearance({ ...okProject, items: [...okProject.items, partition] }, [t1.id]);
+    assert.equal(gap.targetId, partition.id);
+    assert.equal(gap.distance, distance);
+    assert.equal(gap.tight, true);
+  }
+
   // Far away (> clearance + 600 mm from all items and walls): null
   const farProject = { ...baseDragProject, items: baseDragProject.items.filter(i => i.id !== 'dt2') };
   assert.equal(computeDragClearance(farProject, ['dt1', 'dc1']), null);

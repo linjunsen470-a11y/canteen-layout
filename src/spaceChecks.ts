@@ -176,7 +176,7 @@ export function computeDragClearance(p: Project, draggedIds: readonly string[]):
       }
 
       const gap = polygonDistance(ab.poly, measurePoly);
-      if (other.kind === 'partition' && gap.distance <= 220) continue;
+      if (other.kind === 'partition' && isModularLine(ab.item) && gap.distance <= 220) continue;
       if (!isWall && isModularLine(ab.item) && isModularLine(other) && gap.distance <= 200) continue;
       if (gap.distance > margin) continue;
 
