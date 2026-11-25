@@ -50,6 +50,12 @@ export async function testQuickExport(browser, url) {
     }
     assert.deepEqual(await page.evaluate(() => window.planHeaders), [false,true], '单独查看平面时才生成带页眉版本');
 
+    await dialog.getByRole('button', { name: '关闭' }).click();
+    await page.locator('.focus-toggle').click();
+    await page.locator('.app.is-focused').waitFor();
+    await button('导出图片').click();
+    await dialog.getByAltText('平面与立体合图预览').waitFor();
+
     // A/B compare: before saving a second same-shop draft, show empty-state hint and jump directly to 比较摆法.
     await button('A/B 对比图').click();
     await dialog.getByText(/项目库中暂无同铺方案/).waitFor();

@@ -86,6 +86,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
   const dialog = useRef<HTMLDialogElement>(null);
   const cache = useRef<ImageCache>({ compares: new Map() });
   const reqId = useRef(0);
+  const [open, setOpen] = useState(false);
   const rows = useProjectSession(s => s.rows);
 
   const [format, setFormat] = useState<Format>('sheet');
@@ -100,7 +101,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
     const same: CandidateEntry[] = [];
     const other: CandidateEntry[] = [];
     const map = new Map<string, CandidateEntry>();
-    for (const row of rows) {
+    for (const row of open ? rows : []) {
       if (row.deletedAt || row.id === project.id) continue;
       let parsed: Project;
       try { parsed = parseProject(row.project); } catch { continue; }
@@ -110,7 +111,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
       else other.push(entry);
     }
     return { sameShopCandidates: same, otherCandidates: other, byId: map };
-  }, [rows, project]);
+  }, [open, rows, project]);
 
   async function ensurePlanACapture() {
     const images = cache.current;
@@ -214,6 +215,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
       cache.current = { compares: new Map() };
       setCompareId('');
       setCompareMetrics(null);
+      setOpen(true);
       dialog.current!.showModal();
       void select(hasCurrent ? 'sheet' : 'plan');
     }}><ImageDown />导出图片</button>
@@ -221,7 +223,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
       ref={dialog}
       className="image-export"
       aria-label="导出图片"
-      onClose={() => { reqId.current++; }}
+      onClose={() => { reqId.current++; setOpen(false); }}
       onCancel={e => { if (busy) e.preventDefault(); }}
     >
       <header><h2>导出图片</h2><button disabled={busy} onClick={() => dialog.current!.close()}>关闭</button></header>
