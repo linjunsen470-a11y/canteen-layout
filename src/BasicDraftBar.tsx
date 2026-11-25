@@ -60,7 +60,11 @@ export default function BasicDraftBar({ project, notify }: { project: Project; n
         if (!await copyProject(name, next)) throw Error(useProjectSession.getState().message || '保存新稿失败');
         useWorkspace.getState().set({ view: 'split', focusMode: false, camera: 'oblique', move3D: false, propsOpen: false });
       } else {
-        if (comparison.current === undefined || !currentDraftChoices(comparison.snapshot)) return;
+        if (comparison.current === undefined || !currentDraftChoices(comparison.snapshot)) {
+          // The session no longer owns these candidates (e.g. another project was drafted meanwhile).
+          setComparison(undefined);
+          throw Error('候选摆法已失效，请重新比较或另存为新稿。');
+        }
         if (!useStore.getState().commit(next)) throw Error(useStore.getState().error || '应用摆法失败');
       }
       rememberDraftChoices(useStore.getState().project, comparison.choices, selected);

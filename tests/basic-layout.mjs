@@ -57,6 +57,19 @@ export async function testBasicLayout(load, loadScene) {
       const tables = parsed.items.filter(i => i.kind === 'table');
       assert.equal(a.tables, tables.length);
       arrangements.add(JSON.stringify(tables.map(i => [i.x,i.y,i.w,i.d]).sort()));
+      // The card label must describe where the kitchen really sits in the user's (unrotated) plan.
+      const kitchens = parsed.items.filter(i => i.kind === 'zone' && i.name.startsWith('后厨'));
+      const side = a.label.match(/^后厨在图(上方|左侧|下方|右侧)$/)?.[1];
+      if (side && kitchens.length) {
+        const xs = shop.survey.corners.map(p => p.x), ys = shop.survey.corners.map(p => p.y);
+        const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+        const area = kitchens.reduce((s,k) => s + k.w*k.d, 0);
+        const kx = kitchens.reduce((s,k) => s + (k.x+k.w/2)*k.w*k.d, 0) / area;
+        const ky = kitchens.reduce((s,k) => s + (k.y+k.d/2)*k.w*k.d, 0) / area;
+        const dx = kx - cx, dy = ky - cy;
+        const actual = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? '上方' : '下方') : (dx < 0 ? '左侧' : '右侧');
+        assert.equal(actual, side, `候选「${a.label}」的后厨中心 (${Math.round(kx)}, ${Math.round(ky)}) 与标签方位不符`);
+      }
       assert.deepEqual(checkSpace(parsed,null).filter(i => i.type !== '参考净距'), []);
       const fixed = new Map(shop.items.map(i=>[i.id,i]));
       for (const original of fixed.values()) {
