@@ -3,194 +3,28 @@ import { SceneFrame, frameItems, framePoints, frameShop, frameDistance } from '.
 import SceneRegionPicker, { SceneNavigation } from './SceneRegionPicker';
 import { useWallPlacement } from './wallPlacementState';
 import { groupSelection, movableSelection } from './layoutGroups';
-import { baseHeight } from './spatial';
-import { forwardRef, useImperativeHandle, memo, useMemo, useEffect, useRef, useState, ComponentRef } from 'react';
-import { Canvas, useThree, useFrame, ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, ContactShadows } from '@react-three/drei';
+import { forwardRef, useCallback, useImperativeHandle, memo, useMemo, useEffect, useRef, useState, ComponentRef } from 'react';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 import * as T from 'three';
 import { useStore } from './store';
 import { isEditable, isVisible } from './editorInteraction';
 import { useWorkspace } from './workspace';
 import { zoneCorners } from './zones';
-import { wallProfiles } from './wallJoints';
-import { Item, LightingPreset, Point, Project, modelOf, resolveStyle } from './model';
-import { createFurniture, disposeFurniture, studioEnvironment, fadeFurniture } from './furniture';
-import { BuildingRenderOptions } from './buildingModels';
-import SiteFloor from './SiteFloor';
-import SiteOverlay3D from './SiteOverlay3D';
+import { Item, LightingPreset, Project, resolveStyle } from './model';
 import { usePlanning, insidePlanning } from './planning';
 import { isAnnotation } from './annotations';
-import SceneCapture, { SceneCaptureAPI, SceneGalleryShots, computeEyeView } from './SceneCapture';
-import InstancedFurniture from './InstancedFurniture';
+import { SceneCaptureAPI, SceneGalleryShots, computeEyeView } from './SceneCapture';
+import { FurnitureHandlers } from './InstancedFurniture';
 import { dragOpening, isAttachedOpening } from './structure';
-import { computeFrontFacingWallIds, cutawayWallDecorModels, isItemNearWalls } from './wallVisibility3D';
-
-function SelectionBox({ item }: { item: Item }) {
-  const geometry = useMemo(() => {
-    const box = new T.BoxGeometry(item.w / 1000 + 0.02, Math.max(0.02, item.h / 1000) + 0.02, item.d / 1000 + 0.02);
-    const edges = new T.EdgesGeometry(box);
-    box.dispose();
-    return edges;
-  }, [item.w, item.d, item.h]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  return <lineSegments name="selection-highlight" geometry={geometry} position={[0, item.h / 2000, 0]} renderOrder={10} raycast={() => {}}><lineBasicMaterial color="#e09b27" depthTest={false} /></lineSegments>;
-}
-
-function ZoneHighlight({ item }: { item: Item }) {
-  const key = JSON.stringify(zoneCorners(item));
-  const geometry = useMemo(() => {
-    const points = zoneCorners(item);
-    return new T.BufferGeometry().setFromPoints([...points, points[0]].map(p => new T.Vector3(p.x / 1000, 0.015, p.y / 1000)));
-  }, [key]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  return <lineLoop name="selection-highlight" geometry={geometry} raycast={() => {}}><lineBasicMaterial color="#e09b27" depthTest={false} /></lineLoop>;
-}
-
-type DragHandlers = {
-  onPointerDown: (e: ThreeEvent<PointerEvent>, item: Item) => void;
-  onPointerMove: (e: ThreeEvent<PointerEvent>) => void;
-  onPointerUp: (e: ThreeEvent<PointerEvent>) => void;
-  onDoubleClick: (e: ThreeEvent<MouseEvent>, item: Item) => void;
-};
-
-const Furniture = memo(function Furniture({
-  item, selected, openings = [], handlers, faded, profile, renderOptions
-}: {
-  item: Item; selected: boolean; openings?: Item[]; handlers: DragHandlers; faded: boolean; profile?: Point[]; renderOptions: BuildingRenderOptions;
-}) {
-  const host = useRef<T.Group>(null);
-  const invalidate = useThree(s => s.invalidate);
-  const variant = modelOf(item);
-  const signName = variant === 'shop-sign' ? item.name : '';
-  const openingKey = JSON.stringify(openings.map(o => [o.offset, o.sill, o.w, o.h]));
-  useEffect(() => {
-    const model = createFurniture(item, openings, profile, renderOptions);
-    if (faded) fadeFurniture(model);
-    const group = host.current!;
-    group.add(model);
-    invalidate();
-    return () => { group.remove(model); disposeFurniture(model); };
-  }, [variant, signName, item.w, item.d, item.h, item.color, item.flipped, item.hingeRight, item.pointType, item.verification, openingKey, faded, JSON.stringify(profile), renderOptions.wallMaterial, renderOptions.cutaway, renderOptions.lightingPreset]);
-  return <group name={`item:${item.id}`} position={[(item.x + item.w / 2) / 1000, (item.sill ?? 0) / 1000, (item.y + item.d / 2) / 1000]} rotation={[0, -item.rotation * Math.PI / 180, 0]} ref={host} onDoubleClick={e => handlers.onDoubleClick(e, item)} onPointerDown={e => handlers.onPointerDown(e, item)} onPointerMove={handlers.onPointerMove} onPointerUp={handlers.onPointerUp}>{selected && <SelectionBox item={item} />}</group>;
-});
-
-const atmosphereConfig: Record<LightingPreset, { bg: string; ground: string; hemiSky: string; hemiGround: string; hemiInt: number; sunColor: string; sunInt: number; fillColor: string; fillInt: number; envInt: number; exposure: number }> = {
-  'daylight': {
-    bg: '#e8edf0', ground: '#e0e4e2',
-    hemiSky: '#f4f9ff', hemiGround: '#bfb4a2', hemiInt: 0.78,
-    sunColor: '#fff6e6', sunInt: 2.6,
-    fillColor: '#d8e8ff', fillInt: 1.0,
-    envInt: 0.72, exposure: 1.08,
-  },
-  'warm-dining': {
-    bg: '#eee8df', ground: '#e5dfd5',
-    hemiSky: '#fff6e9', hemiGround: '#b59d82', hemiInt: 0.72,
-    sunColor: '#ffebd0', sunInt: 2.2,
-    fillColor: '#ffe0b8', fillInt: 0.75,
-    envInt: 0.65, exposure: 1.06,
-  },
-  'evening': {
-    bg: '#1c222a', ground: '#21272f',
-    hemiSky: '#687b96', hemiGround: '#3e3328', hemiInt: 0.36,
-    sunColor: '#a8bee0', sunInt: 0.62,
-    fillColor: '#ffbe78', fillInt: 0.42,
-    envInt: 0.28, exposure: 1.12,
-  },
-  'clay': {
-    bg: '#f2f2ef', ground: '#ebebe7',
-    hemiSky: '#ffffff', hemiGround: '#c8c6be', hemiInt: 0.9,
-    sunColor: '#fffdf8', sunInt: 2.2,
-    fillColor: '#e4eaf0', fillInt: 0.9,
-    envInt: 0.45, exposure: 1.04,
-  },
-};
-
-function Environment({ center, extent, detail, preset }: { center: [number, number, number]; extent: number; detail: boolean; preset: LightingPreset }) {
-  const { gl, scene, invalidate } = useThree();
-  const cfg = atmosphereConfig[preset];
-  useEffect(() => {
-    const target = studioEnvironment(gl);
-    scene.environment = target.texture;
-    return () => { scene.environment = null; target.dispose(); };
-  }, [gl, scene]);
-  useEffect(() => {
-    scene.environmentIntensity = cfg.envInt;
-    gl.toneMappingExposure = cfg.exposure;
-    invalidate();
-  }, [scene, gl, cfg.envInt, cfg.exposure, invalidate]);
-  const target = useRef(new T.Object3D());
-  target.current.position.set(...center);
-  return <>
-    <color attach="background" args={[cfg.bg]} />
-    <primitive object={target.current} />
-    <hemisphereLight args={[cfg.hemiSky, cfg.hemiGround, cfg.hemiInt]} />
-    <directionalLight
-      target={target.current}
-      position={[center[0] + extent * 0.45, extent * 1.45, center[2] + extent * 0.62]}
-      intensity={cfg.sunInt}
-      color={cfg.sunColor}
-      castShadow
-      key={`${detail}:${preset}`}
-      shadow-mapSize={detail ? [2048, 2048] : [1024, 1024]}
-      shadow-camera-left={-extent * 1.1}
-      shadow-camera-right={extent * 1.1}
-      shadow-camera-top={extent * 1.1}
-      shadow-camera-bottom={-extent * 1.1}
-      shadow-camera-far={extent * 5 + 12}
-      shadow-normalBias={0.006}
-    />
-    <directionalLight position={[center[0] - extent * 0.7, extent * 0.8, center[2] - extent * 0.5]} intensity={cfg.fillInt} color={cfg.fillColor} />
-  </>;
-}
-
-// Active interior point lights generated from placed light fixtures so warm pools of light spill across tables & counters.
-function InteriorLights({ project, preset }: { project: Project; preset: LightingPreset }) {
-  const invalidate = useThree(s => s.invalidate);
-  const lights = useMemo(() => {
-    if (preset === 'clay') return [];
-    const fixtures = project.items.filter(i => i.kind === 'lighting' && isVisible(i, project));
-    const maxLights = 4;
-    const step = Math.max(1, Math.ceil(fixtures.length / maxLights));
-    const sampled = fixtures.filter((_, idx) => idx % step === 0).slice(0, maxLights);
-    const boost = preset === 'evening' ? 5.0 : preset === 'warm-dining' ? 2.4 : 0.75;
-    if (sampled.length) {
-      return sampled.map(i => {
-        const m = modelOf(i);
-        const y = Math.max(1.2, (baseHeight(project, i) + (m === 'pendant-lamp' || m === 'chandelier' ? 80 : 0)) / 1000);
-        const cool = m === 'kitchen-panel-light';
-        const intensity = (m === 'chandelier' ? 1.55 : m === 'linear-light' || m === 'track-light' ? 1.25 : 1.0) * boost;
-        return {
-          id: i.id,
-          pos: [(i.x + i.w / 2) / 1000, y, (i.y + i.d / 2) / 1000] as [number, number, number],
-          color: cool ? '#e8f5ff' : '#ffcb88',
-          intensity,
-          distance: m === 'chandelier' ? 11 : 8.5,
-        };
-      });
-    }
-    if (preset === 'evening') {
-      // Gentle warm interior fill if the owner toggles evening mode before placing light fixtures
-      return [
-        { id: 'fallback-1', pos: [project.width * 0.35 / 1000, 2.5, project.height * 0.5 / 1000] as [number, number, number], color: '#ffca85', intensity: 4.5, distance: 10 },
-        { id: 'fallback-2', pos: [project.width * 0.7 / 1000, 2.5, project.height * 0.5 / 1000] as [number, number, number], color: '#ffd9a8', intensity: 4.0, distance: 10 },
-      ];
-    }
-    return [];
-  }, [project.items, project.width, project.height, preset]);
-
-  useEffect(() => { invalidate(); }, [lights, invalidate]);
-
-  return <>
-    {lights.map(l => (
-      <pointLight key={l.id} position={l.pos} color={l.color} intensity={l.intensity} distance={l.distance} decay={2} />
-    ))}
-  </>;
-}
+import { computeFrontFacingWallIds } from './wallVisibility3D';
+import SceneContent, { atmosphereConfig } from './SceneContent';
 
 const eyeViewNames = ['进店视角', '客区漫游视角', '吧台/明档视角', '临街门头外观'];
 function CameraRig({
-  focus, frame, reset, dragging, picking, pose, eyeIndex, active, navigation, pan, onPanChange
+  project, focus, frame, reset, dragging, picking, pose, eyeIndex, active, navigation, pan, onPanChange
 }: {
+  project: Project;
   pan: React.RefObject<boolean>;
   onPanChange: (mode: ScenePanMode) => void;
   focus: Item | undefined;
@@ -205,7 +39,6 @@ function CameraRig({
 }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const { camera, size, invalidate, gl } = useThree();
-  const project = useStore(s => s.project);
   const width = project.width, height = project.height;
   useSceneSpacePan(gl.domElement, controls, active, dragging || picking, pan, onPanChange);
   const framed = useRef(''), lastCenter = useRef<T.Vector3 | null>(null);
@@ -364,16 +197,6 @@ function CameraRig({
   />;
 }
 
-function ShadowUpdates({ items, focus, detail, styleKey }: { items: Item[]; focus?: string; detail: boolean; styleKey: string }) {
-  const { gl, invalidate } = useThree();
-  useEffect(() => {
-    gl.shadowMap.autoUpdate = false;
-    gl.shadowMap.needsUpdate = true;
-    invalidate();
-  }, [gl, items, focus, detail, styleKey, invalidate]);
-  return null;
-}
-
 const presetLabels: Record<LightingPreset, string> = {
   'daylight': '自然光',
   'warm-dining': '暖光营业',
@@ -419,7 +242,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
   if (active) lastView.current = { selected, ids, focusRequest };
 
   const prefs = useWorkspace(), moveMode = !project.basicDraft && prefs.move3D, planning = usePlanning();
-  const faded = (i: Item) => planning.dim && !insidePlanning(i, project);
+  const faded = useCallback((i: Item) => planning.dim && !insidePlanning(i, project), [planning.dim, planning.activeId, project]);
   const navigation = useRef<SceneNavigation | null>(null);
   const [frame, setFrame] = useState<SceneFrame | null>(null), [picking, setPicking] = useState(false), [detail, setDetail] = useState(false);
   const [closeup, setCloseup] = useState(false), [grid, setGrid] = useState(false), [reset, setReset] = useState(0);
@@ -503,7 +326,7 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
     setFrame(null); setPicking(false); setCloseup(true); setReset(n => n + 1);
   }, [focusRequest]);
 
-  const handlers = useMemo<DragHandlers>(() => ({
+  const handlers = useMemo<FurnitureHandlers>(() => ({
     onPointerDown: (e, i) => {
       if (e.button !== 0 || pan.current) return;
       if (useWallPlacement.getState().session) { e.stopPropagation(); return; }
@@ -552,46 +375,14 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
   const item = project.items.find(i => i.id === selected && i.kind !== 'zone' && !isAnnotation(i) && isVisible(i, project));
   const inspectionFocus = closeup ? (item?.wallId ? project.items.find(w => w.id === item.wallId) : item) : undefined;
   const focus = takingGallery ? undefined : inspectionFocus;
-  const profiles = useMemo(() => wallProfiles(project), [project.items]);
-  const renderOptions: BuildingRenderOptions = useMemo(() => ({
-    wallMaterial: style.wallMaterial,
-    cutaway: style.wallCutaway && prefs.camera !== 'eye-level',
-    lightingPreset: style.lightingPreset,
-  }), [style.wallMaterial, style.wallCutaway, style.lightingPreset, prefs.camera]);
 
   const frontWallIds = useMemo(() => new Set(frontWallKey ? frontWallKey.split(',') : []), [frontWallKey]);
-  const cutawayRenderOptions: BuildingRenderOptions = useMemo(() => ({ ...renderOptions, cutaway: true }), [renderOptions]);
   const smartWallActive = autoWallCutaway && prefs.camera === 'oblique' && !focus && !style.wallCutaway && !takingGallery;
-
-  const groups = useMemo(() => {
-    const visible = focus ? [focus, ...project.items.filter(i => i.wallId === focus.id)] : project.items.filter(i => i.kind !== 'zone' && !isAnnotation(i));
-    const cutWalls = frontWallIds.size ? project.items.filter(w => w.kind === 'wall' && frontWallIds.has(w.id)) : [];
-    const nearCutWall = (item: Item) => isItemNearWalls(item, cutWalls);
-    const shown = visible.filter(i => {
-      if (!isVisible(i, project)) return false;
-      if (!focus && cutawayWallDecorModels.has(modelOf(i)) && (renderOptions.cutaway || nearCutWall(i))) return false;
-      return true;
-    });
-    const groups = new Map<string, Item[]>();
-    for (const original of shown) {
-      const m = modelOf(original);
-      const h = (renderOptions.cutaway || nearCutWall(original)) && !focus && m === 'wood-feature-wall' ? Math.min(original.h, 1180) : original.h;
-      const i = { ...original, h, sill: baseHeight(project, original) };
-      const key = ['wall', 'door', 'window'].includes(i.kind) || cutawayWallDecorModels.has(m)
-        ? i.id
-        : JSON.stringify([i.kind, m, i.w, i.d, i.h, i.color, i.flipped, i.pointType, i.verification, m === 'shop-sign' ? i.name : '', faded(i)]);
-      const group = groups.get(key);
-      if (group) group.push(i);
-      else groups.set(key, [i]);
-    }
-    return groups;
-  }, [project.items, focus?.id, project.planningAreas, planning.activeId, planning.dim, renderOptions.cutaway, frontWallIds]);
 
   const selectedItems = project.items.filter(i => ids.includes(i.id) && isVisible(i, project) && !isAnnotation(i));
   const area = project.planningAreas?.find(a => a.id === planning.activeId);
   const showFrame = (next: SceneFrame) => { setFrame(next); setCloseup(false); setPicking(false); setReset(n => n + 1); };
   const cfg = atmosphereConfig[style.lightingPreset];
-  const styleKey = JSON.stringify([style.floorMaterial, style.wallMaterial, style.lightingPreset, style.wallCutaway, style.showCeiling, prefs.camera, frontWallKey]);
 
   const hideSelectionBox = takingGallery || (prefs.camera === 'eye-level' && eyeIndex === 3);
 
@@ -638,27 +429,27 @@ export default memo(forwardRef<SceneHandle, { active?: boolean; snap?: boolean; 
         </div></details>
       </div>
       <Canvas frameloop={active ? 'demand' : 'never'} shadows dpr={detail ? [1, 1.85] : 1} camera={{ position: [14, 12, 16], fov: 40 }} gl={{ localClippingEnabled: true, antialias: true, toneMapping: T.ACESFilmicToneMapping, toneMappingExposure: cfg.exposure }}>
-        <SceneCapture capture={capture} />
+        <SceneContent
+          project={project}
+          interactive
+          capture={capture}
+          detail={detail}
+          grid={grid}
+          gridSize={prefs.gridSize}
+          forceCeiling={prefs.camera === 'eye-level' && eyeIndex !== 3}
+          cameraMode={prefs.camera}
+          focus={focus}
+          selectedIds={ids}
+          hideSelectionBox={hideSelectionBox}
+          activeAreaId={planning.activeId}
+          faded={faded}
+          handlers={handlers}
+          smartWallActive={smartWallActive}
+          frontWallIds={frontWallIds}
+          frontWallKey={frontWallKey}
+        />
         <CameraWallCutaway project={project} enabled={smartWallActive} onChange={setFrontWallKey} />
-        <ShadowUpdates items={project.items} focus={focus?.id} detail={detail} styleKey={styleKey} />
-        <Environment detail={detail} preset={style.lightingPreset} center={focus ? [(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000] : [project.width / 2000, 0, project.height / 2000]} extent={focus ? Math.max(focus.w, focus.d, focus.h) / 1000 * 1.5 : Math.max(project.width, project.height) / 1000} />
-        {!focus && <InteriorLights project={project} preset={style.lightingPreset} />}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[project.width / 2000, focus ? -0.002 : -0.085, project.height / 2000]} receiveShadow>
-          <planeGeometry args={[1000, 1000]} />
-          <meshStandardMaterial color={cfg.ground} roughness={0.94} />
-        </mesh>
-        {!focus && <><SiteFloor project={project} grid={grid} forceCeiling={prefs.camera === 'eye-level' && eyeIndex !== 3} /><SiteOverlay3D /></>}
-        {!focus && !hideSelectionBox && project.items.filter(i => i.kind === 'zone' && ids.includes(i.id) && isVisible(i, project)).map(i => <ZoneHighlight key={i.id} item={i} />)}
-        {[...groups].map(([spec, items]) => items.length >= 3
-          ? <InstancedFurniture key={spec} spec={spec} items={items} handlers={handlers} faded={faded(items[0])} renderOptions={renderOptions} />
-          : items.map(i => {
-            const isFrontCut = smartWallActive && ((i.kind === 'wall' && frontWallIds.has(i.id)) || (!!i.wallId && frontWallIds.has(i.wallId)));
-            return <Furniture key={i.id} profile={profiles.get(i.id)} item={i} selected={!hideSelectionBox && ids.includes(i.id)} faded={faded(i)} handlers={handlers} renderOptions={isFrontCut ? cutawayRenderOptions : renderOptions} openings={i.kind === 'wall' ? project.items.filter(o => o.wallId === i.id) : undefined} />;
-          })
-        )}
-        {!hideSelectionBox && [...groups.values()].filter(items => items.length >= 3).flat().filter(i => ids.includes(i.id)).map(i => <group key={i.id} position={[(i.x + i.w / 2) / 1000, (i.sill ?? 0) / 1000, (i.y + i.d / 2) / 1000]} rotation={[0, -i.rotation * Math.PI / 180, 0]}><SelectionBox item={i} /></group>)}
-        {focus && <ContactShadows key={[focus.id, focus.x, focus.y, focus.w, focus.d, focus.h, focus.rotation].join('-')} position={[(focus.x + focus.w / 2) / 1000, 0, (focus.y + focus.d / 2) / 1000]} scale={Math.max(focus.w, focus.d) / 1000 * 2.5} far={focus.h / 1000 * 1.5} resolution={256} blur={2.5} opacity={0.4} frames={1} color="#3e453d" />}
-        <CameraRig pan={pan} onPanChange={setPanMode} navigation={navigation} frame={frame} active={active} focus={inspectionFocus} reset={reset} dragging={dragging} picking={picking} pose={prefs.camera} eyeIndex={eyeIndex} />
+        <CameraRig project={project} pan={pan} onPanChange={setPanMode} navigation={navigation} frame={frame} active={active} focus={inspectionFocus} reset={reset} dragging={dragging} picking={picking} pose={prefs.camera} eyeIndex={eyeIndex} />
       </Canvas>
       {picking && <SceneRegionPicker navigation={navigation} onCancel={() => setPicking(false)} onPick={points => showFrame(framePoints(points, 0, '框选区域'))} />}
       <div className={`scene-caption ${style.lightingPreset === 'evening' ? 'is-dark' : ''}`}>

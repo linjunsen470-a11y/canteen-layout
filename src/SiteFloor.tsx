@@ -1,13 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import * as T from 'three';
-import { Project, resolveStyle } from './model';
+import { Item, Project, resolveStyle } from './model';
 import { siteOutline } from './site';
 import ZoneSurface from './ZoneSurface';
-import { useWorkspace } from './workspace';
 import { floorBumpTexture, floorMaterialTexture } from './materials';
 
-export default function SiteFloor({ project, grid, forceCeiling = false }: { project: Project; grid: boolean; forceCeiling?: boolean }) {
-  const gridSize = useWorkspace(s => s.gridSize);
+export default function SiteFloor({ project, grid, forceCeiling = false, gridSize = 500, faded }: { project: Project; grid: boolean; forceCeiling?: boolean; gridSize?: number; faded?: (item: Item) => boolean }) {
   const style = resolveStyle(project);
   const key = JSON.stringify(siteOutline(project));
   const isClay = style.lightingPreset === 'clay';
@@ -94,6 +92,6 @@ export default function SiteFloor({ project, grid, forceCeiling = false }: { pro
         })}
       </group>
     )}
-    {style.showZoneTint3D && project.items.filter(i => i.kind === 'zone' && !i.hidden).map(i => <ZoneSurface key={i.id} project={project} item={i} />)}
+    {style.showZoneTint3D && project.items.filter(i => i.kind === 'zone' && !i.hidden).map(i => <ZoneSurface key={i.id} project={project} item={i} faded={faded?.(i) ?? false} />)}
   </group>;
 }
