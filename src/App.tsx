@@ -223,7 +223,7 @@ export default function App() {
             <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !s.selectedIds.length) s.setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
           </div>
         </div>
-        {project.basicDraft && !focusMode && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} openSignal={draftCompareSignal} />}
+        {project.basicDraft && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} openSignal={draftCompareSignal} />}
         <PlanningBar />
         <WallPlacementBar />
         <div className="canvas-context" hidden={s.tool === 'select'}>

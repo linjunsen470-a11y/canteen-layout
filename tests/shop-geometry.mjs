@@ -345,6 +345,11 @@ try {
     items: cands[1].project.items.map(i => i.kind === 'column' ? { ...i, x: i.x + 50 } : i),
   };
   assert.deepEqual(matchSameShop(cands[0].project, movedCol), { same: false, reason: 'fixtures' });
+  const rotatedFixture = rotation => ({
+    ...rectA, items: [...rectA.items, { ...cands[0].project.items.find(i => i.kind === 'column'), w: 1800, d: 500, rotation }],
+  });
+  assert.deepEqual(matchSameShop(rotatedFixture(0), rotatedFixture(90)), { same: false, reason: 'fixtures' });
+  assert.equal(isSameShop(rotatedFixture(0), rotatedFixture(180)), true);
   const droppedCol = {
     ...cands[1].project,
     items: cands[1].project.items.filter(i => i.kind !== 'column'),

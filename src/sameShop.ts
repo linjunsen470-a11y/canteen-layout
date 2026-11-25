@@ -1,4 +1,5 @@
 import type { Item, Point, Project } from './model';
+import { footprint, subtract } from './spatial';
 import { polygonCoverage } from './polygonArea';
 import { polygonArea, siteOutline } from './site';
 
@@ -108,6 +109,9 @@ export function matchSameShop(a: Project, b: Project): ShopMatch {
   for (const [id, itemA] of fixedA) {
     const itemB = fixedB.get(id);
     if (!itemB) return { same: false, reason: 'fixtures' };
+    const cornersA = footprint(itemA).map(p => subtract(p, refA.origin));
+    const cornersB = footprint(itemB).map(p => subtract(p, refB.origin));
+    if (!sameCornerLoop(cornersA, cornersB, 10)) return { same: false, reason: 'fixtures' };
     const ca = centerOf(itemA, refA.origin);
     const cb = centerOf(itemB, refB.origin);
     if (Math.hypot(ca.x - cb.x, ca.y - cb.y) >= 10 || Math.abs(itemA.w - itemB.w) >= 10 || Math.abs(itemA.d - itemB.d) >= 10) {

@@ -81,6 +81,8 @@ export async function testQuickExport(browser, url) {
       'true',
       '一次撤销应恢复切换前的装修风格',
     );
+    await page.locator('.focus-toggle').click();
+    await page.locator('.app.is-focused').waitFor();
     await button('导出图片').click();
     await dialog.getByAltText('平面与立体合图预览').waitFor();
 
