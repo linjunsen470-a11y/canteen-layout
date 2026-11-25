@@ -11,16 +11,26 @@ import { useStore } from './store';
 
 type Comparison = { snapshot: string; choices: BasicLayoutCandidate[]; current?: number };
 
-export default function BasicDraftBar({ project, notify }: { project: Project; notify: (msg: string) => void }) {
+export default function BasicDraftBar({ project, notify, openSignal = 0 }: { project: Project; notify: (msg: string) => void; openSignal?: number }) {
   const draft = project.basicDraft!;
   const dialog = useRef<HTMLDialogElement>(null);
   const worker = useRef<AbortController | null>(null);
+  const lastSignal = useRef(openSignal);
   const [business, setBusiness] = useState(draft.business);
   const [comparison, setComparison] = useState<Comparison>();
   const [selected, setSelected] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => () => worker.current?.abort(), []);
+  useEffect(() => {
+    if (openSignal > lastSignal.current) {
+      lastSignal.current = openSignal;
+      if (!dialog.current?.open) {
+        dialog.current?.showModal();
+        void compare(draft.business);
+      }
+    }
+  }, [openSignal, draft.business]);
 
   async function compare(next: ConceptBusinessType) {
     worker.current?.abort();

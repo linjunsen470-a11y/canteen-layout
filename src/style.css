@@ -1577,3 +1577,12 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
 .image-export footer span { margin-right:auto; }
 .image-export footer a[hidden] { display:none; }
 .image-formats button[aria-pressed=true] { background:#315c48; color:white; }
+.image-compare-bar { display:grid; gap:8px; margin:0 0 10px; }
+.compare-picker { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:13px; color:#314d3f; }
+.compare-picker select { min-width:190px; max-width:340px; }
+.compare-empty-hint { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 10px; border:1px solid #d4dfd7; border-radius:8px; background:#f4f8f5; font-size:13px; color:#315041; }
+.compare-empty-hint > span { margin-right:auto; }
+.compare-mismatch-badge { padding:2px 8px; border-radius:999px; background:#f8e6d0; color:#8f4714; font-size:12px; font-weight:600; }
+.compare-metrics-strip { display:grid; gap:2px; padding:8px 10px; border:1px solid #dce5de; border-radius:8px; background:#f8faf8; font-size:12px; color:#415b4d; }
+.compare-metrics-strip strong { font-size:13px; color:#1f5e41; }
+.image-proof-error { display:grid; justify-items:center; gap:10px; padding:16px; text-align:center; color:#8f371d; }

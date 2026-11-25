@@ -291,6 +291,77 @@ try {
   assert.ok(exampleStats.estimatedPowerKw >= 15, `example power=${exampleStats.estimatedPowerKw}`);
   assert.deepEqual(checkSpace(exampleProject, null).filter(i => i.type !== '参考净距'), [], 'flagship example');
   console.log('PASS 模板座位与碰撞、窄铺入口、重复围墙、组合摆放与旗舰示范包');
+
+  // Same-shop matching & A/B compare metrics unit checks
+  const { matchSameShop, isSameShop } = await load('sameShop');
+  const { computeCompareMetrics } = await load('makeCompareSheet');
+  const { sketchShell, placeSketchFixture } = await load('sketchGeometry');
+  const { dimensionedOutline } = await load('site');
+  const { generateBasicLayoutCandidates } = await load('basicLayout');
+
+  let baseShell = sketchShell(dimensionedOutline(8500, 6000, { width: 3000, depth: 2000, corner: 'top-left' }));
+  baseShell = placeSketchFixture(baseShell, 'entrance', { x: 5200, y: 200 }, 0, 0);
+  baseShell = placeSketchFixture(baseShell, 'column', { x: 6400, y: 3200 }, 500, 500);
+  const cands = generateBasicLayoutCandidates(baseShell, 'bistro');
+  assert.ok(cands.length >= 2, 'L-shape shell should yield >= 2 layout candidates');
+
+  // 1. Same shop (different layout candidates of the same shell, plus translated copy)
+  assert.deepEqual(matchSameShop(cands[0].project, cands[1].project), { same: true });
+  const shifted = {
+    ...cands[1].project,
+    outline: cands[1].project.outline?.map(p => ({ x: p.x + 1200, y: p.y + 800 })),
+    survey: cands[1].project.survey && {
+      ...cands[1].project.survey,
+      corners: cands[1].project.survey.corners.map(p => ({ x: p.x + 1200, y: p.y + 800 })),
+    },
+    items: cands[1].project.items.map(i => ({ ...i, x: i.x + 1200, y: i.y + 800 })),
+  };
+  assert.equal(isSameShop(cands[0].project, shifted), true, 'translated same-shop should match');
+
+  // 2. Mirrored L-shape (identical 45 m^2 area, opposite notch)
+  const mirrored = sketchShell(dimensionedOutline(8500, 6000, { width: 3000, depth: 2000, corner: 'top-right' }));
+  assert.deepEqual(matchSameShop(cands[0].project, mirrored), { same: false, reason: 'outline' });
+
+  // 3. Same area, different rectangle aspect (8x6 = 48 m^2 vs 12x4 = 48 m^2)
+  const rectA = sketchShell(dimensionedOutline(8000, 6000));
+  const rectB = sketchShell(dimensionedOutline(12000, 4000));
+  assert.deepEqual(matchSameShop(rectA, rectB), { same: false, reason: 'outline' });
+
+  // 4. Entrance moved (> 200 mm fails, < 200 mm passes)
+  const movedEntranceFar = {
+    ...cands[1].project,
+    items: cands[1].project.items.map(i => i.pointType === 'entrance' ? { ...i, x: i.x + 350 } : i),
+  };
+  assert.deepEqual(matchSameShop(cands[0].project, movedEntranceFar), { same: false, reason: 'entrance' });
+  const movedEntranceNear = {
+    ...cands[1].project,
+    items: cands[1].project.items.map(i => i.pointType === 'entrance' ? { ...i, x: i.x + 120 } : i),
+  };
+  assert.equal(isSameShop(cands[0].project, movedEntranceNear), true);
+
+  // 5. Fixed fixture moved (> 10 mm) or removed
+  const movedCol = {
+    ...cands[1].project,
+    items: cands[1].project.items.map(i => i.kind === 'column' ? { ...i, x: i.x + 50 } : i),
+  };
+  assert.deepEqual(matchSameShop(cands[0].project, movedCol), { same: false, reason: 'fixtures' });
+  const droppedCol = {
+    ...cands[1].project,
+    items: cands[1].project.items.filter(i => i.kind !== 'column'),
+  };
+  assert.deepEqual(matchSameShop(cands[0].project, droppedCol), { same: false, reason: 'fixtures' });
+
+  // A/B compare metrics match live seatSummary & nearestTableGap
+  const compareMetrics = computeCompareMetrics(cands[0].project, cands[1].project);
+  assert.equal(compareMetrics.match.same, true);
+  assert.equal(compareMetrics.a.seats, cands[0].capacity.seats);
+  assert.equal(compareMetrics.b.seats, cands[1].capacity.seats);
+  assert.equal(compareMetrics.a.tables, cands[0].tables);
+  assert.equal(compareMetrics.b.tables, cands[1].tables);
+  assert.equal(compareMetrics.a.tableGapMm, cands[0].tableGapMm);
+  assert.equal(compareMetrics.b.tableGapMm, cands[1].tableGapMm);
+  assert.ok(compareMetrics.summary.length > 0);
+  console.log('PASS 同铺判定（同铺/镜像/同面积异形/入口移动/固定构件移动）与 A/B 指标计算');
 } finally {
   await server.close();
 }

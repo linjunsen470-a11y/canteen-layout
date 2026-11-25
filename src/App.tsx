@@ -66,6 +66,7 @@ export default function App() {
   const [librarySignal, setLibrarySignal] = useState(0);
   const [conceptSignal, setConceptSignal] = useState(0);
   const [insightsSignal, setInsightsSignal] = useState(0);
+  const [draftCompareSignal, setDraftCompareSignal] = useState(0);
   useEffect(() => { if (notice) { const timeout = setTimeout(() => notify(''), 4500); return () => clearTimeout(timeout); } }, [notice]);
 
   const activeAreaId = usePlanning(state => state.activeId);
@@ -175,6 +176,10 @@ export default function App() {
           bird: scene.captureShot('birdseye'),
           inside: scene.captureShot('interior'),
         }))} hasCurrent={view !== '2d'}
+          onOpenCompareDrafts={project.basicDraft ? () => {
+            if (focusMode) prefs.set({ focusMode: false, focusView: null });
+            setDraftCompareSignal(n => n + 1);
+          } : undefined}
           current={() => { if (!scene.current) throw Error('三维视图尚未就绪'); return scene.current.capturePNG(); }}
           flat={async () => {
             const previous = useWorkspace.getState();
@@ -218,7 +223,7 @@ export default function App() {
             <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !s.selectedIds.length) s.setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
           </div>
         </div>
-        {project.basicDraft && !focusMode && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} />}
+        {project.basicDraft && !focusMode && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} openSignal={draftCompareSignal} />}
         <PlanningBar />
         <WallPlacementBar />
         <div className="canvas-context" hidden={s.tool === 'select'}>
