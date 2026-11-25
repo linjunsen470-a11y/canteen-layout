@@ -472,6 +472,56 @@ try {
   const avgMs = (performance.now() - t0) / 200;
   assert.ok(avgMs < 2, `300-item computeDragClearance avg ${avgMs.toFixed(3)} ms should be < 2 ms`);
   console.log(`PASS 拖拽实时净距计算（桌组/实测内墙/重叠/超距过滤与 300 物件均耗时 ${avgMs.toFixed(2)} ms）`);
+
+  // Step 4: underlay quick-frame geometry & pixel-aligned shell builder
+  const { initialUnderlayFrame, framePolygon, dragFrameCorner, dragFrameNotch, buildUnderlayFramedShell } = await load('underlayFrame');
+  const { polygonArea } = await load('site');
+  const calibratedShop = {
+    ...dragShop,
+    items: [],
+    survey: undefined,
+    outline: undefined,
+    underlay: {
+      assetId: 'asset-demo',
+      name: 'floorplan.png',
+      pixelWidth: 1000,
+      pixelHeight: 800,
+      x: 500,
+      y: 400,
+      mmPerPixel: 10,
+      rotation: 0,
+      opacity: 0.65,
+      hidden: false,
+      locked: true,
+      calibration: { points: [{ x: 100, y: 100 }, { x: 600, y: 100 }], distance: 5000 },
+    },
+  };
+  const rectFrame = initialUnderlayFrame(calibratedShop, 'rectangle');
+  assert.equal(framePolygon(rectFrame).length, 4);
+  const resizedRect = dragFrameCorner(rectFrame, 'bottom-right', { x: rectFrame.x + 8000, y: rectFrame.y + 6000 }, 50);
+  assert.equal(resizedRect.width, 8000);
+  assert.equal(resizedRect.depth, 6000);
+  const rectShell = buildUnderlayFramedShell(calibratedShop, resizedRect);
+  assert.equal(polygonArea(rectShell.survey.corners), 48000000);
+  assert.equal(rectShell.items.filter(i => i.kind === 'wall').length, 4);
+  const rectMinX = Math.min(...rectShell.survey.corners.map(p => p.x));
+  const rectMinY = Math.min(...rectShell.survey.corners.map(p => p.y));
+  assert.equal(rectShell.underlay.x, calibratedShop.underlay.x + (rectMinX - resizedRect.x));
+  assert.equal(rectShell.underlay.y, calibratedShop.underlay.y + (rectMinY - resizedRect.y));
+
+  const lFrame = initialUnderlayFrame(calibratedShop, 'l-shape');
+  assert.equal(framePolygon(lFrame).length, 6);
+  const draggedNotch = dragFrameNotch(
+    { ...lFrame, x: 1000, y: 1000, width: 8500, depth: 6000, notchCorner: 'top-left', notchWidth: 2000, notchDepth: 1500 },
+    { x: 4000, y: 3000 },
+    50,
+  );
+  assert.equal(draggedNotch.notchWidth, 3000);
+  assert.equal(draggedNotch.notchDepth, 2000);
+  const lShell = buildUnderlayFramedShell(calibratedShop, draggedNotch);
+  assert.equal(lShell.items.filter(i => i.kind === 'wall').length, 6);
+  assert.equal(polygonArea(lShell.survey.corners), 45000000);
+  console.log('PASS 户型底图快速套框几何（矩形/L 形初始化、角点与缺口拖拽及底图坐标对齐建壳）');
 } finally {
   await server.close();
 }
