@@ -118,7 +118,7 @@ flowchart LR
 - 入口：`BasicDraftBar` 一行胶囊；`ImageExport` 弹窗顶部同一组胶囊。不新增弹窗。
 - 写入：仅 `commit({ ...project, style: { ...project.style, floorMaterial, wallMaterial, lightingPreset } })`，一次撤销恢复；**禁止**改动 `items`、`groups`。
 - 首稿默认风格：`businessTypeDefaults` 增加可选 `themeId`，基础草稿生成后若项目 `style` 仍为默认值则套用（面馆/轻食→原木暖调，快餐/食堂→明亮快餐）。用户已手动设置过材质的项目不覆盖。
-- 合图缓存：风格变化即作废所有 3D 截图和合图，平面 PNG 不受影响。
+- 合图缓存：风格变化即作废所有 3D 截图和合图，更换地材时同时刷新平面 PNG，仅调整光照时复用已有平面。
 
 ### 验收
 
