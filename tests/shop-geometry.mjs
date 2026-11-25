@@ -557,7 +557,11 @@ try {
 
   // Layout edit bumps layoutRevision; undo restores revA0
   const movedItems = useStore.getState().project.items.map(i => i.kind === 'table' ? { ...i, x: i.x + 100 } : i);
+  const untouchedChair = movedItems.find(i => i.kind === 'chair');
+  assert.ok(untouchedChair);
   useStore.getState().commit({ ...useStore.getState().project, items: movedItems });
+  assert.equal(useStore.getState().project.items.find(i => i.id === untouchedChair.id), untouchedChair,
+    '移动桌子后应复用未改动的椅子对象，避免列表和画布重绘');
   const revAEdited = useStore.getState().layoutRevision;
   assert.notEqual(revAEdited, revA0);
   assert.equal(currentDraftChoices(useStore.getState().project, revAEdited, false), undefined);

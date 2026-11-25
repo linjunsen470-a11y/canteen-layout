@@ -1,14 +1,12 @@
 import { bounds } from './spatial';
 import { useWallPlacement, pickWallAt } from './wallPlacement';
-import { facingModels } from './equipmentFacing';
-import EquipmentSymbol from './EquipmentSymbol';
+import PlanItemSymbol from './PlanItemSymbol';
 import WallClearanceOverlay from './WallClearanceOverlay';
 import DragClearanceOverlay from './DragClearanceOverlay';
 import { groupSelection, movableSelection } from './layoutGroups';
 import { snapTranslation, SnapGuide } from './layoutSnapping';
 import { finishCopyPlacement } from './layoutCommands';
 import RotationHandle from './RotationHandle';
-import { pointGlyphs } from './siteObjectMeta';
 import { nearestWallEnd, wallProfiles } from './wallJoints';
 import { forwardRef, memo, useMemo, useEffect, useLayoutEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Hand, MousePointer2, Plus, Minus, Scan, Focus, Lightbulb, Route } from 'lucide-react';
@@ -30,7 +28,7 @@ import SiteOutline, { SiteOutlineHandle } from './SiteOutline';
 import PlanFloorPattern from './PlanFloorPattern';
 import { siteOutline } from './site';
 import { zoneArea, zoneCorners } from './zones';
-import { isBuilding, isOpening, isAttachedOpening, wallPoint, segmentPose, dragOpening } from './structure';
+import { isOpening, isAttachedOpening, wallPoint, segmentPose, dragOpening } from './structure';
 
 type Point={x:number;y:number};
 type Camera={x:number;y:number;zoom:number};
@@ -110,7 +108,6 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
   };
   const end=(e:React.PointerEvent)=>{const g=gesture.current;if(g?.type==='build'){const i=drawingItem(g,world(screen(e)),e.shiftKey,e.altKey);if(i.w>=100&&(i.kind!=='zone'||i.d>=100)){const id=useStore.getState().addItem(i);if(id)onSelect([id]);setTool('select')}else notify('长度至少 100mm；区域长宽均至少 100mm')}if(g?.type==='box'){const q=world(screen(e)),left=Math.min(g.start.x,q.x),top=Math.min(g.start.y,q.y),right=Math.max(g.start.x,q.x),bottom=Math.max(g.start.y,q.y);const found=(right-left)*scale<4&&(bottom-top)*scale<4?[]:visibleItems.filter(i=>{const b=itemBounds(i);return i.kind!=='zone'&&b.x>=left&&b.y>=top&&b.x+b.w<=right&&b.y+b.d<=bottom}).map(i=>i.id);onSelect(g.additive?[...new Set([...ids,...found])]:found)}finish();if(svg.current?.hasPointerCapture(e.pointerId))svg.current.releasePointerCapture(e.pointerId)};
   const [showFlow,setShowFlow]=useState(false);
-  const quietLabels=new Set(['wood-feature-wall','wall-art','tv-screen','shop-sign','menu-board']);
   const toggleLights2D=()=>{const s=useStore.getState();s.commit({...s.project,style:{...resolveStyle(s.project),showLightsIn2D:!style.showLightsIn2D}})};
   const orderedItems=[
     ...visibleItems.filter(i=>i.kind==='wall'||i.kind==='partition'),
@@ -147,16 +144,20 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
         </g>)}
         {grid&&<rect data-ui="true" width={project.width} height={project.height} fill="url(#plan-grid)" pointerEvents="none" clipPath="url(#site-clip)"/>}
         <g data-ui="true"><PlanArchitecturalOverlay project={project} scale={scale} showFlow={showFlow}/></g>
-        {orderedItems.map(i=>{const m=modelOf(i);const isRound=m==='round-table'||m==='marble-round-table';const isLight=i.kind==='lighting';const isPlant=m==='potted-plant';const isHood=m==='hood';const draftSeat = !!project.basicDraft && i.kind === 'chair';
-          const showName = draftSeat ? ids.length === 1 && selected === i.id : !quietLabels.has(m) || ids.includes(i.id);
-          const normRot=((i.rotation%360)+360)%360;const flipText=normRot>90&&normRot<270;const labelY=!draftSeat&&i.model&&facingModels.has(i.model)?i.d/2+12/scale:0;const wallLabelY=-i.d/2-12/scale;return <g key={i.id} data-item-id={i.id} opacity={planning.dim&&!insidePlanning(i,project)?0.3:isLight?0.82:1} transform={`translate(${i.x+i.w/2},${i.y+i.d/2}) rotate(${i.rotation})`} pointerEvents={passThroughLights.has(i.id)?'none':undefined} onPointerDown={e=>begin(e,i)} style={{cursor:wallSession?(wallSession.picking&&i.kind==='wall'?'crosshair':'default'):i.locked?'not-allowed':'move'}}>
-          <title>{i.name} · {i.w} × {i.d} × {i.h} mm</title>
-          {isAnnotation(i)?<AnnotationSymbol item={i} selected={ids.includes(i.id)} scale={scale}/>:isBuilding(i)?<BuildingSymbol profile={profiles.get(i.id)} item={i} selected={ids.includes(i.id)} scale={scale}/>:isHood?<g><rect x={-i.w/2} y={-i.d/2} width={i.w} height={i.d} rx={Math.min(40,2/scale)} fill="#7f95a0" fillOpacity={0.14} stroke={ids.includes(i.id)?'#b67523':'#556c78'} strokeWidth={(ids.includes(i.id)?2.5:1.3)/scale} strokeDasharray={`${7/scale} ${4/scale}`}/><line x1={-i.w/2} y1={-i.d/2} x2={i.w/2} y2={i.d/2} stroke="#556c78" strokeOpacity={0.28} strokeWidth={0.9/scale} pointerEvents="none"/><line x1={-i.w/2} y1={i.d/2} x2={i.w/2} y2={-i.d/2} stroke="#556c78" strokeOpacity={0.28} strokeWidth={0.9/scale} pointerEvents="none"/></g>:isLight||isPlant?<ellipse rx={i.w/2} ry={i.d/2} fill="transparent" stroke={ids.includes(i.id)?'#b67523':'none'} strokeWidth={ids.includes(i.id)?2.5/scale:0}/>:isRound?<ellipse rx={i.w/2} ry={i.d/2} fill={i.color} stroke={ids.includes(i.id)?'#b67523':'#5e7166'} strokeWidth={(ids.includes(i.id)?2.5:1)/scale}/>:<rect x={-i.w/2} y={-i.d/2} width={i.w} height={i.d} rx={Math.min(50,3/scale)} fill={i.color} stroke={ids.includes(i.id)?'#b67523':'#5e7166'} strokeWidth={(ids.includes(i.id)?2.5:1)/scale}/>}
-          {!isBuilding(i)&&!isHood&&<EquipmentSymbol item={i} scale={scale}/>}
-          {i.kind==='utility'&&<g pointerEvents="none"><circle r={Math.min(i.w,i.d)*.4} fill="none" stroke="#fff" strokeWidth={1.5/scale}/><text textAnchor="middle" dominantBaseline="middle" fontSize={Math.min(i.w,i.d)*.6} fill="#fff">{pointGlyphs[i.pointType??'power']}</text>{i.verification!=='confirmed'&&<text x={i.w/2} y={-i.d/2} fill="#9f5d12" fontSize={12/scale}>?</text>}</g>}{i.kind==='column'&&<path pointerEvents="none" d={`M ${-i.w/2} ${-i.d/2} L ${i.w/2} ${i.d/2} M ${-i.w/2} ${i.d/2} L ${i.w/2} ${-i.d/2}`} stroke="#66766b" strokeWidth={1/scale}/>} {i.kind==='stairs'&&<g pointerEvents="none" stroke="#5e7166" strokeWidth={1/scale}>{Array.from({length:Math.max(3,Math.min(40,Math.round(i.h/160)))-1},(_,k)=><line key={k} x1={-i.w/2} x2={i.w/2} y1={i.d/2-(k+1)*i.d/Math.max(3,Math.min(40,Math.round(i.h/160)))} y2={i.d/2-(k+1)*i.d/Math.max(3,Math.min(40,Math.round(i.h/160)))}/>)}</g>}
-          {!isAnnotation(i)&&!isBuilding(i)&&!isLight&&!isPlant&&!isHood&&i.kind!=='utility'&&showName&&(i.w*scale>60||ids.includes(i.id))&&<text y={labelY} transform={flipText?`rotate(180 0 ${labelY})`:undefined} textAnchor="middle" dominantBaseline="middle" fontSize={Math.min(11/scale,i.w/Math.max(4,i.name.length))} fill="#273e31" pointerEvents="none">{i.locked?'▣ ':''}{i.name}</text>}
-          {(i.kind==='wall'||i.kind==='partition')&&selected===i.id&&ids.length===1&&isEditable(i,project)&&<g data-ui="true"><circle cx={-i.w/2} cy={0} r={6/scale} fill="#fff" stroke="#b67523" strokeWidth={2/scale} onPointerDown={e=>beginEndpoint(e,i,'start')}/><circle cx={i.w/2} cy={0} r={6/scale} fill="#fff" stroke="#b67523" strokeWidth={2/scale} onPointerDown={e=>beginEndpoint(e,i,'end')}/><text x={0} y={wallLabelY} transform={flipText?`rotate(180 0 ${wallLabelY})`:undefined} textAnchor="middle" fontSize={11/scale} fill="#997037">{Math.round(i.w)} mm</text></g>}
-        </g>})}
+        <g onPointerDown={event => {
+          const id = (event.target as Element).closest('[data-item-id]')?.getAttribute('data-item-id');
+          if (id) begin(event, project.items.find(item => item.id === id));
+        }}>
+          {orderedItems.map(i => {
+            const editEnds = (i.kind === 'wall' || i.kind === 'partition') && selected === i.id && ids.length === 1 && isEditable(i, project);
+            return <PlanItemSymbol key={i.id} item={i} scale={scale} profile={profiles.get(i.id)}
+              selected={ids.includes(i.id)} draftSeat={!!project.basicDraft && i.kind === 'chair'}
+              singleSelected={ids.length === 1 && selected === i.id}
+              faded={planning.dim && !insidePlanning(i,project)} passThrough={passThroughLights.has(i.id)}
+              cursor={wallSession ? (wallSession.picking && i.kind === 'wall' ? 'crosshair' : 'default') : i.locked ? 'not-allowed' : 'move'}
+              onEndpoint={editEnds ? beginEndpoint : undefined} />;
+          })}
+        </g>
         {visibleItems.filter(i=>i.kind==='zone').map(i=>{const zLabel=`${i.name} · ${(zoneArea(project,i)/1e6).toFixed(1)}㎡`;const pillW=(zLabel.length*9.5+18)/scale;const px=i.x+10/scale,py=i.y+i.d-26/scale;return <g key={`zp-${i.id}`} data-ui="true" opacity={0.92} style={{cursor:'move'}} onPointerDown={e=>begin(e,i)}>
           <rect x={px} y={py} width={pillW} height={19/scale} rx={4/scale} fill="#ffffff" fillOpacity={0.9} stroke="#d4cec2" strokeWidth={0.8/scale}/>
           <text x={px+8/scale} y={py+13/scale} fontSize={10.5/scale} fontWeight="600" fill="#354a3e" pointerEvents="none">{zLabel}</text>

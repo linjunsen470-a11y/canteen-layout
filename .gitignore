@@ -1,11 +1,12 @@
 # Dependencies and generated output
-node_modules/
+node_modules
 dist/
 coverage/
 *.tsbuildinfo
 
 # Local verification and project backups. Keep reviewed fixtures in docs/.
 /.local-checks/
+/attachments/
 /archive/g7-integration-2026-11-07/g7-source.zip
 
 # Local environment files. Version only examples with placeholder values.
