@@ -391,7 +391,7 @@ try {
   const scope = page.getByLabel('当前规划范围');
   const pill = page.locator('.footer-check-pill');
   async function checkScope(expected) {
-    assert.equal(await pill.innerText(), expected ? `${expected} 处冲突` : '无冲突');
+    assert.equal(await pill.innerText(), expected ? `体检与预算 · ${expected} 处冲突` : '体检与预算 · 无冲突');
     await pill.click();
     const heading = dialog.getByRole('heading', { name: /空间碰撞与通道体检/ });
     assert.ok((await heading.innerText()).includes(`${expected} 项冲突`));

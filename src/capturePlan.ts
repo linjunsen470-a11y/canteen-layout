@@ -7,11 +7,14 @@ import { planningArea, planningAreaLabel, siteArea } from './site';
 
 const quietModels = new Set(['wood-feature-wall', 'wall-art', 'tv-screen', 'shop-sign', 'menu-board', 'potted-plant', 'hood']);
 
-export function capturePlan(svg:SVGSVGElement,project:Project):Promise<string>{return new Promise((resolve,reject)=>{
+export type CapturePlanOptions = { header?: boolean };
+
+export function capturePlan(svg:SVGSVGElement,project:Project,options:CapturePlanOptions={}):Promise<string>{return new Promise((resolve,reject)=>{
     if(project.underlay&&!project.underlay.hidden&&!svg.querySelector('[data-underlay]')){reject(Error('底图未加载完成或资产缺失，请先恢复底图后导出'));return}
+    const showHeader = options.header !== false;
     const clone=svg.cloneNode(true) as SVGSVGElement;
     const width=Math.max(1,Math.round(2000*project.width/Math.max(project.width,project.height))),height=Math.max(1,Math.round(2000*project.height/Math.max(project.width,project.height))),padding=110;
-    const sheetWidth = Math.max(1060, width + padding * 2), header = 105, sheetHeight = height + padding * 2 + header;
+    const sheetWidth = Math.max(1060, width + padding * 2), header = showHeader ? 105 : 0, sheetHeight = height + padding * 2 + header;
     clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
     clone.setAttribute('viewBox','0 0 ' + sheetWidth + ' ' + sheetHeight);
     clone.setAttribute('width',String(sheetWidth)); clone.setAttribute('height',String(sheetHeight));
@@ -23,19 +26,21 @@ export function capturePlan(svg:SVGSVGElement,project:Project):Promise<string>{r
     const ns='http://www.w3.org/2000/svg';
     const el=(tag:string,attrs:Record<string,string|number>,text?:string)=>{const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;return n};
 
-    const heading = el('svg',{x:36,y:14,width:sheetWidth-72,height:48,overflow:'hidden'});
-    heading.append(el('text',{x:0,y:36,fill:'#244b3c','font-size':32,'font-weight':650},project.name));
-    const seats = seatSummary(project);
-    const facts = [planningAreaLabel(project) + ' ' + (planningArea(project)/1e6).toFixed(2) + ' ㎡',
-      seats.seats + ' 座' + (seats.unknown ? '（另有未标定座位）' : '')];
-    if (project.survey) {
-      const xs = project.survey.corners.map(p=>p.x), ys = project.survey.corners.map(p=>p.y);
-      facts.splice(1,0,'外轮廓面积 ' + (siteArea(project)/1e6).toFixed(2) + ' ㎡');
-      facts.unshift('内净范围 ' + (Math.max(...xs)-Math.min(...xs)) + ' × ' + (Math.max(...ys)-Math.min(...ys)) + ' mm');
-    }
     clone.setAttribute('font-family','system-ui, sans-serif');
-    clone.append(heading, el('text',{x:36,y:84,'font-size':20,fill:'#4e6255'},facts.join('   ·   ')),
-      el('line',{x1:36,x2:sheetWidth-36,y1:header,y2:header,stroke:'#bdcabe'}));
+    if (showHeader) {
+      const heading = el('svg',{x:36,y:14,width:sheetWidth-72,height:48,overflow:'hidden'});
+      heading.append(el('text',{x:0,y:36,fill:'#244b3c','font-size':32,'font-weight':650},project.name));
+      const seats = seatSummary(project);
+      const facts = [planningAreaLabel(project) + ' ' + (planningArea(project)/1e6).toFixed(2) + ' ㎡',
+        seats.seats + ' 座' + (seats.unknown ? '（另有未标定座位）' : '')];
+      if (project.survey) {
+        const xs = project.survey.corners.map(p=>p.x), ys = project.survey.corners.map(p=>p.y);
+        facts.splice(1,0,'外轮廓面积 ' + (siteArea(project)/1e6).toFixed(2) + ' ㎡');
+        facts.unshift('内净范围 ' + (Math.max(...xs)-Math.min(...xs)) + ' × ' + (Math.max(...ys)-Math.min(...ys)) + ' mm');
+      }
+      clone.append(heading, el('text',{x:36,y:84,'font-size':20,fill:'#4e6255'},facts.join('   ·   ')),
+        el('line',{x1:36,x2:sheetWidth-36,y1:header,y2:header,stroke:'#bdcabe'}));
+    }
     clone.querySelectorAll<SVGGElement>('[data-item-id]').forEach(group=>{
       group.removeAttribute('opacity');const i=project.items.find(i=>i.id===group.dataset.itemId)!;if(isAnnotation(i))return;
       group.querySelectorAll('text, [data-zone-pill]').forEach(n=>n.remove());

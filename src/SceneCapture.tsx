@@ -3,7 +3,7 @@ import { Object3D, PerspectiveCamera, Vector2, Vector3 } from 'three';
 import { useStore } from './store';
 import { useThree } from '@react-three/fiber';
 import { frameDistance, frameShop } from './sceneFraming';
-import { computeFrontFacingWallIds } from './wallVisibility3D';
+import { computeBirdseyeHiddenItemIds } from './wallVisibility3D';
 import { surveyWall } from './interiorSurvey';
 import { siteOutline, sitePlacement } from './site';
 import { Project } from './model';
@@ -177,9 +177,8 @@ export default function SceneCapture({ capture }: { capture: RefObject<SceneCapt
         const hidden = new Set<string>();
         if (kind === 'birdseye') {
           hidden.add('ceiling-assembly');
-          const near = computeFrontFacingWallIds(project, shot.pos);
-          for (const item of project.items) {
-            if (near.has(item.id) || (item.wallId && near.has(item.wallId))) hidden.add('item:' + item.id);
+          for (const id of computeBirdseyeHiddenItemIds(project, shot.pos)) {
+            hidden.add('item:' + id);
           }
         }
         return renderShot(cam, 1440, 900, hidden);

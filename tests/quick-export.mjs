@@ -7,8 +7,15 @@ export async function testQuickExport(browser, url) {
   const button = name => page.getByRole('button', { name, exact: true });
   try {
     await page.goto(url);
+    await button('输入铺位尺寸，生成第一稿').waitFor();
+    assert.equal(await page.locator('.plan-quick-bar.is-starter').count(), 0);
     await button('输入铺位尺寸，生成第一稿').click();
     await button('L 形 8 × 12 m').click();
+    await page.getByLabel('缺口宽度（米）').fill('4.5');
+    await page.getByLabel('缺口深度（米）').fill('5.5');
+    await button('L 形 8 × 12 m').click();
+    assert.equal(await page.getByLabel('缺口宽度（米）').inputValue(), '3');
+    assert.equal(await page.getByLabel('缺口深度（米）').inputValue(), '4');
     await page.getByLabel('铺位净宽（米）').fill('8.5');
     await page.getByLabel('铺位净深（米）').fill('6');
     await page.getByLabel('缺口深度（米）').fill('2');
@@ -41,6 +48,7 @@ export async function testQuickExport(browser, url) {
     await dialog.getByRole('button',{name:'关闭'}).click();
     assert.equal(await button('2D 平面').getAttribute('aria-pressed'),'true');
     await page.setViewportSize({width:1100,height:800});
+    assert.match(await page.locator('.footer-check-pill').innerText(), /体检与预算/);
     await page.locator('.footer-check-pill').click();
     await page.locator('.insights-dialog[open]').waitFor();
     console.log('PASS 空白铺位、预设修改、直出分屏、三视图合图、单图切换、PNG 下载与剪贴板');

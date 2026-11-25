@@ -238,13 +238,21 @@ try {
     assert.throws(() => surveyWallInwardPoint(d0, d0.end - d0.start, 0, 500, 500, false), /超出本段内净长/);
   }
 
-  // Verify 3D smart front-facing wall cutaway detection
-  const { computeFrontFacingWallIds } = await load('wallVisibility3D');
+  // Verify 3D smart front-facing wall cutaway detection & birdseye decor hiding
+  const { computeFrontFacingWallIds, computeBirdseyeHiddenItemIds } = await load('wallVisibility3D');
   const frontRight = computeFrontFacingWallIds(rect, { x: 12, z: 10 });
   assert.ok(frontRight.has(rect.items[1].id) && frontRight.has(rect.items[2].id), 'front-right camera should cutaway right & bottom walls');
   assert.ok(!frontRight.has(rect.items[0].id) && !frontRight.has(rect.items[3].id), 'front-right camera should keep top & left walls full height');
   const backLeft = computeFrontFacingWallIds(rect, { x: -6, z: -6 });
   assert.ok(backLeft.has(rect.items[0].id) && backLeft.has(rect.items[3].id), 'back-left camera should cutaway top & left walls');
+  const noodle = shopTemplates[0].build();
+  const birdHidden = computeBirdseyeHiddenItemIds(noodle, { x: 18, z: 16 });
+  const frontSign = noodle.items.find(i => i.model === 'shop-sign');
+  const rightArt = noodle.items.find(i => i.model === 'wall-art');
+  const rearMenu = noodle.items.find(i => i.model === 'menu-board');
+  assert.ok(frontSign && birdHidden.has(frontSign.id), 'birdseye capture must hide storefront sign along hidden front wall');
+  assert.ok(rightArt && birdHidden.has(rightArt.id), 'birdseye capture must hide wall art along hidden right wall');
+  assert.ok(rearMenu && !birdHidden.has(rearMenu.id), 'birdseye capture must keep rear wall menu board visible');
 
   // Verify concept planner optional open-kitchen partition & schematic storefront openings
   const bareShell = makeShop(9600, 7200);

@@ -71,6 +71,7 @@ export default function PlanSelectionBar({
   // 1. Empty / bare shell fast-build starter pill (auto-disappears once furniture is placed)
   if (!items.length) {
     if (hasFurniture) return null;
+    if (!project.items.length && !project.outline && !project.underlay && !project.survey) return null;
     const hasDoor = project.items.some(i => i.kind === 'door');
     const quickAddStorefrontDoor = () => {
       try {

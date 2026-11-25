@@ -23,29 +23,49 @@ async function makeSheet(project: Project, plan: string, bird: string, inside: s
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const seats = seatSummary(project);
   ctx.fillStyle = '#244b3c';
-  ctx.font = '600 56px system-ui';
-  ctx.fillText(project.name, 40, 76, 1300);
-  ctx.font = '38px system-ui';
+  ctx.font = '600 54px system-ui';
+  ctx.fillText(project.name, 40, 74, 1300);
+  ctx.font = '36px system-ui';
+  ctx.fillStyle = '#486054';
   ctx.textAlign = 'right';
   const capacity = seats.seats + ' 座' + (seats.unknown ? '（另有未标定座位）' : '');
-  ctx.fillText(planningAreaLabel(project) + ' ' + (planningArea(project)/1e6).toFixed(2) + ' ㎡  ·  ' + capacity, 2360, 76);
+  ctx.fillText(planningAreaLabel(project) + ' ' + (planningArea(project) / 1e6).toFixed(2) + ' ㎡  ·  ' + capacity, 2360, 74, 960);
   ctx.textAlign = 'left';
+  ctx.strokeStyle = '#d7e0d8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(40, 102);
+  ctx.lineTo(2360, 102);
+  ctx.stroke();
   function panel(image: HTMLImageElement, title: string, x: number, y: number, w: number, h: number) {
-    const scale = Math.min(w / image.width, (h - 54) / image.height);
+    ctx!.fillStyle = '#ffffff';
+    ctx!.fillRect(x, y, w, h);
+    ctx!.strokeStyle = '#dce4dc';
+    ctx!.lineWidth = 2;
+    ctx!.strokeRect(x, y, w, h);
     ctx!.fillStyle = '#244b3c';
-    ctx!.font = '600 30px system-ui';
-    ctx!.fillText(title, x, y + 32);
-    ctx!.drawImage(image, x + (w - image.width * scale) / 2, y + 54 + (h - 54 - image.height * scale) / 2, image.width * scale, image.height * scale);
+    ctx!.font = '600 28px system-ui';
+    ctx!.fillText(title, x + 22, y + 40);
+    const padX = 18, padTop = 58, padBottom = 18;
+    const availW = w - padX * 2, availH = h - padTop - padBottom;
+    const scale = Math.min(availW / image.width, availH / image.height);
+    ctx!.drawImage(
+      image,
+      x + padX + (availW - image.width * scale) / 2,
+      y + padTop + (availH - image.height * scale) / 2,
+      image.width * scale,
+      image.height * scale,
+    );
   }
-  panel(images[0], '平面布置', 40, 120, 1230, 1340);
-  panel(images[1], '整店鸟瞰', 1310, 120, 1050, 660);
-  panel(images[2], '室内视角', 1310, 804, 1050, 660);
+  panel(images[0], '平面布置', 40, 124, 1230, 1336);
+  panel(images[1], '整店鸟瞰', 1300, 124, 1060, 654);
+  panel(images[2], '室内视角', 1300, 806, 1060, 654);
   return canvas.toDataURL('image/png');
 }
 
 type Props = {
   project: Project;
-  capture: () => Promise<{ plan: string; bird: string; inside: string }>;
+  capture: () => Promise<{ plan: string; planBare: string; bird: string; inside: string }>;
   flat: () => Promise<string>;
   current: () => string;
   hasCurrent: boolean;
@@ -67,9 +87,11 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
         if (next === 'plan') images.plan = await flat();
         else if (next === 'current') images.current = current();
         else {
-          const result = await capture();
-          Object.assign(images, result);
-          images.sheet = await makeSheet(project, result.plan, result.bird, result.inside);
+          const { plan, planBare, bird, inside } = await capture();
+          images.plan = plan;
+          images.bird = bird;
+          images.inside = inside;
+          images.sheet = await makeSheet(project, planBare, bird, inside);
         }
       }
       setSrc(images[next]!);
