@@ -17,6 +17,7 @@ import PlanEditor, { PlanHandle } from './PlanEditor';
 import SplitView from './SplitView';
 import SidebarResize from './SidebarResize';
 import BasicDraftBar from './BasicDraftBar';
+import UnderlayQuickFrameBar from './UnderlayQuickFrameBar';
 import ShopWizardDialog from './ShopWizardDialog';
 import ShopInsightsDialog from './ShopInsightsDialog';
 import ConceptPlannerDialog from './ConceptPlannerDialog';
@@ -224,6 +225,7 @@ export default function App() {
           </div>
         </div>
         {project.basicDraft && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} openSignal={draftCompareSignal} />}
+        <UnderlayQuickFrameBar key={'frame-' + project.id} project={project} notify={notify} />
         <PlanningBar />
         <WallPlacementBar />
         <div className="canvas-context" hidden={s.tool === 'select'}>

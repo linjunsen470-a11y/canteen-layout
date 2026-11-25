@@ -135,6 +135,9 @@ try {
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 100; canvas.height = 80;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#d84a38';
+    ctx.fillRect(0, 0, 100, 80);
     return canvas.toDataURL().split(',')[1];
   });
   await page.locator('input[name=image]').setInputFiles({ name: 'survey.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
@@ -150,6 +153,76 @@ try {
   }
   await button('应用校准').click();
   await page.getByText(/已校准 5000mm/).waitFor();
+
+  // Step 4: Quick frame over calibrated floorplan (rectangle <= 6 steps, L-shape <= 9 steps, hide underlay removes pixels)
+  const quickBar = page.locator('.underlay-quick-bar');
+  await quickBar.waitFor();
+  let rectOps = 0;
+  await quickBar.getByRole('button', { name: '按尺寸套矩形', exact: true }).click(); rectOps++;
+  await page.locator('[data-underlay-frame="true"]').waitFor();
+  await quickBar.getByLabel('套框净宽（米）').fill('8'); rectOps++;
+  await quickBar.getByLabel('套框净深（米）').fill('6'); rectOps++;
+  await quickBar.getByRole('button', { name: '确认并生成第一稿', exact: true }).click(); rectOps++;
+  await page.locator('.basic-draft-bar').waitFor();
+  assert.ok(rectOps <= 6, `矩形套框操作数 ${rectOps} 应 <= 6`);
+  assert.match(await page.locator('.project-count').innerText(), /48.00 ㎡/);
+  assert.equal(await underlay.count(), 1, '套框生成后校准底图应保留对齐');
+
+  // Compare exported 2D plan PNG before vs after hiding underlay
+  await button('项目文件').click();
+  const planWithUnderlay = await download('导出 2D 平面图 PNG');
+  await page.locator('.basic-draft-bar').getByRole('button', { name: '出图隐藏底图', exact: true }).click();
+  assert.equal(await underlay.count(), 0, '点击隐藏底图后画布不应再渲染底图');
+  await button('项目文件').click();
+  const planWithoutUnderlay = await download('导出 2D 平面图 PNG');
+  assert.equal(planWithoutUnderlay.readUInt32BE(0), 0x89504e47);
+  assert.notEqual(Buffer.compare(planWithUnderlay, planWithoutUnderlay), 0, '隐藏底图后导出的平面 PNG 不得再包含底图像素');
+
+  // Undo twice (hide toggle + draft generation) back to calibrated underlay and verify L-shape quick frame
+  await button('撤销').click();
+  await button('撤销').click();
+  await quickBar.waitFor();
+  let lOps = 0;
+  await quickBar.getByRole('button', { name: '按尺寸套 L 形', exact: true }).click(); lOps++;
+  await page.locator('[data-frame-handle="notch"]').waitFor();
+  await quickBar.getByLabel('套框净宽（米）').fill('8.5'); lOps++;
+  await quickBar.getByLabel('套框净深（米）').fill('6'); lOps++;
+  await quickBar.getByLabel('套框缺口位置').selectOption('top-left'); lOps++;
+  await quickBar.getByLabel('套框缺口宽（米）').fill('3'); lOps++;
+  await quickBar.getByLabel('套框缺口深（米）').fill('2'); lOps++;
+  await quickBar.getByRole('button', { name: '确认并生成第一稿', exact: true }).click(); lOps++;
+  await page.locator('.basic-draft-bar').waitFor();
+  assert.ok(lOps <= 9, `L 形套框操作数 ${lOps} 应 <= 9`);
+  assert.match(await page.locator('.project-count').innerText(), /45.00 ㎡/);
+
+  // Hold the finished worker reply until a different document is active.
+  await button('撤销').click();
+  await quickBar.getByRole('button', { name: '按尺寸套矩形' }).click();
+  await page.evaluate(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      set onmessage(listener) {
+        super.onmessage = event => {
+          window.releaseFrameReply = () => listener.call(this, event);
+          window.Worker = NativeWorker;
+        };
+      }
+    };
+  });
+  await quickBar.getByRole('button', { name: '确认并生成第一稿' }).click();
+  await page.waitForFunction(() => typeof window.releaseFrameReply === 'function');
+  await button('项目库').click();
+  await page.getByLabel('新项目或副本名称').fill('切换后保留此项目');
+  await button('新建空白项目').click();
+  await page.waitForFunction(() => document.querySelector('[aria-label="项目名称"]').value === '切换后保留此项目');
+  await button('关闭项目库').click();
+  await page.evaluate(async () => {
+    window.releaseFrameReply();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  assert.equal(await page.getByLabel('项目名称', { exact: true }).inputValue(), '切换后保留此项目');
+  assert.equal(await page.locator('.basic-draft-bar').count(), 0);
+
   await button('新建铺位').click();
   await button('按内墙净尺寸').click();
   await page.getByLabel('铺位名称').fill('净尺寸复核');

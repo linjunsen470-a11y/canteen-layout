@@ -89,6 +89,14 @@ export default function BasicDraftBar({ project, notify, openSignal = 0 }: { pro
   return <div className="basic-draft-bar">
     <span>拖动桌组调整位置，双击可单选椅子</span>
     <StyleQuickBar project={project} className="is-inline" />
+    {project.underlay && (
+      <button type="button" onClick={() => {
+        const live = useStore.getState().project;
+        if (live.underlay) useStore.getState().commit({ ...live, underlay: { ...live.underlay, hidden: !live.underlay.hidden } });
+      }}>
+        {project.underlay.hidden ? '恢复显示底图' : '出图隐藏底图'}
+      </button>
+    )}
     <details><summary>生成记录{draft.warnings.length ? `（${draft.warnings.length}）` : ''}</summary>
       <div><strong>{businessTypeDefaults[draft.business].label}</strong>
         {draft.warnings.length ? <ul>{draft.warnings.map(w => <li key={w}>{w}</li>)}</ul> : <p>基础设备和桌组均已摆入。</p>}
