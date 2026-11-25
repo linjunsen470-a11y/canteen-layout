@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { businessTypeDefaults, type ConceptBusinessType } from './conceptPlanner';
-import { requestBasicLayout } from './requestBasicLayout';
+import type { BasicLayoutCandidate } from './basicLayout';
+import { requestLayoutCandidates } from './requestBasicLayout';
 import { checkSketchEdge, placeSketchFixture, sketchFixtures, sketchShell, type SketchFixture } from './sketchGeometry';
 import type { Point, Project } from './model';
 import { footprint } from './spatial';
@@ -14,7 +15,7 @@ const metres = (mm: number) => String(Math.round(mm) / 1000);
 export default function SketchWizard({ busy, onSave, onBusy }: {
   busy: boolean;
   onBusy: (busy: boolean) => void;
-  onSave: (project: Project, warnings: string[]) => Promise<void>;
+  onSave: (choices: BasicLayoutCandidate[]) => Promise<void>;
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const [corners, setCorners] = useState<Point[]>([]);
@@ -120,8 +121,8 @@ export default function SketchWizard({ busy, onSave, onBusy }: {
     if (!source || busy) return;
     onBusy(true);
     try {
-      const result = await requestBasicLayout({ ...source, name: name.trim() || '我的铺位' }, business);
-      await onSave(result.project, result.warnings);
+      const choices = await requestLayoutCandidates({ ...source, name: name.trim() || '我的铺位' }, business);
+      await onSave(choices);
     } catch (e) { setError((e as Error).message); }
     finally { onBusy(false); }
   }

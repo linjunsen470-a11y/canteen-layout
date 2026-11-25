@@ -65,7 +65,7 @@ async function makeSheet(project: Project, plan: string, bird: string, inside: s
 
 type Props = {
   project: Project;
-  capture: () => Promise<{ plan: string; planBare: string; bird: string; inside: string }>;
+  capture: () => Promise<{ planBare: string; bird: string; inside: string }>;
   flat: () => Promise<string>;
   current: () => string;
   hasCurrent: boolean;
@@ -87,8 +87,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
         if (next === 'plan') images.plan = await flat();
         else if (next === 'current') images.current = current();
         else {
-          const { plan, planBare, bird, inside } = await capture();
-          images.plan = plan;
+          const { planBare, bird, inside } = await capture();
           images.bird = bird;
           images.inside = inside;
           images.sheet = await makeSheet(project, planBare, bird, inside);

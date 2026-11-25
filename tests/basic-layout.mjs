@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 export async function testBasicLayout(load, loadScene) {
   const { sketchShell, placeSketchFixture } = await load('sketchGeometry');
-  const { generateBasicLayout } = await load('basicLayout');
+  const { generateBasicLayout, generateBasicLayoutCandidates } = await load('basicLayout');
   const { parseProject } = await load('projectIO');
   const { contains, footprint, inPolygon } = await load('spatial');
   const { checkSpace } = await load('spaceChecks');
@@ -43,6 +43,50 @@ export async function testBasicLayout(load, loadScene) {
   fixture = placeSketchFixture(fixture,'shaft',{x:4500,y:5500},800,600);
   fixture = placeSketchFixture(fixture,'room',{x:2600,y:5500},2000,1200);
   assert.throws(() => placeSketchFixture(fixture,'column',{x:8800,y:6000},500,500));
+  const { nearestTableGap } = await load('conceptPlanner');
+  const { seatSummary } = await load('layoutGroups');
+  for (const shop of [shape(rect(7,10)), sketchShell(dimensionedOutline(8500,6000,{width:3000,depth:2000,corner:'top-left'})), fixture]) {
+    const alternatives = generateBasicLayoutCandidates(shop,'bistro');
+    assert.ok(alternatives.length >= 2 && alternatives.length <= 3);
+    assert.equal(new Set(alternatives.map(a => a.label)).size, alternatives.length);
+    const arrangements = new Set();
+    for (const a of alternatives) {
+      const parsed = parseProject(JSON.parse(JSON.stringify(a.project)));
+      assert.deepEqual(a.capacity, seatSummary(parsed));
+      assert.deepEqual(a.tableGapMm, Math.floor(nearestTableGap(parsed).distance + 1e-6));
+      const tables = parsed.items.filter(i => i.kind === 'table');
+      assert.equal(a.tables, tables.length);
+      arrangements.add(JSON.stringify(tables.map(i => [i.x,i.y,i.w,i.d]).sort()));
+      // The card label must describe where the kitchen really sits in the user's (unrotated) plan.
+      const kitchens = parsed.items.filter(i => i.kind === 'zone' && i.name.startsWith('后厨'));
+      const side = a.label.match(/^后厨在图(上方|左侧|下方|右侧)$/)?.[1];
+      if (side && kitchens.length) {
+        const xs = shop.survey.corners.map(p => p.x), ys = shop.survey.corners.map(p => p.y);
+        const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+        const area = kitchens.reduce((s,k) => s + k.w*k.d, 0);
+        const kx = kitchens.reduce((s,k) => s + (k.x+k.w/2)*k.w*k.d, 0) / area;
+        const ky = kitchens.reduce((s,k) => s + (k.y+k.d/2)*k.w*k.d, 0) / area;
+        const dx = kx - cx, dy = ky - cy;
+        const actual = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? '上方' : '下方') : (dx < 0 ? '左侧' : '右侧');
+        assert.equal(actual, side, `候选「${a.label}」的后厨中心 (${Math.round(kx)}, ${Math.round(ky)}) 与标签方位不符`);
+      }
+      assert.deepEqual(checkSpace(parsed,null).filter(i => i.type !== '参考净距'), []);
+      const fixed = new Map(shop.items.map(i=>[i.id,i]));
+      for (const original of fixed.values()) {
+        const item = parsed.items.find(i => i.id === original.id);
+        assert.deepEqual([item.x,item.y,item.rotation],[original.x,original.y,original.rotation]);
+      }
+      for (const item of parsed.items.filter(i => !fixed.has(i.id))) assert.ok(contains(shop.survey.corners, footprint(item)));
+      const routes = entryRoutes(parsed,parsed.items.filter(i => i.kind === 'zone' && i.name.startsWith('后厨')));
+      if (routes) assert.ok(parsed.items.filter(i => i.kind === 'chair').every(routes.customer));
+    }
+    assert.equal(arrangements.size,alternatives.length);
+    const first = generateBasicLayoutCandidates(shop,'bistro',1);
+    assert.equal(first.length,1);
+    assert.equal(first[0].label,alternatives[0].label);
+    assert.deepEqual(first[0].capacity,alternatives[0].capacity);
+  }
+  assert.equal(generateBasicLayoutCandidates(shape(rect(.6,.6)), 'restaurant').length,1);
   const placed = generate(fixture,'bistro').project;
   assert.ok(placed.groups.length && placed.items.some(i => i.kind === 'sink') && placed.items.some(i => i.model === 'cashier'));
   const { computeInteriorShot, computeStorefrontShot, computeEyeView } = await loadScene();

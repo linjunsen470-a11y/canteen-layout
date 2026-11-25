@@ -22,9 +22,20 @@ export async function testQuickExport(browser, url) {
     await button('直接生成草稿').click();
     await page.locator('.basic-draft-bar').waitFor();
     assert.match(await page.locator('.project-count').innerText(), /45.00 ㎡/);
+    await page.evaluate(() => {
+      window.planHeaders = [];
+      const serialize = XMLSerializer.prototype.serializeToString;
+      XMLSerializer.prototype.serializeToString = function (node) {
+        if (node instanceof SVGSVGElement && node.querySelector('[data-plan]')) {
+          window.planHeaders.push(!!node.querySelector(':scope > svg'));
+        }
+        return serialize.call(this, node);
+      };
+    });
     await button('导出图片').click();
     const dialog = page.getByRole('dialog',{name:'导出图片'});
     await dialog.getByAltText('平面与立体合图预览').waitFor();
+    assert.deepEqual(await page.evaluate(() => window.planHeaders), [false], '合图只栅格化一次无页眉平面');
     const result = page.waitForEvent('download');
     await dialog.getByRole('link',{name:'下载 PNG'}).click();
     const png = await readFile(await (await result).path());
@@ -37,6 +48,7 @@ export async function testQuickExport(browser, url) {
       await button(label).click();
       await dialog.getByAltText(label + '预览').waitFor();
     }
+    assert.deepEqual(await page.evaluate(() => window.planHeaders), [false,true], '单独查看平面时才生成带页眉版本');
     await dialog.getByRole('button',{name:'关闭'}).click();
     await button('2D 平面').click();
     await button('导出图片').click();

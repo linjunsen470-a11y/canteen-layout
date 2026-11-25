@@ -1544,8 +1544,19 @@ select:focus-visible,summary:focus-visible,textarea:focus-visible { outline:2px 
 .basic-draft-bar details > div { position:absolute; z-index:12; top:100%; right:0; width:min(290px,70vw); background:white; box-shadow:0 3px 14px #20352833; padding:12px; }
 .basic-draft-bar ul { padding-left:18px; }
 .basic-draft-bar > button { min-height:24px; padding:2px 8px; }
-.draft-variant-dialog { max-width:360px; padding:20px; border:1px solid #adbaae; border-radius:10px; }
-.draft-variant-dialog label, .draft-variant-dialog footer { display:flex; gap:10px; align-items:center; margin-top:12px; }
+.draft-variant-dialog { width:min(740px, 94vw); max-height:90vh; overflow:auto; padding:18px; border:1px solid #adbaae; border-radius:10px; color:#233d31; }
+.draft-variant-dialog::backdrop { background:#17251c66; }
+.draft-variant-dialog header, .draft-variant-dialog label, .draft-choice-actions { display:flex; align-items:center; gap:10px; }
+.draft-variant-dialog h2 { margin:0 auto 0 0; font-size:20px; }
+.draft-variant-dialog label, .draft-choice-actions { flex-wrap:wrap; margin-top:12px; }
+.draft-choice-actions > span { margin-right:auto; }
+.draft-choice-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(155px,100%),1fr)); gap:8px; margin:14px 0; }
+.draft-choice-grid > button { display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start; gap:3px; height:auto; padding:8px; text-align:left; white-space:normal; }
+.draft-choice-grid > button[aria-pressed=true] { outline:2px solid #357356; outline-offset:-2px; background:#edf5ee; color:#244b37; }
+.draft-choice-grid .plan-mini-preview { width:100%; height:clamp(90px,17vh,156px); margin-bottom:4px; }
+.draft-choice-grid > button:focus-visible { outline:2px solid #244b37; outline-offset:2px; }
+.draft-choice-grid small { color:#466652; }
+.draft-choice-warnings ul { max-height:18vh; overflow:auto; }
 
 .sketch-dimensions summary { cursor: pointer; color: #335e4b; font-weight: 600; }
 .sketch-dimensions form { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); align-items: end; gap: 8px; padding: 10px 0; }
