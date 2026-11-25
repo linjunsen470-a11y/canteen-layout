@@ -81,6 +81,22 @@ export async function testQuickExport(browser, url) {
       'true',
       '一次撤销应恢复切换前的装修风格',
     );
+    await button('导出图片').click();
+    await dialog.getByAltText('平面与立体合图预览').waitFor();
+    await button('平面图').click();
+    const planPreview = dialog.getByAltText('平面图预览');
+    const oldPlan = await planPreview.getAttribute('src');
+    const captureCount = await page.evaluate(() => window.planHeaders.length);
+    await dialog.getByRole('button', { name: '明亮快餐', exact: true }).click();
+    await page.waitForFunction(old => {
+      const image = document.querySelector('dialog.image-export img[alt="平面图预览"]');
+      return image && image.getAttribute('src') !== old;
+    }, oldPlan);
+    await button('平面与立体合图').click();
+    await dialog.getByAltText('平面与立体合图预览').waitFor();
+    assert.deepEqual(await page.evaluate(n => window.planHeaders.slice(n), captureCount), [true, false],
+      '更换地材后应重新生成独立平面和合图内的平面');
+    await dialog.getByRole('button', { name: '关闭' }).click();
     await page.locator('.focus-toggle').click();
     await page.locator('.app.is-focused').waitFor();
     await button('导出图片').click();

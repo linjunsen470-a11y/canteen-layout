@@ -98,9 +98,8 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const resolvedStyle = resolveStyle(project);
-  const styleSig = `${resolvedStyle.floorMaterial}|${resolvedStyle.wallMaterial}|${resolvedStyle.lightingPreset}`;
-  const lastStyleSig = useRef(styleSig);
+  const { floorMaterial, wallMaterial, lightingPreset } = resolveStyle(project);
+  const lastFloor = useRef(floorMaterial);
 
   const { sameShopCandidates, otherCandidates, byId } = useMemo(() => {
     const same: CandidateEntry[] = [];
@@ -208,14 +207,24 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
   selectRef.current = select;
 
   useEffect(() => {
-    if (lastStyleSig.current === styleSig) return;
-    lastStyleSig.current = styleSig;
+    const floorChanged = lastFloor.current !== floorMaterial;
+    lastFloor.current = floorMaterial;
+    if (!dialog.current?.open) return;
+    if (floorChanged) {
+      cache.current.plan = undefined;
+      cache.current.planBare = undefined;
+    }
     cache.current.bird = undefined;
     cache.current.inside = undefined;
     cache.current.sheet = undefined;
     cache.current.current = undefined;
     cache.current.compares.clear();
-    if (!dialog.current?.open || format === 'plan') return;
+    if (format === 'plan') {
+      if (floorChanged) void selectRef.current('plan');
+      return;
+    }
+    setSrc('');
+    setBusy(true);
     // Wait for Three.js Environment/SiteFloor/Furniture effects to flush new materials before re-shooting.
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -233,7 +242,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
       cancelAnimationFrame(raf1);
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [styleSig]);
+  }, [floorMaterial, wallMaterial, lightingPreset]);
 
   async function copy() {
     try {
@@ -250,7 +259,6 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
   return <>
     <button className="primary" onClick={() => {
       cache.current = { compares: new Map() };
-      lastStyleSig.current = styleSig;
       setCompareId('');
       setCompareMetrics(null);
       setOpen(true);
