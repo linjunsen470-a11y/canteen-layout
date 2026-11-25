@@ -367,6 +367,51 @@ try {
   assert.equal(compareMetrics.b.tableGapMm, cands[1].tableGapMm);
   assert.ok(compareMetrics.summary.length > 0);
   console.log('PASS 同铺判定（同铺/镜像/同面积异形/入口移动/固定构件移动）与 A/B 指标计算');
+
+  // Step 1: default business style on untouched shell, custom style preservation, non-destructive quick switches, legacy packages
+  const { activeQuickThemeId, applyQuickTheme, applyQuickLighting, quickThemePresets } = await server.ssrLoadModule('/src/StyleQuickBar.tsx');
+  const { seatSummary } = await load('layoutGroups');
+
+  const rawRect = sketchShell(dimensionedOutline(7000, 10000));
+  const bistroDraft = generateBasicLayoutCandidates(rawRect, 'bistro', 1)[0].project;
+  assert.equal(bistroDraft.style?.floorMaterial, 'oak-wood');
+  assert.equal(bistroDraft.style?.wallMaterial, 'warm-cream');
+  assert.equal(bistroDraft.style?.lightingPreset, 'warm-dining');
+  assert.equal(activeQuickThemeId(bistroDraft), 'oak-bistro');
+
+  const canteenDraft = generateBasicLayoutCandidates(rawRect, 'canteen', 1)[0].project;
+  assert.equal(canteenDraft.style?.floorMaterial, 'warm-tile');
+  assert.equal(canteenDraft.style?.wallMaterial, 'brick-white');
+  assert.equal(canteenDraft.style?.lightingPreset, 'daylight');
+  assert.equal(activeQuickThemeId(canteenDraft), 'bright-canteen');
+
+  // Manually customized shell style must NOT be overwritten
+  const customShell = { ...rawRect, style: { ...rawRect.style, floorMaterial: 'terrazzo', wallMaterial: 'wood-panel', lightingPreset: 'evening' } };
+  const preservedDraft = generateBasicLayoutCandidates(customShell, 'bistro', 1)[0].project;
+  assert.equal(preservedDraft.style?.floorMaterial, 'terrazzo');
+  assert.equal(preservedDraft.style?.wallMaterial, 'wood-panel');
+  assert.equal(preservedDraft.style?.lightingPreset, 'evening');
+
+  // Quick theme & lighting helpers never touch items/groups/seats
+  const eveningTheme = quickThemePresets.find(t => t.id === 'warm-restaurant');
+  const styled = applyQuickTheme(bistroDraft, eveningTheme);
+  assert.strictEqual(styled.items, bistroDraft.items);
+  assert.strictEqual(styled.groups, bistroDraft.groups);
+  assert.deepEqual(seatSummary(styled), seatSummary(bistroDraft));
+  assert.equal(styled.style?.lightingPreset, 'evening');
+  assert.equal(activeQuickThemeId(styled), 'warm-restaurant');
+
+  const lit = applyQuickLighting(styled, 'daylight');
+  assert.strictEqual(lit.items, styled.items);
+  assert.equal(lit.style?.lightingPreset, 'daylight');
+  assert.equal(activeQuickThemeId(lit), 'warm-restaurant');
+
+  // Legacy project without style or with partial style loads cleanly without errors
+  const legacyNoStyle = parseProject(JSON.parse(JSON.stringify({ ...bistroDraft, style: undefined })));
+  assert.equal(activeQuickThemeId(legacyNoStyle), 'raw-concrete');
+  const legacyPartial = parseProject(JSON.parse(JSON.stringify({ ...bistroDraft, style: { floorMaterial: 'concrete', wallMaterial: 'plaster' } })));
+  assert.equal(activeQuickThemeId(legacyPartial), 'raw-concrete');
+  console.log('PASS 首稿业态默认风格、手工材质保护、快捷切换零破坏与旧项目缺省样式回读');
 } finally {
   await server.close();
 }

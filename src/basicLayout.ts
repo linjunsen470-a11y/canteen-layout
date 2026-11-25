@@ -1,7 +1,7 @@
-import { defaultConceptOptions, generateConceptLayout, nearestTableGap, type ConceptBusinessType } from './conceptPlanner';
+import { businessTypeDefaults, decorThemePresets, defaultConceptOptions, generateConceptLayout, nearestTableGap, type ConceptBusinessType } from './conceptPlanner';
 import { seatSummary } from './layoutGroups';
 import { entryRoutes } from './entryAccess';
-import type { Item, Point, Project } from './model';
+import { defaultProjectStyle, resolveStyle, type Item, type Point, type Project } from './model';
 import { parseProject } from './projectIO';
 import { planningArea, siteOutline } from './site';
 import { footprint, inPolygon } from './spatial';
@@ -24,6 +24,32 @@ function quarterTurn(project: Project): Project {
 function rank(a: number[], b: number[]) {
   const i = a.findIndex((v,i) => v !== b[i]);
   return i < 0 ? 0 : b[i] - a[i];
+}
+
+function isDefaultShellStyle(shell: Project): boolean {
+  if (shell.basicDraft) return false;
+  const s = shell.style;
+  if (!s) return true;
+  const isRawSurvey = s.floorMaterial === 'concrete' && s.wallMaterial === 'plaster' && s.lightingPreset === 'daylight';
+  const isBlankDefault =
+    (!s.floorMaterial || s.floorMaterial === defaultProjectStyle.floorMaterial) &&
+    (!s.wallMaterial || s.wallMaterial === defaultProjectStyle.wallMaterial) &&
+    (!s.lightingPreset || s.lightingPreset === defaultProjectStyle.lightingPreset);
+  return isRawSurvey || isBlankDefault;
+}
+
+function defaultDraftStyle(shell: Project, business: ConceptBusinessType): Project['style'] {
+  if (!isDefaultShellStyle(shell)) return shell.style;
+  const defaults = businessTypeDefaults[business];
+  const themeId = defaults.themeId ?? defaults.defaultTheme;
+  const theme = decorThemePresets.find(preset => preset.id === themeId);
+  if (!theme) return shell.style;
+  return {
+    ...resolveStyle(shell),
+    floorMaterial: theme.floorMaterial,
+    wallMaterial: theme.wallMaterial,
+    lightingPreset: theme.lightingPreset,
+  };
 }
 
 export type BasicLayoutCandidate = {
@@ -118,6 +144,7 @@ export function generateBasicLayoutCandidates(shell: Project, business: ConceptB
 
   const ranked = [...bySide].sort(([,a],[,b]) => rank(a.score,b.score) || a.order - b.order);
   const leader = ranked[0][1];
+  const draftStyle = defaultDraftStyle(shell, business);
   const choices: BasicLayoutCandidate[] = [];
   const seen = new Set<string>();
   const limit = Math.min(3, Math.max(1, Math.floor(maxCount) || 1));
@@ -126,7 +153,7 @@ export function generateBasicLayoutCandidates(shell: Project, business: ConceptB
     if (choices.length && (!trial.seats || !leader.seats || trial.score[0] !== leader.score[0])) continue;
     let accepted = trial.project;
     for (let n = 0; n < (4 - trial.turn) % 4; n++) accepted = quarterTurn(accepted);
-    const project = parseProject({ ...shell, items: accepted.items.map(i => {
+    const project = parseProject({ ...shell, style: draftStyle, items: accepted.items.map(i => {
       const fixed = original.get(i.id);
       return fixed ? { ...fixed, zoneId: i.zoneId } : i;
     }), groups: accepted.groups, clearance: options.aisleMm, basicDraft: { business, warnings: trial.warnings } });

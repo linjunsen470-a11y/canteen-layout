@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
-import type { Project } from './model';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { resolveStyle, type Project } from './model';
 import { planningArea, planningAreaLabel } from './site';
 import { seatSummary } from './layoutGroups';
 import { parseProject } from './projectIO';
 import { useProjectSession } from './projectSession';
 import { matchSameShop, type ShopMatch } from './sameShop';
+import StyleQuickBar from './StyleQuickBar';
 import {
   decodeCanvasImage,
   drawFramedPanel,
@@ -75,7 +76,7 @@ type ImageCache = {
 
 type Props = {
   project: Project;
-  capture: () => Promise<{ planBare: string; bird: string; inside: string }>;
+  capture: (options?: { skipPlan?: boolean }) => Promise<{ planBare: string; bird: string; inside: string }>;
   flat: () => Promise<string>;
   current: () => string;
   hasCurrent: boolean;
@@ -96,6 +97,9 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  const { floorMaterial, wallMaterial, lightingPreset } = resolveStyle(project);
+  const lastFloor = useRef(floorMaterial);
 
   const { sameShopCandidates, otherCandidates, byId } = useMemo(() => {
     const same: CandidateEntry[] = [];
@@ -118,11 +122,12 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
     if (images.planBare && images.bird && images.inside) {
       return { planBare: images.planBare, bird: images.bird, inside: images.inside };
     }
-    const shot = await capture();
-    images.planBare = shot.planBare;
+    const skipPlan = !!images.planBare;
+    const shot = await capture({ skipPlan });
+    if (!skipPlan) images.planBare = shot.planBare;
     images.bird = shot.bird;
     images.inside = shot.inside;
-    return shot;
+    return { planBare: images.planBare!, bird: images.bird, inside: images.inside };
   }
 
   async function select(next: Format, overrideCompareId?: string) {
@@ -198,6 +203,47 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
     }
   }
 
+  const selectRef = useRef(select);
+  selectRef.current = select;
+
+  useEffect(() => {
+    const floorChanged = lastFloor.current !== floorMaterial;
+    lastFloor.current = floorMaterial;
+    if (!dialog.current?.open) return;
+    if (floorChanged) {
+      cache.current.plan = undefined;
+      cache.current.planBare = undefined;
+    }
+    cache.current.bird = undefined;
+    cache.current.inside = undefined;
+    cache.current.sheet = undefined;
+    cache.current.current = undefined;
+    cache.current.compares.clear();
+    if (format === 'plan') {
+      if (floorChanged) void selectRef.current('plan');
+      return;
+    }
+    setSrc('');
+    setBusy(true);
+    // Wait for Three.js Environment/SiteFloor/Furniture effects to flush new materials before re-shooting.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        timer = setTimeout(() => {
+          if (!cancelled && dialog.current?.open) {
+            void selectRef.current(format, format === 'compare' ? compareId : undefined);
+          }
+        }, 120);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [floorMaterial, wallMaterial, lightingPreset]);
+
   async function copy() {
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': fetch(src).then(r => r.blob()) })]);
@@ -227,6 +273,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
       onCancel={e => { if (busy) e.preventDefault(); }}
     >
       <header><h2>导出图片</h2><button disabled={busy} onClick={() => dialog.current!.close()}>关闭</button></header>
+      <StyleQuickBar project={project} disabled={busy} />
       <div className="image-formats">
         {(Object.keys(formats) as Format[]).filter(k => k !== 'current' || hasCurrent).map(k => (
           <button key={k} disabled={busy} aria-pressed={format === k} onClick={() => void select(k)}>{formats[k]}</button>

@@ -22,6 +22,11 @@ export async function testQuickExport(browser, url) {
     await button('直接生成草稿').click();
     await page.locator('.basic-draft-bar').waitFor();
     assert.match(await page.locator('.project-count').innerText(), /45.00 ㎡/);
+    assert.equal(
+      await page.locator('.basic-draft-bar').getByRole('button', { name: '原木暖调', exact: true }).getAttribute('aria-pressed'),
+      'true',
+      '面馆首稿应自动套用原木暖调而非素水泥白模',
+    );
     await page.evaluate(() => {
       window.planHeaders = [];
       const serialize = XMLSerializer.prototype.serializeToString;
@@ -36,6 +41,7 @@ export async function testQuickExport(browser, url) {
     const dialog = page.getByRole('dialog',{name:'导出图片'});
     await dialog.getByAltText('平面与立体合图预览').waitFor();
     assert.deepEqual(await page.evaluate(() => window.planHeaders), [false], '合图只栅格化一次无页眉平面');
+    const sheetBeforeStyle = await dialog.getByAltText('平面与立体合图预览').getAttribute('src');
     const result = page.waitForEvent('download');
     await dialog.getByRole('link',{name:'下载 PNG'}).click();
     const png = await readFile(await (await result).path());
@@ -44,12 +50,52 @@ export async function testQuickExport(browser, url) {
     await button('复制图片').click();
     await dialog.getByText('已复制图片，可以粘贴到聊天中').waitFor();
     assert.ok(await page.evaluate(async () => (await navigator.clipboard.read()).some(item => item.types.includes('image/png'))));
+    let birdBeforeStyle = '';
     for (const label of ['室内视角','鸟瞰图','平面图','当前三维视角']) {
       await button(label).click();
       await dialog.getByAltText(label + '预览').waitFor();
+      if (label === '鸟瞰图') birdBeforeStyle = await dialog.getByAltText('鸟瞰图预览').getAttribute('src');
     }
     assert.deepEqual(await page.evaluate(() => window.planHeaders), [false,true], '单独查看平面时才生成带页眉版本');
 
+    // Switch decor style inside ImageExport: composite sheet & birdseye re-render without re-rasterizing 2D plan,
+    // seat count stays identical, and a single undo restores the previous style.
+    const seatsBeforeStyle = await page.locator('.project-count').innerText();
+    await dialog.getByRole('button', { name: '平面与立体合图', exact: true }).click();
+    await dialog.getByAltText('平面与立体合图预览').waitFor();
+    await dialog.getByRole('button', { name: '晚市小馆', exact: true }).click();
+    await page.waitForFunction(prev => {
+      const img = document.querySelector('dialog.image-export img[alt="平面与立体合图预览"]');
+      return !!img && img.getAttribute('src') && img.getAttribute('src') !== prev;
+    }, sheetBeforeStyle);
+    assert.deepEqual(await page.evaluate(() => window.planHeaders), [false, true], '切换风格不得重复栅格化平面图');
+    await dialog.getByRole('button', { name: '鸟瞰图', exact: true }).click();
+    await dialog.getByAltText('鸟瞰图预览').waitFor();
+    const birdAfterStyle = await dialog.getByAltText('鸟瞰图预览').getAttribute('src');
+    assert.notEqual(birdAfterStyle, birdBeforeStyle, '切换风格后鸟瞰图 PNG 像素内容应变化');
+    await dialog.getByRole('button', { name: '关闭' }).click();
+    assert.equal(await page.locator('.project-count').innerText(), seatsBeforeStyle, '切换风格不得改动座位数');
+    await button('撤销').click();
+    assert.equal(
+      await page.locator('.basic-draft-bar').getByRole('button', { name: '原木暖调', exact: true }).getAttribute('aria-pressed'),
+      'true',
+      '一次撤销应恢复切换前的装修风格',
+    );
+    await button('导出图片').click();
+    await dialog.getByAltText('平面与立体合图预览').waitFor();
+    await button('平面图').click();
+    const planPreview = dialog.getByAltText('平面图预览');
+    const oldPlan = await planPreview.getAttribute('src');
+    const captureCount = await page.evaluate(() => window.planHeaders.length);
+    await dialog.getByRole('button', { name: '明亮快餐', exact: true }).click();
+    await page.waitForFunction(old => {
+      const image = document.querySelector('dialog.image-export img[alt="平面图预览"]');
+      return image && image.getAttribute('src') !== old;
+    }, oldPlan);
+    await button('平面与立体合图').click();
+    await dialog.getByAltText('平面与立体合图预览').waitFor();
+    assert.deepEqual(await page.evaluate(n => window.planHeaders.slice(n), captureCount), [true, false],
+      '更换地材后应重新生成独立平面和合图内的平面');
     await dialog.getByRole('button', { name: '关闭' }).click();
     await page.locator('.focus-toggle').click();
     await page.locator('.app.is-focused').waitFor();
