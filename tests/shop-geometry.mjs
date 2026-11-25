@@ -509,7 +509,11 @@ try {
   const resizedRect = dragFrameCorner(rectFrame, 'bottom-right', { x: rectFrame.x + 8000, y: rectFrame.y + 6000 }, 50);
   assert.equal(resizedRect.width, 8000);
   assert.equal(resizedRect.depth, 6000);
-  const rectShell = buildUnderlayFramedShell(calibratedShop, resizedRect);
+  const styledShop = { ...calibratedShop, style: { ...calibratedShop.style, floorMaterial: 'checker', ceilingHeight: 4200 } };
+  const rectShell = buildUnderlayFramedShell(styledShop, resizedRect);
+  assert.equal(rectShell.style.floorMaterial, 'checker');
+  assert.equal(rectShell.style.ceilingHeight, 4200);
+  assert.ok(rectShell.items.every(wall => wall.h === 4200));
   assert.equal(polygonArea(rectShell.survey.corners), 48000000);
   assert.equal(rectShell.items.filter(i => i.kind === 'wall').length, 4);
   const rectMinX = Math.min(...rectShell.survey.corners.map(p => p.x));

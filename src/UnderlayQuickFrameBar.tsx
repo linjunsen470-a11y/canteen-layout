@@ -67,10 +67,16 @@ export default function UnderlayQuickFrameBar({
     setBusy(true);
     setError('');
     try {
-      const live = useStore.getState().project;
+      const { project: live, past } = useStore.getState();
       const shell = buildUnderlayFramedShell(live, activeFrame);
       const choices = await requestLayoutCandidates(shell, business, controller.signal);
       if (controller.signal.aborted) return;
+      const current = useStore.getState();
+      if (current.project.id !== live.id || current.past !== past || current.gesture ||
+          current.tool !== 'select' || useUnderlayFrame.getState().frame !== activeFrame) {
+        setError('铺位或套框已变化，请重新生成首稿');
+        return;
+      }
       const { project: drafted, warnings } = choices[0];
       if (!useStore.getState().commit(drafted)) {
         throw Error(useStore.getState().error || '应用首稿失败');

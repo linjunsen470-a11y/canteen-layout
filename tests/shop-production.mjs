@@ -195,6 +195,34 @@ try {
   assert.ok(lOps <= 9, `L 形套框操作数 ${lOps} 应 <= 9`);
   assert.match(await page.locator('.project-count').innerText(), /45.00 ㎡/);
 
+  // Hold the finished worker reply until a different document is active.
+  await button('撤销').click();
+  await quickBar.getByRole('button', { name: '按尺寸套矩形' }).click();
+  await page.evaluate(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      set onmessage(listener) {
+        super.onmessage = event => {
+          window.releaseFrameReply = () => listener.call(this, event);
+          window.Worker = NativeWorker;
+        };
+      }
+    };
+  });
+  await quickBar.getByRole('button', { name: '确认并生成第一稿' }).click();
+  await page.waitForFunction(() => typeof window.releaseFrameReply === 'function');
+  await button('项目库').click();
+  await page.getByLabel('新项目或副本名称').fill('切换后保留此项目');
+  await button('新建空白项目').click();
+  await page.waitForFunction(() => document.querySelector('[aria-label="项目名称"]').value === '切换后保留此项目');
+  await button('关闭项目库').click();
+  await page.evaluate(async () => {
+    window.releaseFrameReply();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  assert.equal(await page.getByLabel('项目名称', { exact: true }).inputValue(), '切换后保留此项目');
+  assert.equal(await page.locator('.basic-draft-bar').count(), 0);
+
   await button('新建铺位').click();
   await button('按内墙净尺寸').click();
   await page.getByLabel('铺位名称').fill('净尺寸复核');
