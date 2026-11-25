@@ -8,7 +8,7 @@ import { groupSelection, movableSelection } from './layoutGroups';
 import { snapTranslation, SnapGuide } from './layoutSnapping';
 import { finishCopyPlacement } from './layoutCommands';
 import RotationHandle from './RotationHandle';
-import { pointGlyphs } from './siteObjects';
+import { pointGlyphs } from './siteObjectMeta';
 import { nearestWallEnd, wallProfiles } from './wallJoints';
 import { forwardRef, memo, useMemo, useEffect, useLayoutEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Hand, MousePointer2, Plus, Minus, Scan, Focus, Lightbulb, Route } from 'lucide-react';

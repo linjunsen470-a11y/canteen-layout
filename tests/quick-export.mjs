@@ -128,6 +128,12 @@ export async function testQuickExport(browser, url) {
     await button('关闭项目库').click();
     await button('已保存').waitFor();
 
+    // A was restyled and saved before creating B. Reopening A should retain in-place application.
+    await button('比较摆法').click();
+    await compareDialog.locator('.draft-choice-grid > button').nth(1).click();
+    assert.ok(await compareDialog.getByRole('button', { name: '应用摆法' }).isEnabled());
+    await compareDialog.getByRole('button', { name: '关闭' }).click();
+
     const readDbTimestamps = () => page.evaluate(() => new Promise((resolve, reject) => {
       const req = indexedDB.open('canteen-layout-library', 1);
       req.onerror = () => reject(req.error);

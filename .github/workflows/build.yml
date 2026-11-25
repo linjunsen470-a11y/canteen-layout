@@ -15,6 +15,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
+      - name: Geometry & unit tests
+        run: pnpm test:geometry
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Production browser regression
+        run: pnpm test:browser
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-checks
+          path: .local-checks/
+          if-no-files-found: ignore

@@ -32,6 +32,10 @@ type State = {
     setFlags: (ids:string[],patch:Pick<Partial<Item>,'locked'|'hidden'>)=>void;
     past: Project[];
     future: Project[];
+    revision: number;
+    layoutRevision: number;
+    pastRevisions: number[];
+    futureRevisions: number[];
     gesture: Project | null;
     setProject: (project: Project) => void;
     commit: (project: Project) => boolean;
@@ -92,11 +96,18 @@ function applyChanges(project: Project, changes: {
     if(synced.items.some(i=>(changed.has(i.id)||!!i.wallId&&changed.has(i.wallId))&&(!planningEditable(i,synced)||(i.wallId&&!planningEditable(synced.items.find(w=>w.id===i.wallId)!,synced)))))throw Error('修改后的对象或关联门窗超出当前规划范围');
     return synced;
 }
+let nextLayoutRev = 1;
+const isStyleOnlyChange = (a: Project, b: Project) =>
+    a.id === b.id && a.name === b.name && a.width === b.width && a.height === b.height
+    && a.items === b.items && a.groups === b.groups && a.outline === b.outline && a.survey === b.survey
+    && a.clearance === b.clearance && a.underlay === b.underlay && a.basicDraft === b.basicDraft
+    && a.planningAreas === b.planningAreas;
+
 export const useStore = create<State>((set, get) => ({
     placement:null,
     moveZone:(id,points)=>{try{get().move(id,polygonPatch(points))}catch(e){set({error:(e as Error).message})}},
     calibrationPoints:[],setCalibrationPoints:calibrationPoints=>set({calibrationPoints}),moveUnderlay:patch=>{const p=get().project;if(p.underlay)set({project:{...p,underlay:{...p.underlay,...patch}}})},
-    project: blankProject(), selected: null, selectedIds:[], mode:'layout', tool:'select',interactionEpoch:0,focusRequest:0,past: [], future: [], gesture: null, error: null,
+    project: blankProject(), selected: null, selectedIds:[], mode:'layout', tool:'select',interactionEpoch:0,focusRequest:0,past: [], future: [], revision: 0, layoutRevision: 1, pastRevisions: [], futureRevisions: [], gesture: null, error: null,
     selectMany: ids=>{const valid=[...new Set(ids)].filter(id=>get().project.items.some(i=>i.id===id));const items=get().project.items.filter(i=>valid.includes(i.id));set({selectedIds:valid,selected:valid.at(-1)??null,...(items.length?{mode:items.every(i=>['wall','door','window','partition'].includes(i.kind))?'structure' as const:'layout' as const}:{}),error:null})},
     cancelInteraction: ()=>{const restore=get().placement?.previousSelection;get().cancelMove();set(s=>{const ids=(restore??s.selectedIds).filter(id=>s.project.items.some(i=>i.id===id));return{tool:'select',placement:null,selectedIds:ids,selected:ids.at(-1)??null,calibrationPoints:[],interactionEpoch:s.interactionEpoch+1}})},
     setTool: tool=>{get().cancelInteraction();set({tool,...((tool.startsWith('outline')||tool.startsWith('underlay')||tool.startsWith('planning'))?{mode:'site' as const,selected:null,selectedIds:[]}:tool==='wall'||tool==='partition'?{mode:'structure' as const}:['zone','zone-draw','zone-edit','text','dimension','leader'].includes(tool)?{mode:'layout' as const}:{})})},
@@ -105,7 +116,7 @@ export const useStore = create<State>((set, get) => ({
     setFlags: (ids,patch)=>{get().cancelInteraction();get().commit({...get().project,items:get().project.items.map(i=>ids.includes(i.id)?{...i,...patch}:i)})},
     setProject: project => { try {
         usePlanning.getState().set({activeId:null});
-        set(s=>({ project: syncStructure(project),placement:null,calibrationPoints:[], selected: null,selectedIds:[],tool:'select',mode:'layout',interactionEpoch:s.interactionEpoch+1, past: [], future: [], gesture: null, error: null }));
+        set(s=>({ project: syncStructure(project),placement:null,calibrationPoints:[], selected: null,selectedIds:[],tool:'select',mode:'layout',interactionEpoch:s.interactionEpoch+1, past: [], future: [], revision: s.revision + 1, layoutRevision: ++nextLayoutRev, pastRevisions: [], futureRevisions: [], gesture: null, error: null }));
     }
     catch (e) {
         set({ error: (e as Error).message });
@@ -113,25 +124,29 @@ export const useStore = create<State>((set, get) => ({
     commit: project => {
         if(useWallPlacement.getState().session){useWallPlacement.setState({error:placementEditMessage});return false}
         const s = get();
-        try {
-            project = syncStructure(project);
-        }
-        catch (e) {
-            set({ error: (e as Error).message });
-            return false;
+        const styleOnly = isStyleOnlyChange(s.project, project);
+        if (!styleOnly) {
+            try {
+                project = syncStructure(project);
+            }
+            catch (e) {
+                set({ error: (e as Error).message });
+                return false;
+            }
         }
         if (JSON.stringify(project) === JSON.stringify(s.project)) {
             set({ error: null });
             return true;
         }
-        set({ project, past: [...s.past, s.project].slice(-60), future: [], error: null });
+        const nextLayout = styleOnly ? s.layoutRevision : ++nextLayoutRev;
+        set({ project, revision: s.revision + 1, layoutRevision: nextLayout, past: [...s.past, s.project].slice(-60), pastRevisions: [...s.pastRevisions, s.layoutRevision].slice(-60), future: [], futureRevisions: [], error: null });
         return true;
     },
     select: selected => get().selectMany(selected?[selected]:[]),
     addItem: item => {
         const id=uid();try{
             const project=syncStructure({...get().project,items:[...get().project.items,{...item,id}]}),added=project.items.find(i=>i.id===id)!;
-            if(!planningEditable(added,project)||(added.wallId&&!planningEditable(project.items.find(i=>i.id===added.wallId)!,project)))throw Error('请放在当前规划范围内，或切回整场地');
+            if(!planningEditable(added,project)||(added.wallId&&!planningEditable(project.items.find(w=>w.id===added.wallId)!,project)))throw Error('请放在当前规划范围内，或切回整场地');
             if(!get().commit(project))return null;get().selectMany([id]);return id;
         }catch(e){set({error:(e as Error).message});return null}
     },
@@ -151,7 +166,7 @@ export const useStore = create<State>((set, get) => ({
     endMove: () => {
         const s = get();
         if (s.gesture && JSON.stringify(s.gesture) !== JSON.stringify(s.project))
-            set({ past: [...s.past, s.gesture].slice(-60), future: [] });
+            set({ revision: s.revision + 1, layoutRevision: ++nextLayoutRev, past: [...s.past, s.gesture].slice(-60), pastRevisions: [...s.pastRevisions, s.layoutRevision].slice(-60), future: [], futureRevisions: [] });
         set({ gesture: null });
     },
     duplicate: ids => { try {
@@ -185,8 +200,8 @@ export const useStore = create<State>((set, get) => ({
         get().commit(pruneLayout({ ...project, items: project.items.filter(i => !removed.has(i.id)).map(i=>i.zoneId&&removed.has(i.zoneId)?{...i,zoneId:undefined}:i) }));
         get().selectMany([]);
     },
-    undo: () => { if(useWallPlacement.getState().session){cancelWallPlacement();return}get().cancelInteraction(); set(s => s.past.length ? { project: s.past[s.past.length - 1], past: s.past.slice(0, -1), future: [s.project, ...s.future], selected: null,selectedIds:[], error: null } : {}); },
-    redo: () => { if(useWallPlacement.getState().session){cancelWallPlacement();return}get().cancelInteraction(); set(s => s.future.length ? { project: s.future[0], past: [...s.past, s.project], future: s.future.slice(1), selected: null,selectedIds:[], error: null } : {}); },
+    undo: () => { if(useWallPlacement.getState().session){cancelWallPlacement();return}get().cancelInteraction(); set(s => s.past.length ? { project: s.past[s.past.length - 1], past: s.past.slice(0, -1), future: [s.project, ...s.future], revision: s.revision + 1, layoutRevision: s.pastRevisions[s.pastRevisions.length - 1] ?? ++nextLayoutRev, pastRevisions: s.pastRevisions.slice(0, -1), futureRevisions: [s.layoutRevision, ...s.futureRevisions], selected: null,selectedIds:[], error: null } : {}); },
+    redo: () => { if(useWallPlacement.getState().session){cancelWallPlacement();return}get().cancelInteraction(); set(s => s.future.length ? { project: s.future[0], past: [...s.past, s.project], future: s.future.slice(1), revision: s.revision + 1, layoutRevision: s.futureRevisions[0] ?? ++nextLayoutRev, pastRevisions: [...s.pastRevisions, s.layoutRevision], futureRevisions: s.futureRevisions.slice(1), selected: null,selectedIds:[], error: null } : {}); },
     resize: (width, height) => { if (validSize(width) && validSize(height))
         {const p=get().project;get().commit({ ...p, width, height, outline:p.outline?.map(v=>({x:v.x*width/p.width,y:v.y*height/p.height})) });} },
 }));

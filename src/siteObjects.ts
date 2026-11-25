@@ -1,8 +1,7 @@
 import * as T from 'three';
 import { Item } from './model';
-export const pointTypes={entrance:'入口',exhaust:'排烟',water:'上水',drain:'下水',power:'电力'} as const;
-export const pointGlyphs={entrance:'→',exhaust:'↑',water:'W',drain:'D',power:'E'} as const;
-export const isSiteObject=(i:Pick<Item,'kind'>)=>['column','fixture','utility'].includes(i.kind);
+import { pointGlyphs } from './siteObjectMeta';
+export { pointTypes, pointGlyphs, isSiteObject } from './siteObjectMeta';
 export function siteObjectModel(i:Pick<Item,'kind'|'w'|'d'|'h'|'color'|'pointType'|'verification'>){
  const g=new T.Group(),height=Math.max(i.h,10)/1000,mat=new T.MeshStandardMaterial({color:i.color,roughness:.85});
  const box=new T.Mesh(new T.BoxGeometry(i.w/1000,height,i.d/1000),mat);box.position.y=height/2;box.castShadow=true;box.receiveShadow=true;g.add(box);

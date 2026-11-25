@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BasicLayoutCandidate } from './basicLayout';
 import { businessTypeDefaults, type ConceptBusinessType } from './conceptPlanner';
-import { currentDraftChoices, draftSnapshot, rememberDraftChoices } from './draftChoices';
+import { currentDraftChoices, draftRevisionKey, rememberDraftChoices } from './draftChoices';
 import type { Project } from './model';
 import PlanMiniPreview from './PlanMiniPreview';
 import { copyProject, useProjectSession } from './projectSession';
@@ -10,7 +10,7 @@ import StyleQuickBar from './StyleQuickBar';
 import { useWorkspace } from './workspace';
 import { useStore } from './store';
 
-type Comparison = { snapshot: string; choices: BasicLayoutCandidate[]; current?: number };
+type Comparison = { revisionKey: string; choices: BasicLayoutCandidate[]; current?: number };
 
 export default function BasicDraftBar({ project, notify, openSignal = 0 }: { project: Project; notify: (msg: string) => void; openSignal?: number }) {
   const draft = project.basicDraft!;
@@ -38,24 +38,26 @@ export default function BasicDraftBar({ project, notify, openSignal = 0 }: { pro
     const controller = new AbortController();
     worker.current = controller;
     setBusiness(next); setError(''); setComparison(undefined); setSelected(0);
-    const live = useStore.getState().project;
-    const snapshot = draftSnapshot(live);
-    const cached = next === live.basicDraft?.business && currentDraftChoices(snapshot);
+    const state = useStore.getState();
+    const live = state.project;
+    const revisionKey = draftRevisionKey(live, state.layoutRevision);
+    const cached = next === live.basicDraft?.business && currentDraftChoices(live, state.layoutRevision, state.past.length === 0);
     if (cached) {
-      setComparison({ snapshot, choices: cached.choices, current: cached.selected });
+      setComparison({ revisionKey, choices: cached.choices, current: cached.selected });
       setSelected(cached.selected);
       return;
     }
     try {
       const choices = await requestLayoutCandidates(live, next, controller.signal);
-      if (!controller.signal.aborted) setComparison({ snapshot, choices });
+      if (!controller.signal.aborted) setComparison({ revisionKey, choices });
     } catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
   }
 
   async function apply(copy: boolean) {
     if (!comparison || saving) return;
-    const live = useStore.getState().project;
-    if (comparison.snapshot !== draftSnapshot(live)) {
+    const state = useStore.getState();
+    const live = state.project;
+    if (comparison.revisionKey !== draftRevisionKey(live, state.layoutRevision)) {
       setComparison(undefined); setError('铺位内容已有变化，请重新比较。'); return;
     }
     const candidate = comparison.choices[selected];
@@ -71,14 +73,15 @@ export default function BasicDraftBar({ project, notify, openSignal = 0 }: { pro
         if (!await copyProject(name, next)) throw Error(useProjectSession.getState().message || '保存新稿失败');
         useWorkspace.getState().set({ view: 'split', focusMode: false, camera: 'oblique', move3D: false, propsOpen: false });
       } else {
-        if (comparison.current === undefined || !currentDraftChoices(comparison.snapshot)) {
-          // The session no longer owns these candidates (e.g. another project was drafted meanwhile).
+        if (comparison.current === undefined || !currentDraftChoices(live, state.layoutRevision, state.past.length === 0)) {
+          // The session no longer owns these candidates (e.g. evicted from LRU cache).
           setComparison(undefined);
           throw Error('候选摆法已失效，请重新比较或另存为新稿。');
         }
         if (!useStore.getState().commit(next)) throw Error(useStore.getState().error || '应用摆法失败');
       }
-      rememberDraftChoices(useStore.getState().project, comparison.choices, selected);
+      const after = useStore.getState();
+      rememberDraftChoices(after.project, comparison.choices, selected, after.layoutRevision);
       useStore.getState().setMode('layout');
       dialog.current?.close();
       notify(copy ? '新稿已打开，原稿可从项目库打开' : '已应用摆法，可撤销');

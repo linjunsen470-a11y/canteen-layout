@@ -8,7 +8,9 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "test": "node tests/shop-geometry.mjs && node tests/shop-production.mjs",
+    "test": "pnpm test:geometry && pnpm test:browser",
+    "test:geometry": "node tests/shop-geometry.mjs",
+    "test:browser": "node tests/shop-production.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",

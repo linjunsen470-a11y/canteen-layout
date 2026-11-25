@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { blankProject, Project, projectIdentity } from './model';
 import { createBistroNoodleTemplate } from './shopTemplates';
 import { parseProject } from './projectIO';
+import { recordSavedDraft } from './draftChoices';
 import { useStore } from './store';
 import { legacyMigrationId, listProjects, migrateLegacy, ProjectRecord, readProject, RevisionConflict, setDeleted, writeProject } from './projectLibrary';
 
@@ -50,7 +51,7 @@ export async function saveProject():Promise<boolean>{
   if(inflight){const ok=await inflight;return ok?saveProject():false}
   if(useStore.getState().gesture)return false;
   if(useProjectSession.getState().status==='conflict')return false;
-  const project=useStore.getState().project;
+  const { project, layoutRevision }=useStore.getState();
   if(saved===signature(project)){useProjectSession.setState({status:'saved'});return true}
   useProjectSession.setState({status:'saving',message:''});
   inflight=(async()=>{
@@ -58,6 +59,7 @@ export async function saveProject():Promise<boolean>{
       const next={...project,updatedAt:new Date().toISOString()};
       const row=await writeProject(next,revision);
       revision=row.revision;
+      recordSavedDraft(next, layoutRevision);
       // Do not reset selection/history or replace edits made while the transaction was running.
       loading=true;
       const current=useStore.getState().project;
