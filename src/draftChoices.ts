@@ -3,7 +3,7 @@ import type { Project } from './model';
 
 // Keep alternatives for the active drafting session. Imported and reloaded projects
 // can generate new copies, even when we no longer know which edits were manual.
-export const draftSnapshot = (project: Project) => JSON.stringify({ ...project, updatedAt: undefined });
+export const draftSnapshot = (project: Project) => JSON.stringify({ ...project, updatedAt: undefined, style: undefined });
 let last: { id: string; choices: BasicLayoutCandidate[]; snapshots: Map<number, string> } | undefined;
 
 export function rememberDraftChoices(project: Project, choices: BasicLayoutCandidate[], selected: number) {

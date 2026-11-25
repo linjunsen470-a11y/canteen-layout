@@ -53,6 +53,7 @@ export const businessTypeDefaults: Record<ConceptBusinessType, {
   defaultKitchenPct: number;
   defaultSeating: ConceptSeatingStyle;
   defaultTheme: Exclude<ConceptThemeId, 'keep'>;
+  themeId?: Exclude<ConceptThemeId, 'keep'>;
   boothColor: string;
   chairColor: string;
   tableColor: string;

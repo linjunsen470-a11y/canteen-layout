@@ -6,11 +6,11 @@
 
 | 项 | 状态 |
 | --- | --- |
-| 主干 | 已合并 #15/#16/#17；基于 PR-B（#18）完成 PR-C（Step 3：A/B 双方案一图对比导出） |
-| 首稿链路 | 新建铺位 → 输入尺寸 / 画轮廓 → 后台 Worker 试排 → 直接打开分屏第一稿 |
+| 主干 | 已合并 #15/#16/#17；基于 PR-B（#18）→ PR-C（#19）完成 PR-D（Step 1：一键装修风格与光照氛围） |
+| 首稿链路 | 新建铺位 → 输入尺寸 / 画轮廓 → 后台 Worker 试排（按业态自动套用暖调/明亮装修风格）→ 直接打开分屏第一稿 |
 | 候选 | `generateBasicLayoutCandidates` 每个图上厨位保留一份高分试排，按家具坐标去重，最多 3 份；会话内缓存于 `draftChoices.ts`，项目包仍为格式 7 |
-| 出图 | 平面 PNG、3D 鸟瞰/室内/门头、2400×1500 单方案合图与 **A/B 双方案对比图**（同铺优先筛选 + 离屏只读拍摄）；复制剪贴板与下载 |
-| 验证 | `pnpm typecheck`、`pnpm build`、`pnpm test`（几何含 sameShop + 生产版 Chromium 含 basic-layout / editable-draft / quick-export A/B 对比 / offscreen-render） |
+| 出图 | 平面 PNG、3D 鸟瞰/室内/门头、2400×1500 单方案合图与 A/B 双方案对比图；草稿条与导出弹窗内置一键风格/光照胶囊，切换风格自动刷新 3D 与合图预览 |
+| 验证 | `pnpm typecheck`、`pnpm build`、`pnpm test`（几何含 sameShop 与默认/快捷风格单测 + 生产版 Chromium 含风格重拍、A/B 对比与离屏渲染） |
 
 ### #16 审计遗留（已在合并前修复）
 

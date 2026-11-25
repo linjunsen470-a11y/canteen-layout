@@ -6,6 +6,7 @@ import type { Project } from './model';
 import PlanMiniPreview from './PlanMiniPreview';
 import { copyProject, useProjectSession } from './projectSession';
 import { requestLayoutCandidates } from './requestBasicLayout';
+import StyleQuickBar from './StyleQuickBar';
 import { useWorkspace } from './workspace';
 import { useStore } from './store';
 
@@ -87,6 +88,7 @@ export default function BasicDraftBar({ project, notify, openSignal = 0 }: { pro
 
   return <div className="basic-draft-bar">
     <span>拖动桌组调整位置，双击可单选椅子</span>
+    <StyleQuickBar project={project} className="is-inline" />
     <details><summary>生成记录{draft.warnings.length ? `（${draft.warnings.length}）` : ''}</summary>
       <div><strong>{businessTypeDefaults[draft.business].label}</strong>
         {draft.warnings.length ? <ul>{draft.warnings.map(w => <li key={w}>{w}</li>)}</ul> : <p>基础设备和桌组均已摆入。</p>}
