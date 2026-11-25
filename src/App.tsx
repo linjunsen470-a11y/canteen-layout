@@ -40,26 +40,30 @@ const Scene3D = lazy(() => import('./Scene3D'));
 type CatalogItem = typeof catalog[number];
 
 export default function App() {
-  const s = useStore();
+  const project = useStore(s => s.gesture ?? s.project);
+  const multi = useStore(s => s.selectedIds);
+  const mode = useStore(s => s.mode);
+  const tool = useStore(s => s.tool);
+  const error = useStore(s => s.error);
+  const hasPast = useStore(s => s.past.length > 0);
+  const hasFuture = useStore(s => s.future.length > 0);
   const wallSession = useWallPlacement(s => s.session);
   const clipboard = useEditorClipboard();
   const sessionReady = useProjectSession(s => s.ready);
   const sessionBusy = useProjectSession(s => s.busy);
-  const { project } = s;
 
   const prefs = useWorkspace(), { focusMode } = prefs;
   const view = focusMode ? (prefs.focusView ?? prefs.view) : prefs.view;
   const libraryOpen = !focusMode && prefs.libraryOpen;
-  const propsOpen = !focusMode && prefs.propsOpen && (s.selectedIds.length > 0 || s.mode === 'site');
+  const propsOpen = !focusMode && prefs.propsOpen && (multi.length > 0 || mode === 'site');
   const [sceneMounted, setSceneMounted] = useState(view !== '2d');
   useEffect(() => { if (view !== '2d') setSceneMounted(true); }, [view]);
 
-  const toggleFocus = () => { s.cancelInteraction(); prefs.set({ focusMode: !focusMode, focusView: null }); };
-  const V = (nextView: '2d' | 'split' | '3d') => { s.cancelInteraction(); prefs.set({ view: nextView, focusMode: false }); };
+  const toggleFocus = () => { useStore.getState().cancelInteraction(); prefs.set({ focusMode: !focusMode, focusView: null }); };
+  const V = (nextView: '2d' | 'split' | '3d') => { useStore.getState().cancelInteraction(); prefs.set({ view: nextView, focusMode: false }); };
   const setLibraryOpen = (value: boolean | ((v: boolean) => boolean)) => prefs.set({ focusMode: false, libraryOpen: typeof value === 'function' ? value(libraryOpen) : value });
   const setPropsOpen = (value: boolean | ((v: boolean) => boolean)) => prefs.set({ focusMode: false, propsOpen: typeof value === 'function' ? value(propsOpen) : value });
   const wizardTrigger = useRef<HTMLButtonElement>(null);
-  const multi = s.selectedIds;
 
   useEditorKeyboard();
   const [grid, G] = useState(true), [snap, S] = useState(true), [notice, notify] = useState('');
@@ -72,11 +76,10 @@ export default function App() {
 
   const activeAreaId = usePlanning(state => state.activeId);
   // During a drag, inspect the committed layout until the gesture finishes.
-  const inspectionProject = s.gesture ?? project;
-  const insights = useMemo(() => analyzeShop(inspectionProject), [inspectionProject]);
-  const issues = useMemo(() => checkSpace(inspectionProject, activeAreaId)
+  const insights = useMemo(() => analyzeShop(project), [project]);
+  const issues = useMemo(() => checkSpace(project, activeAreaId)
     .sort((a, b) => Number(a.type === '参考净距') - Number(b.type === '参考净距')),
-    [inspectionProject, activeAreaId]);
+    [project, activeAreaId]);
   const criticalCount = issues.filter(issue => issue.type !== '参考净距').length;
 
   const save = () => { void saveProject(); };
@@ -160,7 +163,7 @@ export default function App() {
       </div>
       <ShopWizardDialog trigger={wizardTrigger} notify={notify} />
       <ProjectLibrary />
-      <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => s.commit({ ...project, name: e.target.value })} />
+      <input disabled={!sessionReady || sessionBusy} className="project-title" aria-label="项目名称" value={project.name} onChange={e => useStore.getState().commit({ ...useStore.getState().project, name: e.target.value })} />
       <div className="tabs" aria-label="画布视图">
         {(['2d', 'split', '3d'] as const).map(v => (
           <button key={v} aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => V(v)}>{v === '2d' ? '2D 平面' : v === '3d' ? '3D 效果图' : '2D + 3D 分屏'}</button>
@@ -169,8 +172,8 @@ export default function App() {
       <div className="actions" inert={!sessionReady || sessionBusy}>
         <ConceptPlannerDialog notify={notify} openSignal={conceptSignal} />
         <ShopInsightsDialog openSignal={insightsSignal} insights={insights} issues={issues} criticalCount={criticalCount} />
-        <button disabled={!s.past.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => s.undo()}><Undo2 />撤销</button>
-        <button disabled={!s.future.length && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => s.redo()}><Redo2 />重做</button>
+        <button disabled={!hasPast && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '撤销上一步编辑'} onClick={() => useStore.getState().undo()}><Undo2 />撤销</button>
+        <button disabled={!hasFuture && !wallSession} title={wallSession ? '取消未确认的离墙定位' : '重做编辑'} onClick={() => useStore.getState().redo()}><Redo2 />重做</button>
         <button onClick={save}><Save />保存</button>
         <ImageExport project={project} capture={(options?: { skipPlan?: boolean }) => withExportViews(async (flat, scene) => ({
           planBare: options?.skipPlan ? '' : await flat.capturePNG({ header: false }),
@@ -219,25 +222,25 @@ export default function App() {
             </div>
           )}
           <div className="editor-heading-right">
-            <button className="site-settings-button" onClick={() => { s.setMode('site'); setPropsOpen(true); }}>铺位与装修风格</button>
+            <button className="site-settings-button" onClick={() => { useStore.getState().setMode('site'); setPropsOpen(true); }}>铺位与装修风格</button>
             <button className="focus-toggle" title="专注画布 · F；Esc 退出" aria-pressed={focusMode} onClick={toggleFocus}>{focusMode ? <Minimize2 /> : <Maximize2 />}{focusMode ? '退出专注' : '专注画布'}</button>
-            <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !s.selectedIds.length) s.setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
+            <button aria-label="切换属性面板" title={propsOpen ? '收起属性面板' : '展开属性面板'} aria-pressed={propsOpen} onClick={() => { if (!propsOpen && !multi.length) useStore.getState().setMode('site'); setPropsOpen(!propsOpen); }}>{propsOpen ? <PanelRightClose /> : <PanelRightOpen />}</button>
           </div>
         </div>
         {project.basicDraft && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} openSignal={draftCompareSignal} />}
         <UnderlayQuickFrameBar key={'frame-' + project.id} project={project} notify={notify} />
         <PlanningBar />
         <WallPlacementBar />
-        <div className="canvas-context" hidden={s.tool === 'select'}>
-          <span>{toolLabels[s.tool]} · {multi.length ? `已选 ${multi.length} 项` : '未选择'}</span>
-          {s.tool !== 'select' && <button onClick={() => s.cancelInteraction()}>退出工具 · Esc</button>}
+        <div className="canvas-context" hidden={tool === 'select'}>
+          <span>{toolLabels[tool]} · {multi.length ? `已选 ${multi.length} 项` : '未选择'}</span>
+          {tool !== 'select' && <button onClick={() => useStore.getState().cancelInteraction()}>退出工具 · Esc</button>}
         </div>
         <SplitView
           key={project.id}
           view={view}
           first={
             <div className="plan">
-              {sessionReady && !project.items.length && !project.outline && !project.underlay && !project.survey && s.tool === 'select' &&
+              {sessionReady && !project.items.length && !project.outline && !project.underlay && !project.survey && tool === 'select' &&
                 <button className="blank-start" onClick={() => wizardTrigger.current?.click()}>输入铺位尺寸，生成第一稿</button>}
               <PlanEditor active={view !== '3d'} ref={plan} grid={grid} snap={snap} notify={notify} onDropItem={dropItem} onDropCombo={dropCombo} onOpenConcept={() => setConceptSignal(n => n + 1)} />
             </div>
@@ -255,7 +258,7 @@ export default function App() {
           }
         />
         <footer role="status">
-          <span className="status-message">{s.error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象 · R 旋转 90°` : '就绪 · 从左侧拖入组合，点外墙加门窗，或一键智能分区')}</span>
+          <span className="status-message">{error || notice || clipboard.message || (multi.length ? `已选 ${multi.length} 个对象 · R 旋转 90°` : '就绪 · 从左侧拖入组合，点外墙加门窗，或一键智能分区')}</span>
           <span className="project-count">
             <b>{insights.seats} 座</b>
             <span>·</span>
@@ -276,7 +279,7 @@ export default function App() {
         </footer>
       </section>
       {propsOpen && <SidebarResize side="props" />}
-      <PropertiesPanel onSavedSpec={() => { setLibrarySignal(n => n + 1); prefs.set({ libraryOpen: true, leftTab: 'catalog', focusMode: false }); }} onEditOutline={draw => { if (view === '3d') V('split'); s.setTool(draw ? 'outline-draw' : 'outline-edit'); }} />
+      <PropertiesPanel onSavedSpec={() => { setLibrarySignal(n => n + 1); prefs.set({ libraryOpen: true, leftTab: 'catalog', focusMode: false }); }} onEditOutline={draw => { if (view === '3d') V('split'); useStore.getState().setTool(draw ? 'outline-draw' : 'outline-edit'); }} />
     </div>
   </main>;
 }

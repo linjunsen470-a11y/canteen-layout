@@ -1,5 +1,5 @@
 import { groupSelection } from './layoutGroups';
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Eye, EyeOff, LockKeyhole, LockOpen, Focus } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
@@ -13,8 +13,13 @@ const ObjectRow=memo(function ObjectRow({item:i,parent,selected}:{item:Item;pare
   <div className="object-actions"><button aria-label={`${i.hidden?'显示':'隐藏'} ${i.name}`} title={parent?.hidden?'所属墙体已隐藏；需显示墙体':undefined} aria-pressed={!i.hidden} onClick={()=>useStore.getState().setFlags([i.id],{hidden:!i.hidden})}>{visible?<Eye/>:<EyeOff/>}</button><button aria-label={`${i.locked?'解锁':'锁定'} ${i.name}`} aria-pressed={!!i.locked} onClick={()=>useStore.getState().setFlags([i.id],{locked:!i.locked})}>{i.locked?<LockKeyhole/>:<LockOpen/>}</button><button aria-label={`定位 ${i.name}`} disabled={!visible} onClick={()=>{useStore.getState().locate(i.id);useWorkspace.getState().set({propsOpen:true})}}><Focus/></button></div>
  </article>;
 });
-export default function ObjectList(){
- const {project,selectedIds}=useStore(),[query,setQuery]=useState('');
- const rows=project.items.filter(i=>`${i.name} ${i.id}`.toLowerCase().includes(query.trim().toLowerCase())),byId=new Map(project.items.map(i=>[i.id,i]));
- return <section className="object-browser"><LayerControls/><label className="catalog-search"><input aria-label="搜索对象" placeholder="按名称或 ID 搜索" value={query} onChange={e=>setQuery(e.target.value)}/></label><p className="panel-help">{rows.length} 个对象 · 已选 {selectedIds.length} 项 · Shift 点击多选</p><div className="site-actions"><button onClick={()=>{const s=useStore.getState();s.cancelInteraction();s.selectMany(rows.map(i=>i.id))}}>全选搜索结果</button><button disabled={!selectedIds.length} onClick={()=>useStore.getState().selectMany([])}>取消选择</button></div><div className="object-list">{rows.map(i=><ObjectRow key={i.id} item={i} parent={i.wallId?byId.get(i.wallId):undefined} selected={selectedIds.includes(i.id)}/>)}{!rows.length&&<p>没有匹配的对象。</p>}</div></section>;
-}
+export default memo(function ObjectList(){
+ const project=useStore(s=>s.gesture??s.project),selectedIds=useStore(s=>s.selectedIds),[query,setQuery]=useState('');
+ const selectedSet=useMemo(()=>new Set(selectedIds),[selectedIds]);
+ const {rows,byId}=useMemo(()=>{
+  const q=query.trim().toLowerCase(),map=new Map<string,Item>(),list:Item[]=[];
+  for(const i of project.items){map.set(i.id,i);if(!q||`${i.name} ${i.id}`.toLowerCase().includes(q))list.push(i)}
+  return {rows:list,byId:map};
+ },[project.items,query]);
+ return <section className="object-browser"><LayerControls/><label className="catalog-search"><input aria-label="搜索对象" placeholder="按名称或 ID 搜索" value={query} onChange={e=>setQuery(e.target.value)}/></label><p className="panel-help">{rows.length} 个对象 · 已选 {selectedIds.length} 项 · Shift 点击多选</p><div className="site-actions"><button onClick={()=>{const s=useStore.getState();s.cancelInteraction();s.selectMany(rows.map(i=>i.id))}}>全选搜索结果</button><button disabled={!selectedIds.length} onClick={()=>useStore.getState().selectMany([])}>取消选择</button></div><div className="object-list">{rows.map(i=><ObjectRow key={i.id} item={i} parent={i.wallId?byId.get(i.wallId):undefined} selected={selectedSet.has(i.id)}/>)}{!rows.length&&<p>没有匹配的对象。</p>}</div></section>;
+});

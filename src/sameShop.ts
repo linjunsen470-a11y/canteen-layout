@@ -54,22 +54,35 @@ function sameOutlineByIoU(a: Point[], b: Point[]): boolean {
   return union > 0 && inter / union > 0.98;
 }
 
-function matchPointsWithin(a: Point[], b: Point[], maxDistMm: number): boolean {
-  if (a.length !== b.length) return false;
-  const used = new Array<boolean>(b.length).fill(false);
-  function dfs(index: number): boolean {
-    if (index === a.length) return true;
-    for (let j = 0; j < b.length; j++) {
-      if (used[j]) continue;
-      if (Math.hypot(a[index].x - b[j].x, a[index].y - b[j].y) < maxDistMm) {
-        used[j] = true;
-        if (dfs(index + 1)) return true;
-        used[j] = false;
+function matchBipartite<A, B>(as: A[], bs: B[], matches: (a: A, b: B) => boolean): boolean {
+  if (as.length !== bs.length) return false;
+  if (as.length === 0) return true;
+  const adj = as.map(a => {
+    const list: number[] = [];
+    for (let j = 0; j < bs.length; j++) if (matches(a, bs[j])) list.push(j);
+    return list;
+  });
+  if (adj.some(list => list.length === 0)) return false;
+  const matchB = new Array<number>(bs.length).fill(-1);
+  const augment = (u: number, visited: Uint8Array): boolean => {
+    for (const v of adj[u]) {
+      if (visited[v]) continue;
+      visited[v] = 1;
+      if (matchB[v] === -1 || augment(matchB[v], visited)) {
+        matchB[v] = u;
+        return true;
       }
     }
     return false;
+  };
+  for (let u = 0; u < as.length; u++) {
+    if (!augment(u, new Uint8Array(bs.length))) return false;
   }
-  return dfs(0);
+  return true;
+}
+
+function matchPointsWithin(a: Point[], b: Point[], maxDistMm: number): boolean {
+  return matchBipartite(a, b, (pa, pb) => Math.hypot(pa.x - pb.x, pa.y - pb.y) < maxDistMm);
 }
 
 function isFixedFixture(item: Item): boolean {
@@ -82,6 +95,29 @@ function isFixedFixture(item: Item): boolean {
 
 function centerOf(item: Item, origin: Point): Point {
   return { x: item.x + item.w / 2 - origin.x, y: item.y + item.d / 2 - origin.y };
+}
+
+type FixtureSignature = {
+  item: Item;
+  center: Point;
+  corners: Point[];
+};
+
+function fixtureSignature(item: Item, origin: Point): FixtureSignature {
+  return {
+    item,
+    center: centerOf(item, origin),
+    corners: footprint(item).map(p => subtract(p, origin)),
+  };
+}
+
+function fixtureMatches(a: FixtureSignature, b: FixtureSignature): boolean {
+  if (a.item.kind !== b.item.kind || a.item.pointType !== b.item.pointType) return false;
+  if (Math.hypot(a.center.x - b.center.x, a.center.y - b.center.y) >= 10) return false;
+  const sameDims = Math.abs(a.item.w - b.item.w) < 10 && Math.abs(a.item.d - b.item.d) < 10;
+  const swappedDims = Math.abs(a.item.w - b.item.d) < 10 && Math.abs(a.item.d - b.item.w) < 10;
+  if (!sameDims && !swappedDims) return false;
+  return sameCornerLoop(a.corners, b.corners, 10);
 }
 
 // Determines whether two projects share the same physical shop shell (outline, entrance, fixed fixtures).
@@ -103,20 +139,26 @@ export function matchSameShop(a: Project, b: Project): ShopMatch {
   const entrancesB = b.items.filter(i => !i.hidden && i.kind === 'utility' && i.pointType === 'entrance').map(i => centerOf(i, refB.origin));
   if (!matchPointsWithin(entrancesA, entrancesB, 200)) return { same: false, reason: 'entrance' };
 
-  const fixedA = new Map(a.items.filter(isFixedFixture).map(i => [i.id, i]));
-  const fixedB = new Map(b.items.filter(isFixedFixture).map(i => [i.id, i]));
-  if (fixedA.size !== fixedB.size) return { same: false, reason: 'fixtures' };
-  for (const [id, itemA] of fixedA) {
-    const itemB = fixedB.get(id);
-    if (!itemB) return { same: false, reason: 'fixtures' };
-    const cornersA = footprint(itemA).map(p => subtract(p, refA.origin));
-    const cornersB = footprint(itemB).map(p => subtract(p, refB.origin));
-    if (!sameCornerLoop(cornersA, cornersB, 10)) return { same: false, reason: 'fixtures' };
-    const ca = centerOf(itemA, refA.origin);
-    const cb = centerOf(itemB, refB.origin);
-    if (Math.hypot(ca.x - cb.x, ca.y - cb.y) >= 10 || Math.abs(itemA.w - itemB.w) >= 10 || Math.abs(itemA.d - itemB.d) >= 10) {
-      return { same: false, reason: 'fixtures' };
+  const fixedA = a.items.filter(isFixedFixture).map(i => fixtureSignature(i, refA.origin));
+  const fixedB = b.items.filter(isFixedFixture).map(i => fixtureSignature(i, refB.origin));
+  if (fixedA.length !== fixedB.length) return { same: false, reason: 'fixtures' };
+
+  // Fast path: pair identical IDs that still match geometrically, then fall back to geometric matching
+  // for separately imported or redrawn shells whose fixture IDs differ.
+  const bById = new Map(fixedB.map((entry, idx) => [entry.item.id, idx]));
+  const matchedB = new Uint8Array(fixedB.length);
+  const remA: FixtureSignature[] = [];
+  for (const fa of fixedA) {
+    const idx = bById.get(fa.item.id);
+    if (idx !== undefined && !matchedB[idx] && fixtureMatches(fa, fixedB[idx])) {
+      matchedB[idx] = 1;
+    } else {
+      remA.push(fa);
     }
+  }
+  if (remA.length > 0) {
+    const remB = fixedB.filter((_, idx) => !matchedB[idx]);
+    if (!matchBipartite(remA, remB, fixtureMatches)) return { same: false, reason: 'fixtures' };
   }
 
   return { same: true };

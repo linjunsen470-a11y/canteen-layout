@@ -276,7 +276,17 @@ export default function SceneContent({
   const effectiveFrontWallIds = interactive ? frontWallIds : emptySet;
   const effectiveFrontWallKey = interactive ? frontWallKey : '';
 
-  const profiles = useMemo(() => wallProfiles(project), [project.items]);
+  const profiles = useMemo(() => wallProfiles(project), [project.items, project.survey]);
+  const openingsByWall = useMemo(() => {
+    const map = new Map<string, Item[]>();
+    for (const o of project.items) {
+      if (!o.wallId) continue;
+      const list = map.get(o.wallId);
+      if (list) list.push(o);
+      else map.set(o.wallId, [o]);
+    }
+    return map;
+  }, [profiles]);
   const renderOptions: BuildingRenderOptions = useMemo(() => ({
     wallMaterial: style.wallMaterial,
     cutaway: style.wallCutaway && cameraMode !== 'eye-level',
@@ -284,6 +294,7 @@ export default function SceneContent({
   }), [style.wallMaterial, style.wallCutaway, style.lightingPreset, cameraMode]);
   const cutawayRenderOptions: BuildingRenderOptions = useMemo(() => ({ ...renderOptions, cutaway: true }), [renderOptions]);
 
+  const prevGroupsRef = useRef<Map<string, Item[]>>(new Map());
   const groups = useMemo(() => {
     const visible = effectiveFocus
       ? [effectiveFocus, ...project.items.filter(i => i.wallId === effectiveFocus.id)]
@@ -301,7 +312,8 @@ export default function SceneContent({
       const h = (renderOptions.cutaway || nearCutWall(original)) && !effectiveFocus && m === 'wood-feature-wall'
         ? Math.min(original.h, 1180)
         : original.h;
-      const i = { ...original, h, sill: baseHeight(project, original) };
+      const sill = baseHeight(project, original);
+      const i = h === original.h && sill === (original.sill ?? 0) ? original : { ...original, h, sill };
       const key = ['wall', 'door', 'window'].includes(i.kind) || cutawayWallDecorModels.has(m)
         ? i.id
         : JSON.stringify([i.kind, m, i.w, i.d, i.h, i.color, i.flipped, i.pointType, i.verification, m === 'shop-sign' ? i.name : '', effectiveFaded(i)]);
@@ -309,6 +321,14 @@ export default function SceneContent({
       if (group) group.push(i);
       else map.set(key, [i]);
     }
+    const prev = prevGroupsRef.current;
+    for (const [key, list] of map) {
+      const old = prev.get(key);
+      if (old && old.length === list.length && old.every((item, idx) => item === list[idx])) {
+        map.set(key, old);
+      }
+    }
+    prevGroupsRef.current = map;
     return map;
   }, [project, effectiveFocus?.id, renderOptions.cutaway, effectiveFrontWallIds, effectiveFaded]);
 
@@ -352,7 +372,7 @@ export default function SceneContent({
             faded={effectiveFaded(i)}
             handlers={effectiveHandlers}
             renderOptions={isFrontCut ? cutawayRenderOptions : renderOptions}
-            openings={i.kind === 'wall' ? project.items.filter(o => o.wallId === i.id) : undefined}
+            openings={i.kind === 'wall' ? openingsByWall.get(i.id) : undefined}
           />
         );
       }))}

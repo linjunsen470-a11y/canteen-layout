@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useStore } from './store';
 import { copyProject, createProject, deleteProject, openProject, refreshProjects, saveProject, startProjectSession, useProjectSession } from './projectSession';
 
-export default function ProjectLibrary(){
-  const session=useProjectSession(),project=useStore(s=>s.project);
+export default memo(function ProjectLibrary(){
+  const session=useProjectSession(),project=useStore(s=>s.gesture??s.project);
   const dialog=useRef<HTMLDialogElement>(null);
   const [name,setName]=useState(''),[trash,setTrash]=useState(false);
   useEffect(()=>{void startProjectSession()},[]);
@@ -37,4 +37,4 @@ export default function ProjectLibrary(){
       </fieldset>
     </dialog>
   </>;
-}
+});

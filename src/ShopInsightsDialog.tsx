@@ -18,7 +18,7 @@ type Props = {
 
 export default function ShopInsightsDialog({ openSignal, insights, issues, criticalCount }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const project = useStore(s => s.project);
+  const project = useStore(s => s.gesture ?? s.project);
   const commit = useStore(s => s.commit);
   const open = () => dialog.current?.showModal();
 

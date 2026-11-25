@@ -35,7 +35,7 @@ const seatingStyleLabels: Record<ConceptSeatingStyle, string> = {
 
 export default function ConceptPlannerDialog({ notify, openSignal = 0 }: { notify: (msg: string) => void; openSignal?: number }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const project = useStore(s => s.project);
+  const project = useStore(s => s.gesture ?? s.project);
   const commit = useStore(s => s.commit);
   const session = useProjectSession();
 

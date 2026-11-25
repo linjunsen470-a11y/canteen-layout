@@ -66,34 +66,41 @@ function patchItem(item: Item, patch: Partial<Item>): Item {
             return item;
     }
     if(patch.rotation!==undefined)patch={...patch,rotation:normalizeRotation(patch.rotation)};
-    return { ...item, ...patch, id: item.id, kind: item.kind };
+    let changed = false;
+    for (const key of Object.keys(patch) as (keyof Item)[]) {
+        if (key === 'id' || key === 'kind') continue;
+        if (item[key] !== patch[key]) { changed = true; break; }
+    }
+    return changed ? { ...item, ...patch, id: item.id, kind: item.kind } : item;
 }
 function applyChanges(project: Project, changes: {
     id: string;
     patch: Partial<Item>;
 }[]): Project {
+    const changeMap = new Map(changes.map(c => [c.id, c.patch]));
+    const itemById = new Map(project.items.map(i => [i.id, i]));
     const next = { ...project, items: project.items.map(item => {
-            const change = changes.find(c => c.id === item.id);
-            if (!change)
+            const changePatch = changeMap.get(item.id);
+            if (!changePatch)
                 return item;
             if(!isEditable(item,project))throw Error('对象已锁定、隐藏或位于当前规划范围外');
-            if(item.kind==='wall'&&(['x','y','w','d','h','rotation'] as const).some(key=>change.patch[key]!==undefined&&change.patch[key]!==item[key])&&project.items.some(i=>i.wallId===item.id&&!isEditable(i,project)))
+            if(item.kind==='wall'&&(['x','y','w','d','h','rotation'] as const).some(key=>changePatch[key]!==undefined&&changePatch[key]!==item[key])&&project.items.some(i=>i.wallId===item.id&&!isEditable(i,project)))
                 throw Error('墙体包含锁定、隐藏或范围外门窗，请先处理关联门窗再调整墙体');
-            const wall = project.items.find(w => w.id === item.wallId);
+            const wall = item.wallId ? itemById.get(item.wallId) : undefined;
             if (isOpening(item) && wall?.locked)
                 throw Error('所属墙体已锁定，请先解锁墙体');
-            let patch = { ...change.patch };
+            let patch = { ...changePatch };
             if(isAttachedOpening(item)&&!patch.freeStanding&&patch.rotation!==undefined&&Math.abs(normalizeRotation(patch.rotation)-normalizeRotation(item.rotation))>1e-8)
                 throw Error('贴墙门窗的方向由墙体决定。请旋转所属墙体；如需独立示意，请先在“所属墙体”选择独立放置。');
 
-            if(patch.wallId&&project.items.find(w=>w.id===patch.wallId)?.locked)throw Error('目标墙体已锁定');
+            if(patch.wallId&&itemById.get(patch.wallId)?.locked)throw Error('目标墙体已锁定');
             if (isAttachedOpening(item) && !patch.freeStanding && wall && (patch.x !== undefined || patch.y !== undefined)) {
                 patch.offset = projectOnWall(wall, { x: (patch.x ?? item.x) + item.w / 2, y: (patch.y ?? item.y) + item.d / 2 }).offset - item.w / 2;
             }
-            const next=patchItem(item,patch);if(!planningEditable(next,project))throw Error('对象需完整位于当前规划范围内；可切回整场地继续编辑');return next;
+            const updated=patchItem(item,patch);if(!planningEditable(updated,project))throw Error('对象需完整位于当前规划范围内；可切回整场地继续编辑');return updated;
         }) };
-    const synced=syncStructure(next),changed=new Set(changes.map(c=>c.id));
-    if(synced.items.some(i=>(changed.has(i.id)||!!i.wallId&&changed.has(i.wallId))&&(!planningEditable(i,synced)||(i.wallId&&!planningEditable(synced.items.find(w=>w.id===i.wallId)!,synced)))))throw Error('修改后的对象或关联门窗超出当前规划范围');
+    const synced=syncStructure(next),syncedById=new Map(synced.items.map(i=>[i.id,i]));
+    if(synced.items.some(i=>(changeMap.has(i.id)||!!i.wallId&&changeMap.has(i.wallId))&&(!planningEditable(i,synced)||(i.wallId&&!planningEditable(syncedById.get(i.wallId)!,synced)))))throw Error('修改后的对象或关联门窗超出当前规划范围');
     return synced;
 }
 let nextLayoutRev = 1;
