@@ -174,6 +174,8 @@ export function buildUnderlayFramedShell(source: Project, frame: UnderlayFrame):
     : undefined;
   return {
     ...shell,
+    style: { ...shell.style, ...source.style },
+    items: shell.items.map(wall => ({ ...wall, h: source.style?.ceilingHeight ?? wall.h })),
     id: source.id,
     createdAt: source.createdAt,
     metadata: source.metadata,

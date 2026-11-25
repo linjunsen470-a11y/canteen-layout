@@ -225,7 +225,7 @@ export default function App() {
           </div>
         </div>
         {project.basicDraft && <BasicDraftBar key={'draft-' + project.id} project={project} notify={notify} openSignal={draftCompareSignal} />}
-        <UnderlayQuickFrameBar project={project} notify={notify} />
+        <UnderlayQuickFrameBar key={project.id} project={project} notify={notify} />
         <PlanningBar />
         <WallPlacementBar />
         <div className="canvas-context" hidden={s.tool === 'select'}>
