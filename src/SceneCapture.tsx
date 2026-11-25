@@ -1,6 +1,5 @@
-import { useEffect, RefObject } from 'react';
+import { useEffect, useRef, RefObject } from 'react';
 import { Object3D, PerspectiveCamera, Vector2, Vector3 } from 'three';
-import { useStore } from './store';
 import { useThree } from '@react-three/fiber';
 import { frameDistance, frameShop } from './sceneFraming';
 import { computeBirdseyeHiddenItemIds } from './wallVisibility3D';
@@ -16,6 +15,7 @@ export type SceneGalleryShots = {
 
 export type SceneCaptureAPI = {
   galleryReady: () => boolean;
+  underlayReady: (assetId: string) => boolean;
   captureCurrent: () => string;
   captureShot: (project: Project, kind: keyof SceneGalleryShots) => string;
 };
@@ -126,11 +126,13 @@ export function computeBirdseyeShot(project: Project) {
 }
 
 // Render immediately before copying pixels; no permanent preserveDrawingBuffer cost.
-export default function SceneCapture({ capture }: { capture: RefObject<SceneCaptureAPI | null> }) {
+export default function SceneCapture({ capture, project }: { capture: RefObject<SceneCaptureAPI | null>; project: Project }) {
   const { gl, scene, camera, invalidate } = useThree();
+  const projectRef = useRef(project);
+  projectRef.current = project;
   useEffect(() => {
-    const renderShot = (shot: PerspectiveCamera, targetWidth = 1600, targetHeight = 1000, hiddenNames?: Set<string>) => {
-      const u = useStore.getState().project.underlay;
+    const renderShot = (shot: PerspectiveCamera, targetWidth = 1600, targetHeight = 1000, hiddenNames?: Set<string>, targetProject?: Project) => {
+      const u = (targetProject ?? projectRef.current).underlay;
       if (u && !u.hidden && scene.getObjectByName('site-floor') && !scene.getObjectByName(`site-underlay:${u.assetId}`)) {
         throw Error('底图未加载完成或资产缺失，请先恢复底图后截图');
       }
@@ -161,6 +163,7 @@ export default function SceneCapture({ capture }: { capture: RefObject<SceneCapt
 
     capture.current = {
       galleryReady: () => !!scene.getObjectByName('site-floor'),
+      underlayReady: assetId => !!scene.getObjectByName(`site-underlay:${assetId}`),
       captureCurrent: () => {
         const size = gl.getSize(new Vector2());
         const scale = Math.min(1600 / Math.max(1, size.x), 2000 / Math.max(1, size.y));
@@ -169,19 +172,19 @@ export default function SceneCapture({ capture }: { capture: RefObject<SceneCapt
         const shot = camera.clone() as PerspectiveCamera;
         return renderShot(shot, width, height);
       },
-      captureShot: (project, kind) => {
-        const shot = { birdseye: computeBirdseyeShot, storefront: computeStorefrontShot, interior: computeInteriorShot }[kind](project);
+      captureShot: (targetProject, kind) => {
+        const shot = { birdseye: computeBirdseyeShot, storefront: computeStorefrontShot, interior: computeInteriorShot }[kind](targetProject);
         const cam = new PerspectiveCamera(shot.fov, 1440 / 900, .05, 500);
         cam.position.copy(shot.pos);
         cam.lookAt(shot.target);
         const hidden = new Set<string>();
         if (kind === 'birdseye') {
           hidden.add('ceiling-assembly');
-          for (const id of computeBirdseyeHiddenItemIds(project, shot.pos)) {
+          for (const id of computeBirdseyeHiddenItemIds(targetProject, shot.pos)) {
             hidden.add('item:' + id);
           }
         }
-        return renderShot(cam, 1440, 900, hidden);
+        return renderShot(cam, 1440, 900, hidden, targetProject);
       },
     };
     return () => { capture.current = null; };
