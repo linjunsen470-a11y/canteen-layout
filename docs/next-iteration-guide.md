@@ -6,27 +6,27 @@
 
 | 项 | 状态 |
 | --- | --- |
-| 主干 | 已合并 #15–#20；基于 PR-E（#21）完成 PR-F（Step 4：房东户型截图快速套框建铺） |
-| 首稿链路 | 新建铺位 → 输入尺寸 / 画轮廓 / 户型图两点校准后直接套矩形或 L 形 → 后台 Worker 试排（自动套用业态氛围）→ 分屏第一稿；2D 拖动实时显示通道净距标尺 |
-| 候选 | `generateBasicLayoutCandidates` 每个图上厨位保留一份高分试排，按家具坐标去重，最多 3 份；会话内缓存于 `draftChoices.ts`，项目包仍为格式 7 |
-| 出图 | 平面 PNG、3D 鸟瞰/室内/门头、2400×1500 单方案合图与 A/B 双方案对比图；内置一键风格/光照胶囊与出图隐藏底图开关 |
-| 验证 | `pnpm typecheck`、`pnpm build`、`pnpm test`（几何含 sameShop / 快捷风格 / 局部拖拽净距 / 底图套框 + 生产版 Chromium 含套框出稿、隐藏底图去像素、拖拽净距、风格重拍、A/B 对比与离屏渲染） |
+| 主干 | 已合并 #15–#20；本轮迭代 PR-A～PR-F 已全部交付（#18 PR-B、#19 PR-C、#20 PR-D、#21 PR-E、#22 PR-F、PR-A 工程项） |
+| 首稿链路 | 新建铺位 → 输入尺寸 / 画轮廓 / 户型图两点校准后快速套矩形或 L 形 → 后台 Worker 试排（自动套用业态氛围）→ 分屏第一稿；2D 拖动实时显示邻近通道净距标尺 |
+| 候选 | `generateBasicLayoutCandidates` 每个图上厨位保留一份高分试排，按家具坐标去重，最多 3 份；`draftChoices.ts` 采用 O(1) `layoutRevision` + 3 项目 LRU 缓存，项目包仍为格式 7 |
+| 出图 | 平面 PNG、3D 鸟瞰/室内/门头、2400×1500 单方案合图与 A/B 双方案对比图；内置一键风格/光照胶囊与出图隐藏底图开关；纯 2D 首屏不预加载 Three.js / R3F |
+| 验证 | `pnpm typecheck`、`pnpm build`、`pnpm test:geometry`、`pnpm test:browser`（CI 分步执行并在失败时上传 `.local-checks/`） |
 
-### #16 审计遗留（已在合并前修复）
+### #16 审计遗留（已全部修复）
 
-- 原地「应用摆法」在会话候选失效时静默返回 → 现提示「候选摆法已失效，请重新比较或另存为新稿」，并清空候选。
-- 厨位标签缺少单独断言 → `tests/basic-layout.mjs` 新增「后厨分区面积加权中心与 `后厨在图{上方|左侧|下方|右侧}` 一致」的断言。
+- 原地「应用摆法」在会话候选失效时静默返回 → 已修复（#16）。
+- 厨位标签缺少单独断言 → 已补充（#16）。
 
-### 仍未处理、可随后续 PR 顺手完成
+### 工程化遗留项 T1–T4（已于 PR-A 全部完成）
 
-| 编号 | 问题 | 建议 |
+| 编号 | 问题 | 完成情况 |
 | --- | --- | --- |
-| T1 | `draftSnapshot` 每次对整份项目 `JSON.stringify`，300 件场景下打开比较/应用会有可感知开销 | 在 store 中维护单调递增的 `revision`（`commit`/`undo`/`redo` 时 +1），用 `project.id + revision` 代替整份快照；候选缓存键同步改造 |
-| T2 | `draftChoices.ts` 为模块级单例，只记得最后一个项目的候选 | 改为 `Map<projectId, …>`，上限 3 个项目（LRU），切回项目仍能原地应用 |
-| T3 | 主包压缩后 > 500 kB（three / drei / fiber） | 3D 视图、`SceneCapture`、`ImageExport` 合图逻辑改为 `React.lazy` + 动态 `import()`；纯 2D 首屏不加载 three |
-| T4 | `pnpm test` 只显示两个入口，子套件失败时定位慢 | 新增 `test:geometry`、`test:browser` 脚本；CI 中分 step 运行，失败时上传 `.local-checks/` 截图 |
+| T1 | `draftSnapshot` 整份项目 `JSON.stringify` 开销 | 已完成：`store.ts` 维护 `revision` / `layoutRevision`（仅改 `style` 保活、撤销/重做精准还原），`draftChoices.ts` 改为 O(1) 键值 |
+| T2 | `draftChoices.ts` 单例仅记最后 1 个项目 | 已完成：改为上限 3 个项目的 LRU `Map`，切回未改项目仍可原地应用 |
+| T3 | 纯 2D 首屏预加载 `three-vendor` / `r3f-vendor` | 已完成：抽离 `siteObjectMeta.ts`、按需加载 `catalogThumbnailRenderer.ts` 并调整 `preload-helper` 分包，`dist/index.html` 不再预加载 3D 依赖 |
+| T4 | `pnpm test` 仅两个入口、CI 定位慢 | 已完成：新增 `test:geometry` / `test:browser`，CI 拆为独立 step 并在失败时上传 `.local-checks/` |
 
-T1/T2 属于 Step 3 的前置条件（见下），T3/T4 可以单独一个工程 PR。
+下一里程碑：**真实店主 3 分钟盲测**（验证看铺 1 分钟出首稿、3 分钟出对比图），再决定是否开启第 7 节暂缓项。
 
 ---
 

@@ -522,6 +522,49 @@ try {
   assert.equal(lShell.items.filter(i => i.kind === 'wall').length, 6);
   assert.equal(polygonArea(lShell.survey.corners), 45000000);
   console.log('PASS 户型底图快速套框几何（矩形/L 形初始化、角点与缺口拖拽及底图坐标对齐建壳）');
+
+  // T1 & T2: store layoutRevision (O(1) dirty tracking) & 3-project LRU draftChoices cache
+  const { useStore } = await load('store');
+  const { rememberDraftChoices, currentDraftChoices, clearDraftChoices, draftRevisionKey } = await load('draftChoices');
+  clearDraftChoices();
+  const makeDraft = (id, updatedAt) => ({ ...bistroDraft, id, updatedAt });
+  const pA = makeDraft('lru-a', '2026-11-25T01:00:00.000Z');
+  const pB = makeDraft('lru-b', '2026-11-25T02:00:00.000Z');
+  const pC = makeDraft('lru-c', '2026-11-25T03:00:00.000Z');
+  const pD = makeDraft('lru-d', '2026-11-25T04:00:00.000Z');
+
+  useStore.getState().setProject(pA);
+  const revA0 = useStore.getState().layoutRevision;
+  rememberDraftChoices(useStore.getState().project, cands, 0, revA0);
+  assert.equal(currentDraftChoices(useStore.getState().project, revA0, true)?.selected, 0);
+
+  // Style-only commit keeps layoutRevision intact so in-place apply stays available
+  useStore.getState().commit(applyQuickTheme(useStore.getState().project, eveningTheme));
+  assert.equal(useStore.getState().layoutRevision, revA0, '仅切换装修风格不得使 layoutRevision 失效');
+  assert.equal(currentDraftChoices(useStore.getState().project, useStore.getState().layoutRevision, false)?.selected, 0);
+
+  // Layout edit bumps layoutRevision; undo restores revA0
+  const movedItems = useStore.getState().project.items.map(i => i.kind === 'table' ? { ...i, x: i.x + 100 } : i);
+  useStore.getState().commit({ ...useStore.getState().project, items: movedItems });
+  const revAEdited = useStore.getState().layoutRevision;
+  assert.notEqual(revAEdited, revA0);
+  assert.equal(currentDraftChoices(useStore.getState().project, revAEdited, false), undefined);
+  useStore.getState().undo();
+  assert.equal(useStore.getState().layoutRevision, revA0, '撤销家具移动后应恢复原 layoutRevision');
+  assert.equal(currentDraftChoices(useStore.getState().project, useStore.getState().layoutRevision, false)?.selected, 0);
+  assert.equal(draftRevisionKey(pA, revA0), `lru-a:${revA0}`);
+
+  // Switch across 3 projects (A, B, C): switching back to A hits LRU via savedAt; adding D evicts oldest (B)
+  rememberDraftChoices(pB, cands, 1, 1002);
+  rememberDraftChoices(pC, cands, 0, 1003);
+  useStore.getState().setProject(pA); // fresh revision, unmodified updatedAt => hits savedAt and refreshes A in LRU
+  assert.equal(currentDraftChoices(pA, useStore.getState().layoutRevision, true)?.selected, 0, '3 项目内切回未改动的 A 应命中 LRU 缓存');
+  rememberDraftChoices(pD, cands, 0, 1004); // cache now holds C, A, D; B evicted
+  assert.equal(currentDraftChoices(pB, 1002, true), undefined, '超过 3 个项目时应淘汰最久未用项');
+  assert.equal(currentDraftChoices(pC, 1003, true)?.selected, 0);
+  assert.equal(currentDraftChoices(pD, 1004, true)?.selected, 0);
+  clearDraftChoices();
+  console.log('PASS store revision 轻量追踪（仅改风格保活/撤销还原）与 3 项目 LRU 候选缓存');
 } finally {
   await server.close();
 }

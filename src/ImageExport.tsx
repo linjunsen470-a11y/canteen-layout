@@ -223,6 +223,7 @@ export default function ImageExport({ project, capture, flat, current, hasCurren
       if (floorChanged) void selectRef.current('plan');
       return;
     }
+    if (format === 'compare' && !compareId) return;
     setSrc('');
     setBusy(true);
     // Wait for Three.js Environment/SiteFloor/Furniture effects to flush new materials before re-shooting.

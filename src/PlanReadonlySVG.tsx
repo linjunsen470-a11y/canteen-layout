@@ -6,7 +6,7 @@ import { siteOutline } from './site';
 import { zoneCorners } from './zones';
 import { isBuilding, isOpening } from './structure';
 import { isAnnotation } from './annotations';
-import { pointGlyphs } from './siteObjects';
+import { pointGlyphs } from './siteObjectMeta';
 import PlanFloorPattern from './PlanFloorPattern';
 import AnnotationSymbol from './AnnotationSymbol';
 import BuildingSymbol from './BuildingSymbol';

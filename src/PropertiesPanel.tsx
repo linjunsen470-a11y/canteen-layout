@@ -5,7 +5,7 @@ import DoorControls from './DoorControls';
 import LayoutItemFields from './LayoutItemFields';
 import RotationFields from './RotationFields';
 import SiteObjectFields from './SiteObjectFields';
-import { isSiteObject } from './siteObjects';
+import { isSiteObject } from './siteObjectMeta';
 import { polygonArea } from './site';
 import { zoneCorners } from './zones';
 import { PanelRightClose, LockOpen, Trash2 } from 'lucide-react';
