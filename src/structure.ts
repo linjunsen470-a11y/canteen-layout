@@ -34,7 +34,7 @@ export function syncStructure(project: Project): Project {
         if(i.catalogId!==undefined&&(typeof i.catalogId!=='string'||!i.catalogId.trim()||i.catalogId.length>200))throw Error('目录来源标识无效');
         if(i.specification!==undefined&&(typeof i.specification!=='string'||i.specification.length>500))throw Error('规格说明无效');
         if(i.operationFace!==undefined&&(!ordinaryEquipment(i)||!['none','positive-y'].includes(i.operationFace)||(i.operationFace==='positive-y'&&(!i.model||!facingModels.has(i.model)))))throw Error('设备操作面定义无效');
-        if(ordinaryEquipment(i))i={...i,operationFace:operationFace(i)};
+        if (ordinaryEquipment(i) && i.operationFace === undefined) i = { ...i, operationFace: operationFace(i) };
         if(i.hingeRight!==undefined&&(i.kind!=='door'||typeof i.hingeRight!=='boolean'))throw Error('门轴设置仅适用于门，且必须为布尔值');
         if(i.flipped!==undefined&&typeof i.flipped!=='boolean')throw Error('开向无效');
         if(i.freeStanding!==undefined&&(typeof i.freeStanding!=='boolean'||!isOpening(i)))throw Error('独立放置状态仅适用于门窗');
