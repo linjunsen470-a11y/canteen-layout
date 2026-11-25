@@ -32,12 +32,21 @@ export function rememberDraftChoices(
   cache.delete(project.id);
   cache.set(project.id, entry);
   entry.revisions.set(layoutRevision, selected);
-  if (project.updatedAt) entry.savedAt.set(project.updatedAt, selected);
+  if (useStore.getState().past.length === 0) recordSavedDraft(project, layoutRevision);
   while (cache.size > MAX_CACHED_PROJECTS) {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
     cache.delete(oldest);
   }
+}
+
+// Bind the timestamp of the snapshot that actually reached IndexedDB.
+export function recordSavedDraft(project: Project, layoutRevision: number) {
+  const entry = cache.get(project.id);
+  if (!entry) return;
+  const selected = entry.revisions.get(layoutRevision);
+  entry.savedAt.clear();
+  if (selected !== undefined) entry.savedAt.set(project.updatedAt, selected);
 }
 
 export function currentDraftChoices(
