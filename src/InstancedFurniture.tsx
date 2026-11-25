@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as T from 'three';
 import { ThreeEvent } from '@react-three/fiber';
 import { Item } from './model';
@@ -25,9 +25,9 @@ function Instances({part,items,handlers}:{part:Part;items:Item[];handlers?:Furni
 }
 
 // Identical local specifications share each component mesh in one instanced draw.
-export default function InstancedFurniture({items,spec,handlers,faded,renderOptions}:{items:Item[];spec:string;handlers?:FurnitureHandlers;faded:boolean;renderOptions?:BuildingRenderOptions}){
+export default memo(function InstancedFurniture({items,spec,handlers,faded,renderOptions}:{items:Item[];spec:string;handlers?:FurnitureHandlers;faded:boolean;renderOptions?:BuildingRenderOptions}){
  const model=useMemo(()=>{const model=createFurniture(items[0],[],undefined,renderOptions);if(faded)fadeFurniture(model);return model},[spec,faded,renderOptions?.lightingPreset,renderOptions?.wallMaterial,renderOptions?.cutaway]);
  const parts=useMemo(()=>{model.updateMatrixWorld(true);const result:Part[]=[];model.traverse(o=>{if(o instanceof T.Mesh)result.push({geometry:o.geometry,material:o.material,matrix:o.matrixWorld.clone(),castShadow:o.castShadow,receiveShadow:o.receiveShadow})});return result},[model]);
  useEffect(()=>()=>disposeFurniture(model),[model]);
  return <>{parts.map((part,n)=><Instances key={`${n}:${items.length}`} part={part} items={items} handlers={handlers}/>)}</>;
-}
+});

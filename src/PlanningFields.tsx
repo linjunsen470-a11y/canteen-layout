@@ -2,10 +2,11 @@ import { useStore } from './store';
 import { usePlanning } from './planning';
 import { useWorkspace } from './workspace';
 import { polygonArea } from './site';
+const EMPTY_AREAS: NonNullable<ReturnType<typeof useStore.getState>['project']['planningAreas']> = [];
 export function PlanningBar(){
- const s=useStore(),state=usePlanning(),areas=s.project.planningAreas??[];
- if(!areas.length&&s.mode!=='site')return null;
- return <div className="planning-bar"><label>规划范围<select aria-label="当前规划范围" value={areas.some(a=>a.id===state.activeId)?state.activeId??'':''} onChange={e=>{s.cancelInteraction();s.selectMany([]);state.set({activeId:e.target.value||null})}}><option value="">整场地</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>{areas.some(a=>a.id===state.activeId)&&<label><input type="checkbox" checked={state.protect} onChange={e=>{s.cancelInteraction();state.set({protect:e.target.checked})}}/>范围外保护</label>}<button onClick={()=>{s.setMode('site');useWorkspace.getState().set({propsOpen:true,focusMode:false})}}>场地资料 / 范围</button></div>;
+ const areas=useStore(s=>s.project.planningAreas??EMPTY_AREAS),mode=useStore(s=>s.mode),state=usePlanning();
+ if(!areas.length&&mode!=='site')return null;
+ return <div className="planning-bar"><label>规划范围<select aria-label="当前规划范围" value={areas.some(a=>a.id===state.activeId)?state.activeId??'':''} onChange={e=>{const s=useStore.getState();s.cancelInteraction();s.selectMany([]);state.set({activeId:e.target.value||null})}}><option value="">整场地</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>{areas.some(a=>a.id===state.activeId)&&<label><input type="checkbox" checked={state.protect} onChange={e=>{useStore.getState().cancelInteraction();state.set({protect:e.target.checked})}}/>范围外保护</label>}<button onClick={()=>{useStore.getState().setMode('site');useWorkspace.getState().set({propsOpen:true,focusMode:false})}}>场地资料 / 范围</button></div>;
 }
 export default function PlanningFields(){
  const s=useStore(),state=usePlanning(),area=s.project.planningAreas?.find(a=>a.id===state.activeId);

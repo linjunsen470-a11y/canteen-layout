@@ -29,6 +29,21 @@ export function openingError(wall: Item, opening: Item, others: Item[]) {
 // Attached opening transforms are derived here, shared by every edit and import path.
 export function syncStructure(project: Project): Project {
     validateSite(project);validateSiteExtras(project);validateLayout(project);
+    let wallById: Map<string, Item> | undefined;
+    let openingsByWall: Map<string, Item[]> | undefined;
+    const ensureWallMaps = () => {
+        if (wallById) return;
+        wallById = new Map();
+        openingsByWall = new Map();
+        for (const item of project.items) {
+            if (item.kind === 'wall') wallById.set(item.id, item);
+            if (isOpening(item) && item.wallId) {
+                const list = openingsByWall.get(item.wallId);
+                if (list) list.push(item);
+                else openingsByWall.set(item.wallId, [item]);
+            }
+        }
+    };
     const items = project.items.map(i => {
         validateZone(i);
         if(i.catalogId!==undefined&&(typeof i.catalogId!=='string'||!i.catalogId.trim()||i.catalogId.length>200))throw Error('目录来源标识无效');
@@ -51,17 +66,22 @@ export function syncStructure(project: Project): Project {
         }
         if(i.freeStanding){
             if(i.wallId!==undefined||i.offset!==undefined||!Number.isFinite(i.sill??0)||(i.sill??0)<0||(i.kind==='door'&&(i.sill??0)!==0)||i.w<100||i.h<100)throw Error('独立门窗位置或尺寸无效');
-            return {...i,sill:i.kind==='door'?0:i.sill??900};
+            const sill = i.kind==='door'?0:i.sill??900;
+            return i.sill === sill ? i : {...i,sill};
         }
-        const wall = project.items.find(w => w.id === i.wallId && w.kind === 'wall');
+        ensureWallMaps();
+        const wall = i.wallId ? wallById!.get(i.wallId) : undefined;
         if (!wall)
             throw Error('门窗必须关联有效墙体');
-        const opening = { ...i, offset: i.offset ?? 50, sill: i.kind === 'door' ? 0 : i.sill ?? 900 };
-        const error = openingError(wall, opening, project.items);
+        const offset = i.offset ?? 50, sill = i.kind === 'door' ? 0 : i.sill ?? 900;
+        const opening = i.offset === offset && i.sill === sill ? i : { ...i, offset, sill };
+        const error = openingError(wall, opening, openingsByWall!.get(wall.id) ?? []);
         if (error)
             throw Error(error);
-        const center = wallPoint(wall, opening.offset + opening.w / 2);
-        return { ...opening, x: center.x - opening.w / 2, y: center.y - wall.d / 2, d: wall.d, rotation: wall.rotation };
+        const center = wallPoint(wall, offset + opening.w / 2);
+        const nx = center.x - opening.w / 2, ny = center.y - wall.d / 2;
+        if (opening === i && i.x === nx && i.y === ny && i.d === wall.d && i.rotation === wall.rotation) return i;
+        return { ...opening, x: nx, y: ny, d: wall.d, rotation: wall.rotation };
     });
     return syncMeasurements({ ...project, items });
 }

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Compass, Copy, DoorOpen, FlipHorizontal2, LayoutGrid, RotateCcw, RotateCw, Ruler, Sparkles, Sun, Trash2 } from 'lucide-react';
 import { useStore } from './store';
 import { useWorkspace } from './workspace';
@@ -14,18 +15,20 @@ import { buildPerimeterWalls } from './shopTemplates';
 import { decorThemePresets } from './conceptPlanner';
 import { surveyWall } from './interiorSurvey';
 
-export default function PlanSelectionBar({
+export default memo(function PlanSelectionBar({
   onOpenConcept,
   notify,
 }: {
   onOpenConcept?: () => void;
   notify: (msg: string) => void;
 }) {
-  const s = useStore();
+  const project = useStore(s => s.gesture ? null : s.project);
+  const selectedIds = useStore(s => s.selectedIds);
+  const tool = useStore(s => s.tool);
+  const hasPlacement = useStore(s => !!s.placement);
   const wallSession = useWallPlacement(v => v.session);
-  const { project, selectedIds, tool, gesture, placement } = s;
 
-  if (wallSession || gesture || placement || tool !== 'select') return null;
+  if (wallSession || !project || hasPlacement || tool !== 'select') return null;
 
   const items = project.items.filter(i => selectedIds.includes(i.id));
   const hasFurniture = project.items.some(i =>
@@ -128,17 +131,17 @@ export default function PlanSelectionBar({
     const flyToZone = () => {
       const ws = useWorkspace.getState();
       if (ws.view === '2d') ws.set({ view: 'split', focusMode: false });
-      s.locate(zone.id);
+      useStore.getState().locate(zone.id);
     };
     return (
       <div className="plan-quick-bar" data-ui="true" role="toolbar" aria-label="功能区快捷操作">
         <span className="quick-bar-name">{zone.name}</span>
         <button type="button" className="is-accent" onClick={flyToZone}><Compass />3D 飞入此区</button>
         {isEditable(zone, project) && (
-          <button type="button" onClick={() => s.setTool('zone-edit')}><LayoutGrid />调整顶点</button>
+          <button type="button" onClick={() => useStore.getState().setTool('zone-edit')}><LayoutGrid />调整顶点</button>
         )}
         {isEditable(zone, project) && (
-          <button type="button" className="is-danger" title="删除分区" onClick={() => { s.removeMany([zone.id]); s.selectMany([]); }}><Trash2 />删除</button>
+          <button type="button" className="is-danger" title="删除分区" onClick={() => { const s = useStore.getState(); s.removeMany([zone.id]); s.selectMany([]); }}><Trash2 />删除</button>
         )}
       </div>
     );
@@ -151,6 +154,7 @@ export default function PlanSelectionBar({
     const spanM = ((datum ? datum.end - datum.start : wall.w) / 1000).toFixed(2);
     const addOnWall = (kind: 'door' | 'window') => {
       try {
+        const s = useStore.getState();
         const placed = placeBoundedOpeningOnWall(project, wall, kind);
         if (!placed) { notify(`「${wall.name}」剩余净长不足以放置${kind === 'door' ? '门' : '窗'}，可在右侧精确量距放置`); return; }
         if (s.commit({ ...project, items: [...project.items, placed] })) {
@@ -167,7 +171,7 @@ export default function PlanSelectionBar({
         <button type="button" onClick={() => addOnWall('door')}><DoorOpen />加门</button>
         <button type="button" onClick={() => addOnWall('window')}><LayoutGrid />加窗</button>
         <button type="button" onClick={() => useWorkspace.getState().set({ propsOpen: true, focusMode: false })}><Ruler />量距放柱/水电</button>
-        <button type="button" className="is-danger" title="删除墙体" onClick={() => { s.removeMany([wall.id]); s.selectMany([]); }}><Trash2 />删除</button>
+        <button type="button" className="is-danger" title="删除墙体" onClick={() => { const s = useStore.getState(); s.removeMany([wall.id]); s.selectMany([]); }}><Trash2 />删除</button>
       </div>
     );
   }
@@ -185,6 +189,7 @@ export default function PlanSelectionBar({
   const label = group?.name ?? (items.length === 1 ? items[0].name : `${items.length} 项`);
 
   const copyDir = (dxSign: -1 | 0 | 1, dySign: -1 | 0 | 1) => layoutAction(() => {
+    const s = useStore.getState();
     const box = bounds(items);
     const gap = project.clearance ?? 900;
     const ids = movableSelection(project, selectedIds).map(i => i.id);
@@ -197,7 +202,7 @@ export default function PlanSelectionBar({
   });
 
   const flipDoors = () => layoutAction(() => {
-    s.updateMany(items.filter(i => i.kind === 'door' && isEditable(i, project)).map(i => ({ id: i.id, patch: { flipped: !i.flipped } })));
+    useStore.getState().updateMany(items.filter(i => i.kind === 'door' && isEditable(i, project)).map(i => ({ id: i.id, patch: { flipped: !i.flipped } })));
   });
 
   return (
@@ -216,8 +221,8 @@ export default function PlanSelectionBar({
           <button type="button" title="按净距向下复制" aria-label="快捷向下复制" onClick={() => copyDir(0, 1)}><ArrowDown /></button>
         </span>
       )}
-      {!attachedOnly && <button type="button" title="复制副本（Ctrl+D）" onClick={() => layoutAction(() => s.duplicate(selectedIds))}><Copy />副本</button>}
-      <button type="button" className="is-danger" title="删除（Delete）" onClick={() => { s.removeMany(selectedIds); s.selectMany([]); }}><Trash2 />删除</button>
+      {!attachedOnly && <button type="button" title="复制副本（Ctrl+D）" onClick={() => layoutAction(() => useStore.getState().duplicate(selectedIds))}><Copy />副本</button>}
+      <button type="button" className="is-danger" title="删除（Delete）" onClick={() => { const s = useStore.getState(); s.removeMany(selectedIds); s.selectMany([]); }}><Trash2 />删除</button>
     </div>
   );
-}
+});

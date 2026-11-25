@@ -1,4 +1,3 @@
-import { bounds } from './spatial';
 import { useWallPlacement, pickWallAt } from './wallPlacement';
 import PlanItemSymbol from './PlanItemSymbol';
 import WallClearanceOverlay from './WallClearanceOverlay';
@@ -8,7 +7,7 @@ import { snapTranslation, SnapGuide } from './layoutSnapping';
 import { finishCopyPlacement } from './layoutCommands';
 import RotationHandle from './RotationHandle';
 import { nearestWallEnd, wallProfiles } from './wallJoints';
-import { forwardRef, memo, useMemo, useEffect, useLayoutEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useMemo, useEffect, useLayoutEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Hand, MousePointer2, Plus, Minus, Scan, Focus, Lightbulb, Route } from 'lucide-react';
 import SurveyDimension from './SurveyDimension';
 import PlanArchitecturalOverlay from './PlanArchitecturalOverlay';
@@ -35,6 +34,14 @@ type Camera={x:number;y:number;zoom:number};
 type Gesture={type:'pan'|'move'|'resize'|'box'|'build'|'endpoint';buildKind?:'wall'|'partition'|'zone'|'text'|'dimension'|'leader';endpoint?:'start'|'end';start:Point;camera:Camera;origins:Item[];id?:string;additive?:boolean};
 export type PlanHandle={capturePNG:(options?:CapturePlanOptions)=>Promise<string>;exportPNG:()=>void;center:()=>Point};
 type Props={active?:boolean;grid:boolean;snap:boolean;onDropItem:(name:string,kind:string,point:Point,id?:string)=>void;onDropCombo?:(comboId:string,point:Point)=>void;onOpenConcept?:()=>void;notify:(text:string)=>void};
+const EMPTY_SET = new Set<string>();
+function sameGuides(a: SnapGuide[], b: SnapGuide[]) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].label !== b[i].label || a[i].a.x !== b[i].a.x || a[i].a.y !== b[i].a.y || a[i].b.x !== b[i].b.x || a[i].b.y !== b[i].b.y) return false;
+  }
+  return true;
+}
 function itemBounds(i:Item){const angle=i.rotation*Math.PI/180,c=Math.abs(Math.cos(angle)),s=Math.abs(Math.sin(angle));const w=i.w*c+i.d*s,d=i.w*s+i.d*c;return{x:i.x+i.w/2-w/2,y:i.y+i.d/2-d/2,w,d}}
 const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,grid,snap,onDropItem,onDropCombo,onOpenConcept,notify},ref){
   const last=useRef(useStore.getState());const project=useStore(s=>active?s.project:last.current.project),selected=useStore(s=>active?s.selected:last.current.selected),ids=useStore(s=>active?s.selectedIds:last.current.selectedIds),onSelect=useStore(s=>s.selectMany),tool=useStore(s=>active?s.tool:last.current.tool),setTool=useStore(s=>s.setTool),focusRequest=useStore(s=>active?s.focusRequest:last.current.focusRequest);if(active)last.current=useStore.getState();
@@ -43,13 +50,41 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
   const planning=usePlanning(),activeArea=project.planningAreas?.find(a=>a.id===planning.activeId);
   const {gridSize,snapSize,objectSnap}=useWorkspace();
   const [guides,setGuides]=useState<SnapGuide[]>([]);
-  const profiles=useMemo(()=>wallProfiles(project),[project.items]);
+  const profiles=useMemo(()=>wallProfiles(project),[project.items,project.survey]);
   const [snapTarget,setSnapTarget]=useState<Point|null>(null);
-  const visibleItems=project.items.filter(i=>isVisible(i,project)&&(style.showLightsIn2D||i.kind!=='lighting'));
+  const { visibleItems, zones, orderedItems, lights } = useMemo(() => {
+    const visible: Item[] = [];
+    const zoneList: Item[] = [];
+    const wallsAndPartitions: Item[] = [];
+    const furniture: Item[] = [];
+    const hoods: Item[] = [];
+    const openings: Item[] = [];
+    const lighting: Item[] = [];
+    const annotations: Item[] = [];
+    for (const i of project.items) {
+      if (!isVisible(i, project)) continue;
+      if (i.kind === 'lighting' && !style.showLightsIn2D) continue;
+      visible.push(i);
+      if (i.kind === 'zone') zoneList.push(i);
+      else if (i.kind === 'wall' || i.kind === 'partition') wallsAndPartitions.push(i);
+      else if (isAnnotation(i)) annotations.push(i);
+      else if (isOpening(i)) openings.push(i);
+      else if (i.kind === 'lighting') lighting.push(i);
+      else if (modelOf(i) === 'hood') hoods.push(i);
+      else furniture.push(i);
+    }
+    return {
+      visibleItems: visible,
+      zones: zoneList,
+      orderedItems: [...wallsAndPartitions, ...furniture, ...hoods, ...openings, ...lighting, ...annotations],
+      lights: lighting,
+    };
+  }, [project, style.showLightsIn2D]);
+  const selectedSet = useMemo(() => new Set(ids), [ids]);
   const host=useRef<HTMLDivElement>(null),svg=useRef<SVGSVGElement>(null);
   const [size,setSize]=useState({w:600,h:500}),[camera,setCamera]=useState<Camera|null>(null),[space,setSpace]=useState(false),[box,setBox]=useState<{a:Point;b:Point}|null>(null),[dragging,setDragging]=useState(false),[dragClearanceIds,setDragClearanceIds]=useState<string[]|null>(null);
   const outlineMode=tool==='outline-draw'||tool==='planning-draw'||tool==='zone-draw'?'draw':tool==='outline-edit'||tool==='planning-edit'||tool==='zone-edit'?'edit':null;const setOutlineMode=(mode:'draw'|'edit'|null)=>setTool(mode==='draw'?'outline-draw':mode==='edit'?'outline-edit':'select');const outlineEditor=useRef<SiteOutlineHandle>(null);
-  const floorPoints=siteOutline(project).map(v=>`${v.x},${v.y}`).join(' ');
+  const floorPoints=useMemo(()=>siteOutline(project).map(v=>`${v.x},${v.y}`).join(' '),[project.outline,project.width,project.height]);
   const [draft,setDraft]=useState<Item|null>(null);
   const gesture=useRef<Gesture|null>(null),cameraRef=useRef<Camera>({x:0,y:0,zoom:1});
   const drawingTop=outlineMode?50:0;
@@ -60,7 +95,7 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
   const world=(p:Point)=>({x:(p.x-size.w/2)/scale+cam.x,y:(p.y-(size.h-60+drawingTop)/2)/scale+cam.y});
   const pointer=useRef<number|null>(null);
   const doubleClickTarget = useRef<string | null>(null);
-  const finish=(cancel=false)=>{const g=gesture.current;gesture.current=null;if(g?.type==='move'||g?.type==='resize'||g?.type==='endpoint'){if(cancel)useStore.getState().cancelMove();else useStore.getState().endMove()}const id=pointer.current;pointer.current=null;if(id!==null&&svg.current?.hasPointerCapture(id))svg.current.releasePointerCapture(id);setDragging(false);setDragClearanceIds(null);setBox(null);setDraft(null);setSnapTarget(null);setGuides([])};
+  const finish=(cancel=false)=>{const g=gesture.current;gesture.current=null;if(g?.type==='move'||g?.type==='resize'||g?.type==='endpoint'){if(cancel)useStore.getState().cancelMove();else useStore.getState().endMove()}const id=pointer.current;pointer.current=null;if(id!==null&&svg.current?.hasPointerCapture(id))svg.current.releasePointerCapture(id);setDragging(false);setDragClearanceIds(null);setBox(null);setDraft(null);setSnapTarget(null);setGuides(prev=>prev.length?[]:prev)};
   useEffect(()=>useStore.subscribe((state,prev)=>{if(state.interactionEpoch!==prev.interactionEpoch){finish(true);setSpace(false)}}),[]);
   const view=useWorkspace(s=>s.view);useEffect(()=>{if(view==='3d')finish(true)},[view]);
   useEffect(()=>{const observer=new ResizeObserver(([entry])=>{const {width,height}=entry.contentRect;if(width>0&&height>0)setSize({w:width,h:height})});observer.observe(host.current!);return()=>observer.disconnect()},[]);
@@ -84,9 +119,14 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
   const snapPoint=(p:Point,enabled=snap)=>enabled?{x:Math.round(p.x/snapSize)*snapSize,y:Math.round(p.y/snapSize)*snapSize}:p;
   const drawingItem=(g:Gesture,p:Point,shift:boolean,alt=false):Item=>{let q=snapPoint(p,snap&&!alt);if(g.buildKind==='text')return{id:'drawing',kind:'text',name:'文字说明',x:g.start.x,y:g.start.y,w:Math.max(2000,Math.abs(q.x-g.start.x)),d:Math.max(300,Math.abs(q.y-g.start.y)),h:0,rotation:0,color:'#334d40',fontSize:180};if(g.buildKind==='dimension'||g.buildKind==='leader'){if(shift){if(Math.abs(q.x-g.start.x)>Math.abs(q.y-g.start.y))q.y=g.start.y;else q.x=g.start.x}return{id:'drawing',kind:g.buildKind,name:g.buildKind==='dimension'?'尺寸':'说明',d:400,h:0,color:'#334d40',fontSize:180,...segmentPose(g.start,q,400)}}if(g.buildKind==='zone')return{id:'drawing',kind:'zone',name:'新区域',x:Math.min(q.x,g.start.x),y:Math.min(q.y,g.start.y),w:Math.abs(q.x-g.start.x),d:Math.abs(q.y-g.start.y),h:0,rotation:0,color:'#e8edf7'};if(shift){if(Math.abs(q.x-g.start.x)>Math.abs(q.y-g.start.y))q.y=g.start.y;else q.x=g.start.x}const kind=g.buildKind??'wall',d=kind==='wall'?200:100;if(kind==='wall'){const target=snap&&!alt?nearestWallEnd(project,p,12/scale):undefined;if(target)q=target;setSnapTarget(target??null)}return{id:'drawing',kind,model:kind,name:(kind==='wall'?'墙体':'隔断')+' '+(visibleItems.filter(i=>i.kind===kind).length+1),d,h:kind==='wall'?(style.ceilingHeight||3000):1800,color:kind==='wall'?'#eee8de':'#b7c0c8',...segmentPose(g.start,q,d)}};
   const beginEndpoint=(e:React.PointerEvent,i:Item,endpoint:'start'|'end')=>{if(!isEditable(i,useStore.getState().project))return;if(e.button!==0||space||tool==='pan'||tool==='wall'||tool==='partition'||tool==='zone'||tool==='text'||tool==='dimension'||tool==='leader'){begin(e,i);return}e.preventDefault();e.stopPropagation();svg.current!.focus({preventScroll:true});i=useStore.getState().project.items.find(v=>v.id===i.id)??i;svg.current!.setPointerCapture(e.pointerId);pointer.current=e.pointerId;useStore.getState().beginMove();gesture.current={type:'endpoint',endpoint,start:wallPoint(i,endpoint==='start'?i.w:0),camera:cam,origins:[i],id:i.id};setDragging(true)};
+  const beginEndpointRef = useRef(beginEndpoint);
+  beginEndpointRef.current = beginEndpoint;
+  const handleEndpoint = useCallback((e: React.PointerEvent, i: Item, endpoint: 'start' | 'end') => {
+    beginEndpointRef.current(e, i, endpoint);
+  }, []);
   const begin=(e:React.PointerEvent,i?:Item,resize=false)=>{
     doubleClickTarget.current = !resize && !space && tool === 'select' && e.button === 0 ? i?.id ?? null : null;
-    if(e.button!==0&&e.button!==1)return;if(useStore.getState().placement){e.preventDefault();e.stopPropagation();finishCopyPlacement();setGuides([]);return}e.preventDefault();e.stopPropagation();svg.current!.focus({preventScroll:true});const currentProject=useStore.getState().project;if(i)i=currentProject.items.find(v=>v.id===i!.id)??i;const point=screen(e);
+    if(e.button!==0&&e.button!==1)return;if(useStore.getState().placement){e.preventDefault();e.stopPropagation();finishCopyPlacement();setGuides(prev=>prev.length?[]:prev);return}e.preventDefault();e.stopPropagation();svg.current!.focus({preventScroll:true});const currentProject=useStore.getState().project;if(i)i=currentProject.items.find(v=>v.id===i!.id)??i;const point=screen(e);
     const wallPlacement=useWallPlacement.getState().session;
     if(wallPlacement&&e.button===0&&!space&&tool!=='pan'){if(wallPlacement.picking)pickWallAt(world(point),12/scale,i?.kind==='wall'?i.id:i?.wallId);return}
     svg.current!.setPointerCapture(e.pointerId);pointer.current=e.pointerId;
@@ -97,7 +137,7 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
     const selectedIds=resize?[i.id]:groupSelection(currentProject,i.id,ids,false,e.ctrlKey||e.metaKey);onSelect(selectedIds);if(!isEditable(i,currentProject)||i.measure){finish();return}
     let origins:Item[];try{origins=movableSelection(currentProject,selectedIds)}catch(error){notify((error as Error).message);finish();return}gesture.current={type:resize?'resize':'move',start:world(point),camera:cam,origins,id:i.id};useStore.getState().beginMove();setDragging(true);if(!resize&&!(origins.length===1&&isAttachedOpening(origins[0])))setDragClearanceIds(origins.map(o=>o.id));
   };
-  const translate=(origins:Item[],delta:Point,alt:boolean)=>{const result=objectSnap&&!alt?snapTranslation(useStore.getState().project,origins,delta,9/scale):{delta,guides:[]};setGuides(result.guides);if(!result.guides.length&&snap&&!alt)result.delta={x:Math.round(delta.x/snapSize)*snapSize,y:Math.round(delta.y/snapSize)*snapSize};useStore.getState().moveMany(origins.map(i=>({id:i.id,patch:{x:i.x+result.delta.x,y:i.y+result.delta.y}})))};
+  const translate=(origins:Item[],delta:Point,alt:boolean)=>{const result=objectSnap&&!alt?snapTranslation(useStore.getState().project,origins,delta,9/scale):{delta,guides:[]};setGuides(prev=>sameGuides(prev,result.guides)?prev:result.guides);if(!result.guides.length&&snap&&!alt)result.delta={x:Math.round(delta.x/snapSize)*snapSize,y:Math.round(delta.y/snapSize)*snapSize};useStore.getState().moveMany(origins.map(i=>({id:i.id,patch:{x:i.x+result.delta.x,y:i.y+result.delta.y}})))};
   const move=(e:React.PointerEvent)=>{const point=screen(e),q=world(point),placement=useStore.getState().placement;if(placement){translate(placement.origins,{x:q.x-placement.anchor.x,y:q.y-placement.anchor.y},e.altKey);return}const g=gesture.current;if(!g)return;
     if(g.type==='pan'){setCamera({...g.camera,x:g.camera.x-(point.x-g.start.x)/scale,y:g.camera.y-(point.y-g.start.y)/scale});return}
     if(g.type==='build'){setDraft(drawingItem(g,q,e.shiftKey,e.altKey));return}
@@ -109,19 +149,26 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
   const end=(e:React.PointerEvent)=>{const g=gesture.current;if(g?.type==='build'){const i=drawingItem(g,world(screen(e)),e.shiftKey,e.altKey);if(i.w>=100&&(i.kind!=='zone'||i.d>=100)){const id=useStore.getState().addItem(i);if(id)onSelect([id]);setTool('select')}else notify('长度至少 100mm；区域长宽均至少 100mm')}if(g?.type==='box'){const q=world(screen(e)),left=Math.min(g.start.x,q.x),top=Math.min(g.start.y,q.y),right=Math.max(g.start.x,q.x),bottom=Math.max(g.start.y,q.y);const found=(right-left)*scale<4&&(bottom-top)*scale<4?[]:visibleItems.filter(i=>{const b=itemBounds(i);return i.kind!=='zone'&&b.x>=left&&b.y>=top&&b.x+b.w<=right&&b.y+b.d<=bottom}).map(i=>i.id);onSelect(g.additive?[...new Set([...ids,...found])]:found)}finish();if(svg.current?.hasPointerCapture(e.pointerId))svg.current.releasePointerCapture(e.pointerId)};
   const [showFlow,setShowFlow]=useState(false);
   const toggleLights2D=()=>{const s=useStore.getState();s.commit({...s.project,style:{...resolveStyle(s.project),showLightsIn2D:!style.showLightsIn2D}})};
-  const orderedItems=[
-    ...visibleItems.filter(i=>i.kind==='wall'||i.kind==='partition'),
-    ...visibleItems.filter(i=>i.kind!=='zone'&&i.kind!=='wall'&&i.kind!=='partition'&&i.kind!=='lighting'&&!isOpening(i)&&!isAnnotation(i)&&modelOf(i)!=='hood'),
-    ...visibleItems.filter(i=>modelOf(i)==='hood'),
-    ...visibleItems.filter(isOpening),
-    ...visibleItems.filter(i=>i.kind==='lighting'),
-    ...visibleItems.filter(isAnnotation),
-  ];
   // Ceiling lights are drawn on top for readability, but must not steal clicks from the tables/furniture
   // beneath them. A light is click-through whenever its centre sits over a floor object (unless selected);
   // lights hanging over open floor stay directly clickable, and any light can still be picked via box-select or the object list.
-  const floorBoxes=visibleItems.filter(i=>i.kind!=='lighting'&&i.kind!=='zone'&&i.kind!=='wall'&&i.kind!=='partition'&&!isOpening(i)&&!isAnnotation(i)).map(i=>bounds([i]));
-  const passThroughLights=new Set(visibleItems.filter(i=>i.kind==='lighting'&&!ids.includes(i.id)&&floorBoxes.some(b=>{const cx=i.x+i.w/2,cy=i.y+i.d/2;return cx>=b.x&&cx<=b.x+b.w&&cy>=b.y&&cy<=b.y+b.h})).map(i=>i.id));
+  const passThroughLights = useMemo(() => {
+    if (!lights.length) return EMPTY_SET;
+    const activeLights = lights.filter(i => !selectedSet.has(i.id));
+    if (!activeLights.length) return EMPTY_SET;
+    const floorBoxes: { x: number; y: number; w: number; d: number }[] = [];
+    for (const i of visibleItems) {
+      if (i.kind === 'lighting' || i.kind === 'zone' || i.kind === 'wall' || i.kind === 'partition' || isOpening(i) || isAnnotation(i)) continue;
+      floorBoxes.push(itemBounds(i));
+    }
+    const set = new Set<string>();
+    for (const i of activeLights) {
+      const cx = i.x + i.w / 2, cy = i.y + i.d / 2;
+      if (floorBoxes.some(b => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.d)) set.add(i.id);
+    }
+    return set;
+  }, [lights, visibleItems, selectedSet]);
+  const hasBasicDraft = !!project.basicDraft;
   return <div className="plan-viewport" ref={host}>
     <svg ref={svg} tabIndex={0} aria-label="二维布局画布" viewBox={`0 0 ${size.w} ${size.h}`} className={tool==='wall'||tool==='partition'||tool==='zone'||tool==='text'||tool==='dimension'||tool==='leader'?'is-drawing':space||tool==='pan'?(dragging?'is-grabbing':'is-pan'):dragging?'is-moving':''}
       onPointerDownCapture={() => { doubleClickTarget.current = null; }}
@@ -137,9 +184,9 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
       <defs><clipPath id="site-clip"><polygon points={floorPoints}/></clipPath><PlanFloorPattern material={style.floorMaterial}/><pattern id="plan-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 H 0 V ${gridSize}`} fill="none" stroke="#c8d0c7" strokeWidth={.7/scale}/></pattern></defs>
       <g data-plan="true" transform={`translate(${offset.x},${offset.y}) scale(${scale})`}>
         <polygon data-site-floor="true" points={floorPoints} fill="url(#plan-floor)" stroke="#7c9286" strokeWidth={1.2/scale}/><UnderlayLayer/>
-        {visibleItems.filter(i=>i.kind==='zone').map(i=><g key={i.id} data-item-id={i.id} opacity={planning.dim&&!insidePlanning(i,project)?0.3:1}>
+        {zones.map(i=><g key={i.id} data-item-id={i.id} opacity={planning.dim&&!insidePlanning(i,project)?0.3:1}>
           <polygon points={zoneCorners(i).map(p=>`${p.x},${p.y}`).join(' ')} fill={i.color} opacity={.26} pointerEvents="none" clipPath="url(#site-clip)"/>
-          <polygon points={zoneCorners(i).map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={ids.includes(i.id)?'#b67523':'#acbcb3'} strokeWidth={(ids.includes(i.id)?2:1)/scale} strokeDasharray={`${5/scale} ${4/scale}`} pointerEvents="stroke" onPointerDown={e=>begin(e,i)}/>
+          <polygon points={zoneCorners(i).map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={selectedSet.has(i.id)?'#b67523':'#acbcb3'} strokeWidth={(selectedSet.has(i.id)?2:1)/scale} strokeDasharray={`${5/scale} ${4/scale}`} pointerEvents="stroke" onPointerDown={e=>begin(e,i)}/>
           {selected===i.id&&ids.length===1&&!i.polygon&&isEditable(i,project)&&<circle data-ui="true" cx={zoneCorners(i)[2].x} cy={zoneCorners(i)[2].y} r={7/scale} fill="#fff" stroke="#b67523" strokeWidth={2/scale} style={{cursor:'nwse-resize'}} onPointerDown={e=>begin(e,i,true)}/>}
         </g>)}
         {grid&&<rect data-ui="true" width={project.width} height={project.height} fill="url(#plan-grid)" pointerEvents="none" clipPath="url(#site-clip)"/>}
@@ -151,14 +198,14 @@ const PlanEditor=forwardRef<PlanHandle,Props>(function PlanEditor({active=true,g
           {orderedItems.map(i => {
             const editEnds = (i.kind === 'wall' || i.kind === 'partition') && selected === i.id && ids.length === 1 && isEditable(i, project);
             return <PlanItemSymbol key={i.id} item={i} scale={scale} profile={profiles.get(i.id)}
-              selected={ids.includes(i.id)} draftSeat={!!project.basicDraft && i.kind === 'chair'}
+              selected={selectedSet.has(i.id)} draftSeat={hasBasicDraft && i.kind === 'chair'}
               singleSelected={ids.length === 1 && selected === i.id}
               faded={planning.dim && !insidePlanning(i,project)} passThrough={passThroughLights.has(i.id)}
               cursor={wallSession ? (wallSession.picking && i.kind === 'wall' ? 'crosshair' : 'default') : i.locked ? 'not-allowed' : 'move'}
-              onEndpoint={editEnds ? beginEndpoint : undefined} />;
+              onEndpoint={editEnds ? handleEndpoint : undefined} />;
           })}
         </g>
-        {visibleItems.filter(i=>i.kind==='zone').map(i=>{const zLabel=`${i.name} · ${(zoneArea(project,i)/1e6).toFixed(1)}㎡`;const pillW=(zLabel.length*9.5+18)/scale;const px=i.x+10/scale,py=i.y+i.d-26/scale;return <g key={`zp-${i.id}`} data-ui="true" opacity={0.92} style={{cursor:'move'}} onPointerDown={e=>begin(e,i)}>
+        {zones.map(i=>{const zLabel=`${i.name} · ${(zoneArea(project,i)/1e6).toFixed(1)}㎡`;const pillW=(zLabel.length*9.5+18)/scale;const px=i.x+10/scale,py=i.y+i.d-26/scale;return <g key={`zp-${i.id}`} data-ui="true" opacity={0.92} style={{cursor:'move'}} onPointerDown={e=>begin(e,i)}>
           <rect x={px} y={py} width={pillW} height={19/scale} rx={4/scale} fill="#ffffff" fillOpacity={0.9} stroke="#d4cec2" strokeWidth={0.8/scale}/>
           <text x={px+8/scale} y={py+13/scale} fontSize={10.5/scale} fontWeight="600" fill="#354a3e" pointerEvents="none">{zLabel}</text>
         </g>})}

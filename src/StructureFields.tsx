@@ -8,13 +8,13 @@ import { isOpening, openingSlot } from './structure';
 export default function StructureFields({ item }: {
     item: Item;
 }) {
-    const s = useStore(), wall = s.project.items.find(w => w.id === item.wallId);
+    const project = useStore(s => s.gesture ?? s.project), wall = project.items.find(w => w.id === item.wallId);
     const reference = wall ?? item;
-    const datum = reference.kind === 'wall' ? surveyWall(s.project, reference) : undefined;
-    const update = (patch: Partial<Item>) => s.update(item.id, patch);
+    const datum = reference.kind === 'wall' ? surveyWall(project, reference) : undefined;
+    const update = (patch: Partial<Item>) => useStore.getState().update(item.id, patch);
     if (isOpening(item))
         return <>
-  <label className="full-field">所属墙体<select aria-label="所属墙体" value={item.wallId??''} onChange={e=>{if(!e.target.value){update({freeStanding:true,wallId:undefined,offset:undefined});return}const next=s.project.items.find(w=>w.id===e.target.value)!;const offset=openingSlot(next,item,s.project.items,(next.w-item.w)/2);if(offset===undefined){useStore.setState({error:'这面墙没有足够空间容纳该门窗'});return}update({freeStanding:false,wallId:next.id,offset})}}><option value="">独立放置 · 可自由旋转</option>{s.project.items.filter(w=>w.kind==='wall').map(w=><option key={w.id} value={w.id} disabled={w.locked||w.hidden}>{w.name}{w.locked?'（锁定）':''}</option>)}</select></label>
+  <label className="full-field">所属墙体<select aria-label="所属墙体" value={item.wallId??''} onChange={e=>{if(!e.target.value){update({freeStanding:true,wallId:undefined,offset:undefined});return}const cur=useStore.getState().project;const next=cur.items.find(w=>w.id===e.target.value)!;const offset=openingSlot(next,item,cur.items,(next.w-item.w)/2);if(offset===undefined){useStore.setState({error:'这面墙没有足够空间容纳该门窗'});return}update({freeStanding:false,wallId:next.id,offset})}}><option value="">独立放置 · 可自由旋转</option>{project.items.filter(w=>w.kind==='wall').map(w=><option key={w.id} value={w.id} disabled={w.locked||w.hidden}>{w.name}{w.locked?'（锁定）':''}</option>)}</select></label>
   <label className="full-field">{item.kind==='door'?'门型':'窗型'}<select aria-label={item.kind==='door'?'门型':'窗型'} value={item.model??item.kind} onChange={e=>update({model:e.target.value as Item['model']})}>{catalog.filter(c=>c.kind===item.kind).map(c=><option value={c.model} key={c.model}>{c.name}</option>)}</select></label>
   {datum && wall ? <SurveyOpeningFields wall={wall} item={item} datum={datum} /> : <label>开口宽度（mm）<NumberField value={item.w} min={100} max={wall?wall.w-(item.offset??50)-50:undefined} onCommit={w => update({ w })}/></label>}<label>开口高度（mm）<NumberField value={item.h} min={100} max={wall?wall.h-(item.sill??0)-50:undefined} onCommit={h => update({ h })}/></label>
   {wall ? !datum && <><label className="full-field">距墙起点（mm）<NumberField value={item.offset ?? 50} min={50} max={wall.w-item.w-50} onCommit={offset=>update({offset})}/></label><p>距墙终点：{Math.round(wall.w-(item.offset??0)-item.w)} mm · 两端至少留 50 mm</p></>:<><label>X 坐标（mm）<NumberField value={item.x} onCommit={x=>update({x})}/></label><label>Y 坐标（mm）<NumberField value={item.y} onCommit={y=>update({y})}/></label><label>厚度（mm）<NumberField value={item.d} min={1} onCommit={d=>update({d})}/></label></>}
@@ -25,7 +25,7 @@ export default function StructureFields({ item }: {
  </>;
     const cx = item.x + item.w / 2, cy = item.y + item.d / 2;
     return <>
-  {datum && <><p className="full-field">{s.project.survey?.source === 'estimated' ? '格网估算' : '现场记录'} · 第 {datum.index+1} 段内净长 {datum.end-datum.start} mm</p><SurveyOpeningFields wall={item} datum={datum} /><SurveySiteObjectFields datum={datum} /></>}
+  {datum && <><p className="full-field">{project.survey?.source === 'estimated' ? '格网估算' : '现场记录'} · 第 {datum.index+1} 段内净长 {datum.end-datum.start} mm</p><SurveyOpeningFields wall={item} datum={datum} /><SurveySiteObjectFields datum={datum} /></>}
   {item.kind==='partition'&&<label className="full-field">隔断样式<select value={item.model??'partition'} onChange={e=>update({model:e.target.value as Item['model']})}>{catalog.filter(c=>c.kind==='partition').map(c=><option value={c.model} key={c.model}>{c.name}</option>)}</select></label>}
   <label>{datum ? '墙中心线长' : '长度'}（mm）<NumberField value={item.w} min={100} onCommit={w => update({ w, x: cx - w / 2 })}/></label><label>厚度（mm）<NumberField value={item.d} min={50} onCommit={d => update({ d, y: cy - d / 2 })}/></label>
   <label>高度（mm）<NumberField value={item.h} min={100} onCommit={h => update({ h })}/></label>

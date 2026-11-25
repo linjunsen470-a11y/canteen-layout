@@ -82,8 +82,13 @@ const unsubscribe=useStore.subscribe((state,previous)=>{
   clearTimeout(timer);
   const status=useProjectSession.getState().status;
   if(status==='conflict'||status==='failed')return;
-  useProjectSession.setState({status:signature(state.project)===saved?'saved':'unsaved'});
-  if(!state.gesture)schedule();
+  if(state.gesture){
+    if(state.project!==previous.project&&status!=='unsaved')useProjectSession.setState({status:'unsaved'});
+    return;
+  }
+  const nextStatus=signature(state.project)===saved?'saved':'unsaved';
+  if(status!==nextStatus)useProjectSession.setState({status:nextStatus});
+  schedule();
 });
 channel?.addEventListener('message',async e=>{
   try{

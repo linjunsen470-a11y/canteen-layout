@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import EquipmentSpecification from './EquipmentSpecification';
 import { useWallPlacement } from './wallPlacementState';
 import WallClearanceFields from './WallClearanceFields';
@@ -34,63 +35,69 @@ const COLOR_SWATCHES = [
   { label: '暖黄铜', hex: '#d4a254' },
 ];
 
-export default function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEditOutline: (draw?: boolean) => void; onSavedSpec?: () => void }) {
+export default memo(function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEditOutline: (draw?: boolean) => void; onSavedSpec?: () => void }) {
   const wallSession = useWallPlacement(s => s.session);
-  const s = useStore(), { project, selected, selectedIds: multi } = s, M = s.selectMany, item = project.items.find(i => i.id === selected), prefs = useWorkspace();
+  const project = useStore(s => s.gesture ?? s.project);
+  const selected = useStore(s => s.selected);
+  const multi = useStore(s => s.selectedIds);
+  const mode = useStore(s => s.mode);
+  const error = useStore(s => s.error);
+  const hasPlacement = useStore(s => !!s.placement);
+  const item = project.items.find(i => i.id === selected), prefs = useWorkspace();
   usePlanning();
   const supportsElevation = !!item && (item.kind === 'lighting' || item.kind === 'decor' || item.model === 'wall-shelf');
   const currentElevation = item ? (item.elevation ?? defaultElevation(item)) : 0;
 
-  return <aside className="props" hidden={!prefs.propsOpen || prefs.focusMode || (!multi.length && s.mode !== 'site')}>
+  return <aside className="props" hidden={!prefs.propsOpen || prefs.focusMode || (!multi.length && mode !== 'site')}>
     <div className="panel-heading">
       <div><h3>{multi.length > 1 ? `组合与多选 · ${multi.length} 项` : item ? '对象属性' : '铺位与风格设置'}</h3><p>{multi.length > 0 ? '尺寸单位：mm' : '材质 · 氛围 · 场地轮廓'}</p></div>
       <button aria-label="收起属性面板" onClick={() => prefs.set({ propsOpen: false })}><PanelRightClose /></button>
     </div>
-    {s.error && <p className="property-error" role="alert">{s.error}</p>}
+    {error && <p className="property-error" role="alert">{error}</p>}
     {multi.length === 1 && item && <>
       {item.wallId && <p className="selection-note">所属墙体：{project.items.find(w => w.id === item.wallId)?.name}</p>}
       {!planningEditable(item, project) && <p className="selection-note">此对象在当前规划范围外，已保护。切回整场地或关闭范围外保护后可编辑。</p>}
       {!isVisible(item, project) && <p>对象或所属墙体已隐藏，请从对象列表显示后编辑。</p>}
-      {item.locked && <button onClick={() => s.setFlags([item.id], { locked: false })}><LockOpen />解锁对象</button>}
-      {item.wallId && project.items.find(w => w.id === item.wallId)?.locked && <button onClick={() => s.select(item.wallId!)}>所属墙体已锁定 · 选择墙体</button>}
+      {item.locked && <button onClick={() => useStore.getState().setFlags([item.id], { locked: false })}><LockOpen />解锁对象</button>}
+      {item.wallId && project.items.find(w => w.id === item.wallId)?.locked && <button onClick={() => useStore.getState().select(item.wallId!)}>所属墙体已锁定 · 选择墙体</button>}
     </>}
     {multi.length > 1 ? <BatchProperties /> : item ? (
-      <fieldset key={item.id} disabled={!!s.placement || !isEditable(item, project)}>
-        {!isAnnotation(item) && <label className="full-field">名称<input disabled={!!wallSession} value={item.name} onChange={e => s.update(item.id, { name: e.target.value })} /></label>}
+      <fieldset key={item.id} disabled={hasPlacement || !isEditable(item, project)}>
+        {!isAnnotation(item) && <label className="full-field">名称<input disabled={!!wallSession} value={item.name} onChange={e => useStore.getState().update(item.id, { name: e.target.value })} /></label>}
         {item.kind === 'door' && <DoorControls items={[item]} />}
         <fieldset className="object-detail-fields" disabled={!!wallSession}>
           {!item.measure && <RotationFields item={item} />}
           {isAnnotation(item) ? <AnnotationFields item={item} /> : isBuilding(item) ? <StructureFields item={item} /> : <>
             {item.kind !== 'zone' && (
               <div className="full-field dim-triple">
-                <label>长 mm<NumberField value={item.w} min={1} onCommit={n => s.update(item.id, { w: n })} /></label>
-                <label>宽 mm<NumberField value={item.d} min={1} onCommit={n => s.update(item.id, { d: n })} /></label>
-                <label>高 mm<NumberField value={item.h} min={0} onCommit={n => s.update(item.id, { h: n })} /></label>
+                <label>长 mm<NumberField value={item.w} min={1} onCommit={n => useStore.getState().update(item.id, { w: n })} /></label>
+                <label>宽 mm<NumberField value={item.d} min={1} onCommit={n => useStore.getState().update(item.id, { d: n })} /></label>
+                <label>高 mm<NumberField value={item.h} min={0} onCommit={n => useStore.getState().update(item.id, { h: n })} /></label>
               </div>
             )}
             {supportsElevation && (
               <div className="full-field elevation-field">
                 <label>安装离地高度（mm）
-                  <NumberField value={currentElevation} min={0} max={15000} onCommit={elevation => s.update(item.id, { elevation })} />
+                  <NumberField value={currentElevation} min={0} max={15000} onCommit={elevation => useStore.getState().update(item.id, { elevation })} />
                 </label>
                 <div className="quick-pills">
                   {[['贴地', 0], ['壁挂 1.5m', 1500], ['吊装 2.2m', 2200], ['吸顶 2.8m', 2800]].map(([label, val]) => (
-                    <button key={String(label)} type="button" onClick={() => s.update(item.id, { elevation: Number(val) })}>{label}</button>
+                    <button key={String(label)} type="button" onClick={() => useStore.getState().update(item.id, { elevation: Number(val) })}>{label}</button>
                   ))}
                 </div>
               </div>
             )}
             {item.kind === 'zone' && <>
-              <label>区域长度（mm）<NumberField value={item.w} min={1} onCommit={n => s.update(item.id, { w: Math.max(100, n) })} /></label>
-              <label>区域宽度（mm）<NumberField value={item.d} min={1} onCommit={n => s.update(item.id, { d: Math.max(100, n) })} /></label>
+              <label>区域长度（mm）<NumberField value={item.w} min={1} onCommit={n => useStore.getState().update(item.id, { w: Math.max(100, n) })} /></label>
+              <label>区域宽度（mm）<NumberField value={item.d} min={1} onCommit={n => useStore.getState().update(item.id, { d: Math.max(100, n) })} /></label>
               <p>区域面积：{(polygonArea(zoneCorners(item)) / 1e6).toFixed(2)} ㎡</p>
             </>}
             <div className="full-field">
-              <label>颜色与材质色调<input type="color" value={item.color} onChange={e => s.update(item.id, { color: e.target.value })} /></label>
+              <label>颜色与材质色调<input type="color" value={item.color} onChange={e => useStore.getState().update(item.id, { color: e.target.value })} /></label>
               {item.kind !== 'zone' && (
                 <div className="color-swatches" role="group" aria-label="快捷色板">
                   {COLOR_SWATCHES.map(sw => (
-                    <button key={sw.hex} type="button" title={sw.label} aria-label={sw.label} style={{ background: sw.hex }} className={item.color.toLowerCase() === sw.hex ? 'is-active' : ''} onClick={() => s.update(item.id, { color: sw.hex })} />
+                    <button key={sw.hex} type="button" title={sw.label} aria-label={sw.label} style={{ background: sw.hex }} className={item.color.toLowerCase() === sw.hex ? 'is-active' : ''} onClick={() => useStore.getState().update(item.id, { color: sw.hex })} />
                   ))}
                 </div>
               )}
@@ -109,8 +116,8 @@ export default function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEdit
             <summary>精确坐标与工程参数</summary>
             <div className="props-advanced-body">
               <div className="props-xy-row">
-                <label>X 坐标（mm）<NumberField disabled={!!wallSession} value={item.x} onCommit={n => s.update(item.id, { x: n })} /></label>
-                <label>Y 坐标（mm）<NumberField disabled={!!wallSession} value={item.y} onCommit={n => s.update(item.id, { y: n })} /></label>
+                <label>X 坐标（mm）<NumberField disabled={!!wallSession} value={item.x} onCommit={n => useStore.getState().update(item.id, { x: n })} /></label>
+                <label>Y 坐标（mm）<NumberField disabled={!!wallSession} value={item.y} onCommit={n => useStore.getState().update(item.id, { y: n })} /></label>
               </div>
               <WallClearanceFields item={item} />
               {!wallSession && <>
@@ -122,8 +129,8 @@ export default function PropertiesPanel({ onEditOutline, onSavedSpec }: { onEdit
             </div>
           </details>
         )}
-        <button className="delete" disabled={!!wallSession} onClick={() => { s.removeMany(multi.length ? multi : [item.id]); M([]); }}><Trash2 />删除选中对象</button>
+        <button className="delete" disabled={!!wallSession} onClick={() => { const s = useStore.getState(); s.removeMany(multi.length ? multi : [item.id]); s.selectMany([]); }}><Trash2 />删除选中对象</button>
       </fieldset>
     ) : <SiteFields onEdit={onEditOutline} />}
   </aside>;
-}
+});

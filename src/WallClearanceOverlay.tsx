@@ -6,7 +6,7 @@ import EquipmentSymbol from './EquipmentSymbol';
 import { wallFaceChoices } from './wallFaceChoices';
 
 export default function WallClearanceOverlay({scale}:{scale:number}){
-  const p=useStore(s=>s.project),{session}=useWallPlacement();if(!session)return null;
+  const {session}=useWallPlacement(),p=useStore(s=>session?s.project:null);if(!session||!p)return null;
   const i=p.items.find(i=>i.id===session.itemId),face=wallFaces(p).find(f=>f.wallId===session.wallId&&f.side===session.side);if(!i)return null;
   if(session.picking)return <g data-ui="true" data-wall-picking="true" pointerEvents="none">{wallFaceChoices(p,i).filter(c=>c.distance!==null).map(c=><line key={`${c.face.wallId}|${c.face.side}`} x1={c.face.a.x} y1={c.face.a.y} x2={c.face.b.x} y2={c.face.b.y} stroke="#217fa1" strokeWidth={3/scale} strokeDasharray={`${6/scale} ${3/scale}`}/>)}</g>;
   if(!face)return null;

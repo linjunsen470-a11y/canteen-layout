@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Project } from './model';
 import { inspectSpace } from './spaceChecks';
 import { bounds } from './spatial';
 
-export default function PlanArchitecturalOverlay({
+function PlanArchitecturalOverlay({
   project,
   scale,
   showFlow,
@@ -116,3 +116,13 @@ export default function PlanArchitecturalOverlay({
     </g>
   );
 }
+
+export default memo(PlanArchitecturalOverlay, (prev, next) => {
+  if (prev.scale !== next.scale || prev.showFlow !== next.showFlow) return false;
+  if (next.showFlow) return prev.project === next.project;
+  return (
+    prev.project.width === next.project.width &&
+    prev.project.height === next.project.height &&
+    !!prev.project.survey === !!next.project.survey
+  );
+});

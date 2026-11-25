@@ -356,6 +356,38 @@ try {
   };
   assert.deepEqual(matchSameShop(cands[0].project, droppedCol), { same: false, reason: 'fixtures' });
 
+  // 6. Separately imported / redrawn shell with different fixture IDs should still match by geometry
+  const reimportedSame = {
+    ...cands[1].project,
+    id: 'reimported-shop',
+    items: cands[1].project.items.map((i, idx) => ({ ...i, id: `reimp-${idx}` })),
+  };
+  assert.deepEqual(matchSameShop(cands[0].project, reimportedSame), { same: true }, '重新导入导致固定构件 ID 不同时仍应识别为同铺');
+
+  const colItem = cands[0].project.items.find(i => i.kind === 'column');
+  const multiFixA = {
+    ...rectA,
+    items: [
+      ...rectA.items,
+      { ...colItem, id: 'f-col', x: 2000, y: 2000, w: 1800, d: 500, rotation: 0 },
+      { ...colItem, id: 'f-water', kind: 'utility', pointType: 'water', verification: 'confirmed', x: 5000, y: 1200, w: 200, d: 200, h: 100, rotation: 0 },
+    ],
+  };
+  const multiFixB = {
+    ...rectA,
+    items: [
+      ...rectA.items,
+      { ...colItem, id: 'other-water', kind: 'utility', pointType: 'water', verification: 'confirmed', x: 5000, y: 1200, w: 200, d: 200, h: 100, rotation: 0 },
+      { ...colItem, id: 'other-col', x: 2650, y: 1350, w: 500, d: 1800, rotation: 90 },
+    ],
+  };
+  assert.deepEqual(matchSameShop(multiFixA, multiFixB), { same: true }, '多固定构件 ID 不同且柱体以 90° 互换宽高表达同一占地时应识别为同铺');
+  const wrongUtilityType = {
+    ...multiFixB,
+    items: multiFixB.items.map(i => i.id === 'other-water' ? { ...i, pointType: 'drain' } : i),
+  };
+  assert.deepEqual(matchSameShop(multiFixA, wrongUtilityType), { same: false, reason: 'fixtures' }, '同坐标但工程点位类型不同不得误判为同铺');
+
   // A/B compare metrics match live seatSummary & nearestTableGap
   const compareMetrics = computeCompareMetrics(cands[0].project, cands[1].project);
   assert.equal(compareMetrics.match.same, true);
@@ -366,7 +398,7 @@ try {
   assert.equal(compareMetrics.a.tableGapMm, cands[0].tableGapMm);
   assert.equal(compareMetrics.b.tableGapMm, cands[1].tableGapMm);
   assert.ok(compareMetrics.summary.length > 0);
-  console.log('PASS 同铺判定（同铺/镜像/同面积异形/入口移动/固定构件移动）与 A/B 指标计算');
+  console.log('PASS 同铺判定（同铺/重导异 ID/镜像/同面积异形/入口移动/固定构件移动与类型区分）与 A/B 指标计算');
 
   // Step 1: default business style on untouched shell, custom style preservation, non-destructive quick switches, legacy packages
   const { activeQuickThemeId, applyQuickTheme, applyQuickLighting, quickThemePresets } = await server.ssrLoadModule('/src/StyleQuickBar.tsx');
@@ -556,12 +588,20 @@ try {
   assert.equal(currentDraftChoices(useStore.getState().project, useStore.getState().layoutRevision, false)?.selected, 0);
 
   // Layout edit bumps layoutRevision; undo restores revA0
+  const profilesBeforeMove = wallProfiles(useStore.getState().project);
   const movedItems = useStore.getState().project.items.map(i => i.kind === 'table' ? { ...i, x: i.x + 100 } : i);
   const untouchedChair = movedItems.find(i => i.kind === 'chair');
+  const untouchedDoor = movedItems.find(i => i.kind === 'door');
   assert.ok(untouchedChair);
   useStore.getState().commit({ ...useStore.getState().project, items: movedItems });
   assert.equal(useStore.getState().project.items.find(i => i.id === untouchedChair.id), untouchedChair,
     '移动桌子后应复用未改动的椅子对象，避免列表和画布重绘');
+  if (untouchedDoor) {
+    assert.equal(useStore.getState().project.items.find(i => i.id === untouchedDoor.id), untouchedDoor,
+      '移动桌子后应复用未改动的门窗对象，避免画布重绘');
+  }
+  assert.strictEqual(wallProfiles(useStore.getState().project), profilesBeforeMove,
+    '仅移动家具时 wallProfiles 应命中缓存并复用墙体轮廓映射');
   const revAEdited = useStore.getState().layoutRevision;
   assert.notEqual(revAEdited, revA0);
   assert.equal(currentDraftChoices(useStore.getState().project, revAEdited, false), undefined);
@@ -569,6 +609,21 @@ try {
   assert.equal(useStore.getState().layoutRevision, revA0, '撤销家具移动后应恢复原 layoutRevision');
   assert.equal(currentDraftChoices(useStore.getState().project, useStore.getState().layoutRevision, false)?.selected, 0);
   assert.equal(draftRevisionKey(pA, revA0), `lru-a:${revA0}`);
+
+  // Fast AABB-culled snapTranslation accuracy & 300-item speed check
+  const { snapTranslation } = await load('layoutSnapping');
+  const snapNearEdge = snapTranslation(proj300, [items300[0]], { x: 595, y: 0 }, 20);
+  assert.equal(snapNearEdge.guides.length, 1);
+  assert.equal(snapNearEdge.guides[0].label, '物体边缘');
+  assert.ok(Math.abs(snapNearEdge.delta.x - 600) < 0.01, `edge snap delta.x=${snapNearEdge.delta.x}`);
+  const snapAlign = snapTranslation(proj300, [items300[0]], { x: 10, y: 400 }, 20);
+  assert.ok(snapAlign.guides.some(g => g.label === '边缘 / 中心'), '应保留远距对齐吸附线');
+  assert.ok(Math.abs(snapAlign.delta.x) < 0.01, `align snap delta.x=${snapAlign.delta.x}`);
+  const tSnap = performance.now();
+  for (let k = 0; k < 200; k++) snapTranslation(proj300, [items300[0]], { x: 250 + (k % 20), y: 250 }, 30);
+  const snapAvgMs = (performance.now() - tSnap) / 200;
+  assert.ok(snapAvgMs < 2, `300-item snapTranslation avg ${snapAvgMs.toFixed(3)} ms should be < 2 ms`);
+  console.log(`PASS 拖拽复用（家具/门窗/墙体轮廓缓存）与 300 物件吸附计算（均耗时 ${snapAvgMs.toFixed(2)} ms）`);
 
   // Switch across 3 projects (A, B, C): switching back to A hits LRU via savedAt; adding D evicts oldest (B)
   rememberDraftChoices(pB, cands, 1, 1002);

@@ -144,7 +144,7 @@ export default memo(function PlanItemSymbol({
           stroke="#66766b"
           strokeWidth={1 / scale}
         />
-      )}{' '}
+      )}
       {i.kind === 'stairs' && (
         <g pointerEvents="none" stroke="#5e7166" strokeWidth={1 / scale}>
           {Array.from({ length: Math.max(3, Math.min(40, Math.round(i.h / 160))) - 1 }, (_, k) => (
