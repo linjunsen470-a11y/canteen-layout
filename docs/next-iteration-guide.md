@@ -6,11 +6,11 @@
 
 | 项 | 状态 |
 | --- | --- |
-| 主干 | 已合并 #15（出图细节与开发指南）、#16（同铺比较摆法）、#17（下一轮开发指导）；本 PR 完成 PR-B（只读离屏 3D/2D 渲染层） |
+| 主干 | 已合并 #15/#16/#17；基于 PR-B（#18）完成 PR-C（Step 3：A/B 双方案一图对比导出） |
 | 首稿链路 | 新建铺位 → 输入尺寸 / 画轮廓 → 后台 Worker 试排 → 直接打开分屏第一稿 |
 | 候选 | `generateBasicLayoutCandidates` 每个图上厨位保留一份高分试排，按家具坐标去重，最多 3 份；会话内缓存于 `draftChoices.ts`，项目包仍为格式 7 |
-| 出图 | 平面 PNG、3D 鸟瞰/室内/门头、2400×1500 合图；复制剪贴板与下载；新增离屏只读 3D（`OffscreenStage.tsx`）与 2D（`offscreenPlan.tsx`）能力 |
-| 验证 | `pnpm typecheck`、`pnpm build`、`pnpm test`（几何 + 生产版 Chromium，含 basic-layout / editable-draft / quick-export / offscreen-render） |
+| 出图 | 平面 PNG、3D 鸟瞰/室内/门头、2400×1500 单方案合图与 **A/B 双方案对比图**（同铺优先筛选 + 离屏只读拍摄）；复制剪贴板与下载 |
+| 验证 | `pnpm typecheck`、`pnpm build`、`pnpm test`（几何含 sameShop + 生产版 Chromium 含 basic-layout / editable-draft / quick-export A/B 对比 / offscreen-render） |
 
 ### #16 审计遗留（已在合并前修复）
 
